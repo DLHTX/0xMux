@@ -1,0 +1,380 @@
+use crate::error::AppError;
+use crate::models::session::TmuxSession;
+use crate::models::window::TmuxWindow;
+use regex::Regex;
+use std::process::Command;
+use std::sync::LazyLock;
+
+static SESSION_NAME_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[a-zA-Z0-9_.-]+$").unwrap());
+
+/// Build a `Command` for tmux with a clean environment.
+///
+/// When the server is launched from an interactive shell (e.g. a terminal with
+/// oh-my-zsh + Powerlevel10k), dozens of shell-theme env vars leak into child
+/// processes. Inside a detached tmux session the shell sees these stale vars
+/// (e.g. `_P9K_TTY` pointing to the parent's TTY), fails to initialise, and
+/// exits — which destroys the session and potentially the whole tmux server.
+///
+/// We solve this by giving tmux a minimal, known-good environment.
+fn tmux_cmd() -> Command {
+    let mut cmd = Command::new("tmux");
+    cmd.env_clear();
+    // Only pass through the essentials
+    for key in &["HOME", "SHELL", "USER", "LOGNAME", "PATH", "TERM", "LANG", "LC_ALL", "TMPDIR", "XDG_RUNTIME_DIR"] {
+        if let Ok(val) = std::env::var(key) {
+            cmd.env(key, val);
+        }
+    }
+    // Ensure TERM is set (tmux needs it)
+    if std::env::var("TERM").is_err() {
+        cmd.env("TERM", "xterm-256color");
+    }
+    cmd
+}
+
+fn validate_name(name: &str) -> Result<(), AppError> {
+    if name.is_empty() || name.len() > 50 {
+        return Err(AppError::BadRequest(
+            "Session name must be 1-50 characters".to_string(),
+        ));
+    }
+    if !SESSION_NAME_RE.is_match(name) {
+        return Err(AppError::BadRequest(
+            "Session name contains invalid characters".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+pub fn list_sessions() -> Result<Vec<TmuxSession>, AppError> {
+    let output = tmux_cmd()
+        .args([
+            "list-sessions",
+            "-F",
+            "#{session_name}|#{session_windows}|#{session_created}|#{session_attached}|#{pane_current_path}",
+        ])
+        .output();
+
+    match output {
+        Ok(out) if out.status.success() => {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            Ok(stdout
+                .lines()
+                .filter_map(|line| {
+                    let parts: Vec<&str> = line.split('|').collect();
+                    if parts.len() >= 4 {
+                        Some(TmuxSession {
+                            name: parts[0].to_string(),
+                            windows: parts[1].parse().unwrap_or(0),
+                            created: parts[2].to_string(),
+                            attached: parts[3] == "1",
+                            start_directory: parts.get(4).unwrap_or(&"").to_string(),
+                        })
+                    } else {
+                        None
+                    }
+                })
+                .collect())
+        }
+        Ok(_) => {
+            // No active sessions (server not running, no sessions, or other non-success)
+            Ok(vec![])
+        }
+        Err(e) => {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                Ok(vec![])
+            } else {
+                Err(AppError::Internal(format!("Failed to run tmux: {e}")))
+            }
+        }
+    }
+}
+
+pub fn new_session(name: &str, start_directory: Option<&str>) -> Result<TmuxSession, AppError> {
+    validate_name(name)?;
+
+    let existing = list_sessions()?;
+    if existing.iter().any(|s| s.name == name) {
+        return Err(AppError::Conflict(format!(
+            "Session '{name}' already exists"
+        )));
+    }
+
+    let mut args = vec!["new-session", "-d", "-s", name];
+    if let Some(dir) = start_directory {
+        args.push("-c");
+        args.push(dir);
+    }
+    // Enable remain-on-exit so the session survives if the shell exits
+    // unexpectedly (e.g. due to .zshrc/Powerlevel10k incompatibilities in
+    // detached mode). The pane stays around in "dead" state and will be
+    // respawned when a PTY client connects.
+    args.extend_from_slice(&[";", "set-option", "-t", name, "remain-on-exit", "on"]);
+
+    let status = tmux_cmd()
+        .args(&args)
+        .status()
+        .map_err(|e| AppError::Internal(format!("Failed to create session: {e}")))?;
+
+    if !status.success() {
+        return Err(AppError::Internal(format!(
+            "tmux new-session failed for '{name}'"
+        )));
+    }
+
+    // Return the newly created session info
+    let sessions = list_sessions()?;
+    sessions
+        .into_iter()
+        .find(|s| s.name == name)
+        .ok_or_else(|| AppError::Internal("Session created but not found in list".to_string()))
+}
+
+/// Generate the next session name for a directory, e.g. `dirname-01`, `dirname-02`, ...
+pub fn next_session_name(dir: &str) -> Result<String, AppError> {
+    let basename = std::path::Path::new(dir)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("session");
+
+    let existing = list_sessions()?;
+    let prefix = format!("{basename}-");
+
+    let max_num = existing
+        .iter()
+        .filter_map(|s| {
+            s.name.strip_prefix(&prefix).and_then(|suffix| suffix.parse::<u32>().ok())
+        })
+        .max()
+        .unwrap_or(0);
+
+    Ok(format!("{prefix}{:02}", max_num + 1))
+}
+
+pub fn kill_session(name: &str) -> Result<(), AppError> {
+    let existing = list_sessions()?;
+    if !existing.iter().any(|s| s.name == name) {
+        return Err(AppError::NotFound(format!(
+            "Session '{name}' not found"
+        )));
+    }
+
+    let status = tmux_cmd()
+        .args(["kill-session", "-t", name])
+        .status()
+        .map_err(|e| AppError::Internal(format!("Failed to kill session: {e}")))?;
+
+    if !status.success() {
+        return Err(AppError::Internal(format!(
+            "tmux kill-session failed for '{name}'"
+        )));
+    }
+
+    Ok(())
+}
+
+pub fn rename_session(old: &str, new_name: &str) -> Result<TmuxSession, AppError> {
+    validate_name(new_name)?;
+
+    let existing = list_sessions()?;
+    if !existing.iter().any(|s| s.name == old) {
+        return Err(AppError::NotFound(format!(
+            "Session '{old}' not found"
+        )));
+    }
+    if existing.iter().any(|s| s.name == new_name) {
+        return Err(AppError::Conflict(format!(
+            "Session '{new_name}' already exists"
+        )));
+    }
+
+    let status = tmux_cmd()
+        .args(["rename-session", "-t", old, new_name])
+        .status()
+        .map_err(|e| AppError::Internal(format!("Failed to rename session: {e}")))?;
+
+    if !status.success() {
+        return Err(AppError::Internal(format!(
+            "tmux rename-session failed for '{old}' → '{new_name}'"
+        )));
+    }
+
+    let sessions = list_sessions()?;
+    sessions
+        .into_iter()
+        .find(|s| s.name == new_name)
+        .ok_or_else(|| AppError::Internal("Session renamed but not found in list".to_string()))
+}
+
+pub fn list_windows(session: &str) -> Result<Vec<TmuxWindow>, AppError> {
+    // Check that session exists first
+    let sessions = list_sessions()?;
+    if !sessions.iter().any(|s| s.name == session) {
+        return Err(AppError::NotFound(format!(
+            "Session '{session}' not found"
+        )));
+    }
+
+    let output = tmux_cmd()
+        .args([
+            "list-windows",
+            "-t",
+            session,
+            "-F",
+            "#{window_index}|#{window_name}|#{window_active}|#{window_panes}",
+        ])
+        .output()
+        .map_err(|e| AppError::Internal(format!("Failed to run tmux: {e}")))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(AppError::Internal(format!(
+            "tmux list-windows failed: {stderr}"
+        )));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(stdout
+        .lines()
+        .filter_map(|line| {
+            let parts: Vec<&str> = line.split('|').collect();
+            if parts.len() == 4 {
+                Some(TmuxWindow {
+                    index: parts[0].parse().unwrap_or(0),
+                    name: parts[1].to_string(),
+                    active: parts[2] == "1",
+                    panes: parts[3].parse().unwrap_or(1),
+                })
+            } else {
+                None
+            }
+        })
+        .collect())
+}
+
+pub fn new_window(session: &str, name: Option<&str>) -> Result<TmuxWindow, AppError> {
+    // Check that session exists first
+    let sessions = list_sessions()?;
+    if !sessions.iter().any(|s| s.name == session) {
+        return Err(AppError::NotFound(format!(
+            "Session '{session}' not found"
+        )));
+    }
+
+    let mut args = vec!["new-window", "-t", session];
+    // If name is provided, validate and add -n flag
+    if let Some(n) = name {
+        validate_name(n)?;
+        args.push("-n");
+        args.push(n);
+    }
+
+    let status = tmux_cmd()
+        .args(&args)
+        .status()
+        .map_err(|e| AppError::Internal(format!("Failed to create window: {e}")))?;
+
+    if !status.success() {
+        return Err(AppError::Internal(format!(
+            "tmux new-window failed for session '{session}'"
+        )));
+    }
+
+    // The newly created window becomes the active window
+    let windows = list_windows(session)?;
+    windows
+        .into_iter()
+        .rev()
+        .find(|w| {
+            if let Some(n) = name {
+                w.name == n
+            } else {
+                w.active
+            }
+        })
+        .ok_or_else(|| AppError::Internal("Window created but not found in list".to_string()))
+}
+
+pub fn kill_window(session: &str, index: u32) -> Result<(), AppError> {
+    let windows = list_windows(session)?;
+
+    if windows.len() <= 1 {
+        return Err(AppError::LastWindow(format!(
+            "Cannot kill the last window in session '{session}'"
+        )));
+    }
+
+    let target = format!("{session}:{index}");
+    let status = tmux_cmd()
+        .args(["kill-window", "-t", &target])
+        .status()
+        .map_err(|e| AppError::Internal(format!("Failed to kill window: {e}")))?;
+
+    if !status.success() {
+        return Err(AppError::Internal(format!(
+            "tmux kill-window failed for '{target}'"
+        )));
+    }
+
+    Ok(())
+}
+
+/// Check whether the active pane in `session` is dead.
+fn is_pane_dead(session: &str) -> Result<bool, AppError> {
+    let output = tmux_cmd()
+        .args([
+            "display-message",
+            "-t",
+            session,
+            "-p",
+            "#{pane_dead}",
+        ])
+        .output()
+        .map_err(|e| AppError::Internal(format!("Failed to query pane state: {e}")))?;
+
+    if output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        Ok(stdout.trim() == "1")
+    } else {
+        Ok(false)
+    }
+}
+
+/// If the active pane in `session` is dead, respawn it and verify it stays
+/// alive before returning.  Retries up to 2 times if the new shell exits
+/// immediately (e.g. due to .zshrc incompatibilities in detached mode).
+pub fn ensure_pane_alive(session: &str) -> Result<(), AppError> {
+    if !is_pane_dead(session)? {
+        return Ok(());
+    }
+
+    for attempt in 0..2 {
+        tracing::info!("Respawning dead pane in '{session}' (attempt {attempt})");
+
+        let status = tmux_cmd()
+            .args(["respawn-pane", "-k", "-t", session])
+            .status()
+            .map_err(|e| AppError::Internal(format!("Failed to respawn pane: {e}")))?;
+
+        if !status.success() {
+            tracing::warn!("respawn-pane failed for '{session}'");
+            continue;
+        }
+
+        // Give the shell a moment to initialise (or crash).
+        std::thread::sleep(std::time::Duration::from_millis(500));
+
+        if !is_pane_dead(session)? {
+            return Ok(());
+        }
+
+        tracing::warn!("Pane in '{session}' died again after respawn");
+    }
+
+    // Last resort: still dead after retries — return error so the WS handler
+    // can inform the client instead of attaching to a dead session.
+    Err(AppError::Internal(format!(
+        "Pane in '{session}' could not be revived"
+    )))
+}

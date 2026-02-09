@@ -1,0 +1,27 @@
+# Rust
+server/target/
+
+# Node / Bun
+web/node_modules/
+web/dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Env
+.env
+.env.local
+
+node_modules/
+
+# npm distribution build artifacts
+npm/
+*.tgz
+.claude/

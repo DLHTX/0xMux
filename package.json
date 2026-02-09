@@ -1,0 +1,18 @@
+{
+  "name": "0xmux",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Hacker-grade tmux session manager with web UI",
+  "scripts": {
+    "dev": "concurrently -n WEB,API -c cyan.bold,magenta.bold --kill-others \"bun run dev:web\" \"bun run dev:api\"",
+    "dev:web": "cd web && bun dev",
+    "dev:api": "cd server && PORT=1235 cargo watch -q -c -w src -x run",
+    "build": "bun run build:web && bun run build:server",
+    "build:web": "cd web && bun run build",
+    "build:server": "cd server && cargo build --release --features embed-frontend",
+    "start": "cd server && cargo run --release --features embed-frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}

@@ -1,0 +1,182 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-14
+            platform: darwin-arm64
+          - target: x86_64-apple-darwin
+            os: macos-13
+            platform: darwin-x64
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            platform: linux-x64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Build frontend
+        run: |
+          cd web && bun install && bun run build
+
+      - name: Build backend
+        run: |
+          cd server && cargo build --release --features embed-frontend --target ${{ matrix.target }}
+
+      - name: Strip binary
+        run: |
+          strip server/target/${{ matrix.target }}/release/oxmux-server || true
+
+      - name: Create tarball
+        run: |
+          mkdir -p dist
+          cp server/target/${{ matrix.target }}/release/oxmux-server dist/
+          cd dist && tar czf ../0xmux-${{ matrix.platform }}.tar.gz oxmux-server
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: 0xmux-${{ matrix.platform }}.tar.gz
+
+      - name: Upload artifact for npm publish
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.platform }}
+          path: dist/oxmux-server
+
+  publish-npm:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Get version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Build platform packages
+        run: |
+          for platform in darwin-arm64 darwin-x64 linux-x64; do
+            case $platform in
+              darwin-arm64) os=darwin; cpu=arm64 ;;
+              darwin-x64)   os=darwin; cpu=x64 ;;
+              linux-x64)    os=linux;  cpu=x64 ;;
+            esac
+
+            dir="npm/@0xmux/${platform}"
+            mkdir -p "${dir}/bin"
+
+            # Generate package.json from template
+            sed -e "s/\${PLATFORM}/${platform}/g" \
+                -e "s/\${VERSION}/${{ steps.version.outputs.version }}/g" \
+                -e "s/\${OS}/${os}/g" \
+                -e "s/\${CPU}/${cpu}/g" \
+                npm/platform-template/package.json > "${dir}/package.json"
+
+            # Copy binary
+            cp "binary-${platform}/oxmux-server" "${dir}/bin/"
+            chmod +x "${dir}/bin/oxmux-server"
+          done
+
+      - name: Update main package version
+        run: |
+          cd npm/0xmux
+          npm version ${{ steps.version.outputs.version }} --no-git-tag-version
+          # Update optional deps versions
+          node -e "
+            const pkg = require('./package.json');
+            for (const dep of Object.keys(pkg.optionalDependencies || {})) {
+              pkg.optionalDependencies[dep] = '${{ steps.version.outputs.version }}';
+            }
+            require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+
+      - name: Publish platform packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          for platform in darwin-arm64 darwin-x64 linux-x64; do
+            cd "npm/@0xmux/${platform}"
+            npm publish --access public || true
+            cd -
+          done
+
+      - name: Publish main package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          cd npm/0xmux
+          npm publish --access public
+
+  update-formula:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Download release tarballs
+        run: |
+          for platform in darwin-arm64 darwin-x64 linux-x64; do
+            curl -sL "https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/0xmux-${platform}.tar.gz" -o "0xmux-${platform}.tar.gz"
+          done
+
+      - name: Calculate SHA256
+        id: sha
+        run: |
+          echo "darwin_arm64=$(shasum -a 256 0xmux-darwin-arm64.tar.gz | awk '{print $1}')" >> $GITHUB_OUTPUT
+          echo "darwin_x64=$(shasum -a 256 0xmux-darwin-x64.tar.gz | awk '{print $1}')" >> $GITHUB_OUTPUT
+          echo "linux_x64=$(shasum -a 256 0xmux-linux-x64.tar.gz | awk '{print $1}')" >> $GITHUB_OUTPUT
+
+      - name: Update Homebrew formula
+        run: |
+          sed -i "s/SHA256_DARWIN_ARM64/${{ steps.sha.outputs.darwin_arm64 }}/g" homebrew/Formula/0xmux.rb
+          sed -i "s/SHA256_DARWIN_X64/${{ steps.sha.outputs.darwin_x64 }}/g" homebrew/Formula/0xmux.rb
+          sed -i "s/SHA256_LINUX_X64/${{ steps.sha.outputs.linux_x64 }}/g" homebrew/Formula/0xmux.rb
+          sed -i "s/version \".*\"/version \"${{ steps.version.outputs.version }}\"/g" homebrew/Formula/0xmux.rb
+
+      - name: Commit formula update
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add homebrew/Formula/0xmux.rb
+          git commit -m "chore: update formula to v${{ steps.version.outputs.version }}" || true
+          git push || true

@@ -1,0 +1,98 @@
+import { useEffect, useState, useCallback } from 'react'
+import { Icon } from '@iconify/react'
+import { IconPlus, IconX } from '../../lib/icons'
+import type { TmuxWindow } from '../../lib/types'
+import * as api from '../../lib/api'
+
+interface WindowTabsProps {
+  sessionName: string
+  activeWindowIndex: number
+  onWindowChange: (index: number) => void
+}
+
+export function WindowTabs({
+  sessionName,
+  activeWindowIndex,
+  onWindowChange,
+}: WindowTabsProps) {
+  const [windows, setWindows] = useState<TmuxWindow[]>([])
+
+  const fetchWindows = useCallback(async () => {
+    try {
+      const data = await api.getWindows(sessionName)
+      setWindows(data)
+    } catch {
+      // ignore - session might not exist yet
+    }
+  }, [sessionName])
+
+  useEffect(() => {
+    fetchWindows()
+  }, [fetchWindows])
+
+  const handleCreate = async () => {
+    try {
+      const newWindow = await api.createWindow(sessionName)
+      setWindows((prev) => [...prev, newWindow])
+      onWindowChange(newWindow.index)
+    } catch {
+      // ignore
+    }
+  }
+
+  const handleClose = async (index: number) => {
+    if (windows.length <= 1) return
+    try {
+      await api.deleteWindow(sessionName, index)
+      setWindows((prev) => prev.filter((w) => w.index !== index))
+      if (activeWindowIndex === index) {
+        const remaining = windows.filter((w) => w.index !== index)
+        if (remaining.length > 0) {
+          onWindowChange(remaining[0].index)
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return (
+    <div className="flex items-center border-b-[length:var(--border-w)] border-[var(--color-border-light)] overflow-x-auto shrink-0 scrollbar-hide">
+      {windows.map((win) => (
+        <div
+          key={win.index}
+          className={`group flex items-center gap-1.5 px-3 py-1.5 text-xs cursor-pointer shrink-0
+            border-r-[length:var(--border-w)] border-[var(--color-border-light)]
+            ${
+              activeWindowIndex === win.index
+                ? 'bg-[var(--color-bg-alt)] border-b-2 border-b-[var(--color-success)] font-bold'
+                : 'hover:bg-[var(--color-bg-alt)]'
+            }
+            transition-colors`}
+          onClick={() => onWindowChange(win.index)}
+        >
+          <span className="text-[var(--color-fg-muted)]">{win.index}:</span>
+          <span>{win.name}</span>
+          {windows.length > 1 && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                handleClose(win.index)
+              }}
+              className="opacity-0 group-hover:opacity-100 text-[var(--color-fg-muted)] hover:text-[var(--color-danger)] transition-opacity ml-1"
+            >
+              <Icon icon={IconX} width={12} />
+            </button>
+          )}
+        </div>
+      ))}
+      <button
+        onClick={handleCreate}
+        className="p-1.5 text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] transition-colors shrink-0"
+        title="New Window"
+      >
+        <Icon icon={IconPlus} width={14} />
+      </button>
+    </div>
+  )
+}
