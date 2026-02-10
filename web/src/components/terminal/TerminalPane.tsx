@@ -118,14 +118,10 @@ export function TerminalPane({
     }
   }, [isMobile, fit])
 
-  const borderClass = focused
-    ? 'ring-1 ring-[var(--color-success)]'
-    : 'ring-1 ring-transparent'
-
   return (
     <div
       ref={wrapperRef}
-      className={`relative w-full h-full min-h-0 overflow-hidden ${borderClass} transition-[box-shadow,opacity] duration-150 ${mounted ? 'opacity-100' : 'opacity-0'}`}
+      className={`relative w-full h-full min-h-0 overflow-hidden transition-opacity duration-150 ${mounted ? 'opacity-100' : 'opacity-0'}`}
       style={isMobile && viewportHeight !== null ? { height: `${viewportHeight}px` } : { height: '100%' }}
       onClick={() => {
         onFocus?.()

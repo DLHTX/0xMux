@@ -156,6 +156,15 @@ function AppContent() {
     return () => window.removeEventListener('keydown', handler)
   }, [isMobile, activePaneId, canSplit, splitPane, closePane, getPaneIds, setActivePaneId])
 
+  // Sync selectedSession with activePaneId
+  useEffect(() => {
+    if (!activePaneId) return
+    const sessionName = paneSessionMap[activePaneId]
+    if (sessionName && sessionName !== selectedSession) {
+      setSelectedSession(sessionName)
+    }
+  }, [activePaneId, paneSessionMap, selectedSession])
+
   const handleCreate = async (name: string, startDirectory?: string) => {
     try {
       const session = await createSession(name, startDirectory)

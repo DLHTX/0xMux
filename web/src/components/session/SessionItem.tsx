@@ -147,8 +147,8 @@ export function SessionItem({
         }}
       />
 
-      {/* LIVE label for attached sessions */}
-      {session.attached && (
+      {/* LIVE label for currently selected attached session */}
+      {selected && session.attached && (
         <span className="text-[9px] font-bold shrink-0" style={{ color: projectColor }}>
           LIVE
         </span>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ConnectionStatus } from '../lib/types'
+import { getAuthToken } from '../lib/api'
 
 export interface UsePtySocketOptions {
   session: string
@@ -46,7 +47,10 @@ export function usePtySocket(options: UsePtySocketOptions) {
 
     setStatus('connecting')
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const url = `${protocol}//${window.location.host}/ws/pty?session=${encodeURIComponent(session)}&cols=${cols}&rows=${rows}`
+    const token = getAuthToken()
+    const url = token
+      ? `${protocol}//${window.location.host}/ws/pty?session=${encodeURIComponent(session)}&cols=${cols}&rows=${rows}&token=${encodeURIComponent(token)}`
+      : `${protocol}//${window.location.host}/ws/pty?session=${encodeURIComponent(session)}&cols=${cols}&rows=${rows}`
     const ws = new WebSocket(url)
     ws.binaryType = 'arraybuffer'
     wsRef.current = ws
