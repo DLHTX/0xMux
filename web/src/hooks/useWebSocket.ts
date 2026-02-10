@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import type { ConnectionStatus, WsMessage } from '../lib/types'
+import { getAuthToken } from '../lib/api'
 
 interface UseWebSocketOptions {
   onMessage?: (msg: WsMessage) => void
@@ -17,7 +18,11 @@ export function useWebSocket(options?: UseWebSocketOptions) {
 
     setStatus('connecting')
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const ws = new WebSocket(`${protocol}//${window.location.host}/ws`)
+    const token = getAuthToken()
+    const wsUrl = token
+      ? `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}`
+      : `${protocol}//${window.location.host}/ws`
+    const ws = new WebSocket(wsUrl)
     wsRef.current = ws
 
     ws.onopen = () => {
