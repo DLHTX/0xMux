@@ -5,7 +5,6 @@ import {
   IconChevronRight,
   IconChevronDown,
   IconChevronUp,
-  IconCornerRightDown,
   IconX,
 } from '../../lib/icons'
 

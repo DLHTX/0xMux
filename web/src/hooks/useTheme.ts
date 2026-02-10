@@ -6,7 +6,6 @@ import {
   type ThemeConfig,
   DEFAULT_PRESET,
   FUSION_PIXEL_FONT,
-  SILKSCREEN_FONT,
   applyTokens,
   loadConfig,
   saveConfig,

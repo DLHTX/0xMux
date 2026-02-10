@@ -63,6 +63,7 @@ export function TerminalPane({
   // Sync terminal ref to parent component
   useEffect(() => {
     if (externalTerminalRef && terminal.current) {
+      // eslint-disable-next-line react-hooks/immutability
       (externalTerminalRef as React.MutableRefObject<typeof terminal.current>).current = terminal.current
     }
   }, [terminal, externalTerminalRef])

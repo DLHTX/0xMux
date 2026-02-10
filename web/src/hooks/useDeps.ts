@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { Dependency, SystemDepsResponse } from '../lib/types'
+import type { SystemDepsResponse } from '../lib/types'
 import * as api from '../lib/api'
 
 export function useDeps() {

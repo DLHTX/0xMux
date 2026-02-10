@@ -90,7 +90,8 @@ export function usePtySocket(options: UsePtySocketOptions) {
     ws.onerror = () => {
       ws.close()
     }
-  }, [session, cols, rows, enabled, onOutput, onExit, onError, cleanup]) // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, cols, rows, enabled, onOutput, onExit, onError, cleanup])
 
   const scheduleReconnect = useCallback(() => {
     if (!mountedRef.current || !enabled) return

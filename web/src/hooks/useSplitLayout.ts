@@ -20,6 +20,7 @@ export interface LayoutHistory {
 }
 
 /** Serialize layout to JSON (for deep comparison) */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function serializeLayout(layout: SplitLayout, paneSessionMap: Record<string, string>): string {
   return JSON.stringify({ layout, paneSessionMap })
 }

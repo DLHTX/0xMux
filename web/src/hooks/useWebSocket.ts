@@ -54,6 +54,7 @@ export function useWebSocket(options?: UseWebSocketOptions) {
     ws.onerror = () => {
       ws.close()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [options?.onMessage])
 
   const cleanup = useCallback(() => {

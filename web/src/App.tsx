@@ -92,6 +92,7 @@ function AppContent() {
     if (selectedSession && sessions.some((s) => s.name === selectedSession)) return
     if (sessions.length > 0) {
       const firstSession = sessions[0].name
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedSession(firstSession)
       // Initialize with single pane
       const leafIds = getPaneIds()
@@ -153,7 +154,7 @@ function AppContent() {
 
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [isMobile, activePaneId, canSplit, splitPane, closePane, getPaneIds])
+  }, [isMobile, activePaneId, canSplit, splitPane, closePane, getPaneIds, setActivePaneId])
 
   const handleCreate = async (name: string, startDirectory?: string) => {
     try {
@@ -445,7 +446,5 @@ function App() {
     </I18nProvider>
   )
 }
-
-declare const __APP_VERSION__: string
 
 export default App

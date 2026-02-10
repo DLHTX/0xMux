@@ -24,7 +24,8 @@ export function WindowTabs({ sessionName }: WindowTabsProps) {
   }, [sessionName])
 
   useEffect(() => {
-    fetchWindows()
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void fetchWindows()
   }, [fetchWindows])
 
   const handleSelect = async (index: number) => {
