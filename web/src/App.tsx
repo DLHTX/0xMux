@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Header, EmptyState, MobileNav, type MobileView } from './components/layout'
 import { SessionSidebar, CreateSessionModal } from './components/session'
-import { SplitWorkspace, TerminalPane } from './components/terminal'
+import { SplitWorkspace, TerminalPane, WindowTabs } from './components/terminal'
+import { VirtualKeybar } from './components/mobile/VirtualKeybar'
 import { SetupWizard } from './components/setup'
+import { SetupPasswordModal, LoginModal, SettingsModal } from './components/auth'
 import { ToastContainer } from './components/ui/Toast'
 import { useSessions } from './hooks/useSessions'
 import { useDeps } from './hooks/useDeps'
@@ -10,11 +12,14 @@ import { useSplitLayout } from './hooks/useSplitLayout'
 import { useSettings } from './hooks/useSettings'
 import { useMobile } from './hooks/useMobile'
 import { useToast } from './hooks/useToast'
+import { useAuth } from './hooks/useAuth'
+import { useImagePaste } from './hooks/useImagePaste'
 import { ThemeProvider, useTheme } from './hooks/useTheme'
 import { I18nProvider, useI18n } from './hooks/useI18n'
 import { FUSION_PIXEL_FONT, SILKSCREEN_FONT } from './lib/theme'
 import { Icon } from '@iconify/react'
 import { IconTerminal, IconChevronLeft } from './lib/icons'
+import type { Terminal } from '@xterm/xterm'
 
 /** Auto-switch font when locale changes (zh -> Fusion Pixel, en -> Silkscreen) */
 function LocaleFontBridge() {
@@ -40,6 +45,7 @@ function LocaleFontBridge() {
 
 function AppContent() {
   const { t } = useI18n()
+  const { status: authStatus, loading: authLoading, setup, login, logout, changePassword } = useAuth()
   const {
     sessions,
     loading,
@@ -52,6 +58,7 @@ function AppContent() {
   const { deps, loading: depsLoading, allReady, installPackage } = useDeps()
 
   const [showCreate, setShowCreate] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
   const [selectedSession, setSelectedSession] = useState<string | null>(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileView, setMobileView] = useState<MobileView>('sessions')
@@ -66,10 +73,17 @@ function AppContent() {
     canSplit,
     paneSessionMap,
     assignSession,
+    activePaneId,
+    setActivePaneId,
+    switchToSession,
   } = useSplitLayout()
-  const [activePaneId, setActivePaneId] = useState<string | null>(() => getPaneIds()[0] ?? null)
   const isMobile = useMobile()
   const { toasts, addToast, removeToast } = useToast()
+  const mobileTerminalRef = useRef<Terminal | null>(null)
+  const activeTerminalRef = useRef<Terminal | null>(null)
+
+  // Enable image paste feature
+  useImagePaste(activeTerminalRef)
 
   const needsSetup = deps && !allReady
 
@@ -77,23 +91,18 @@ function AppContent() {
   useEffect(() => {
     if (selectedSession && sessions.some((s) => s.name === selectedSession)) return
     if (sessions.length > 0) {
-      setSelectedSession(sessions[0].name)
+      const firstSession = sessions[0].name
+      setSelectedSession(firstSession)
+      // Initialize with single pane
+      const leafIds = getPaneIds()
+      if (leafIds.length === 1 && !paneSessionMap[leafIds[0]]) {
+        assignSession(leafIds[0], firstSession)
+        setActivePaneId(leafIds[0])
+      }
     } else {
       setSelectedSession(null)
     }
-  }, [sessions, selectedSession])
-
-  // Ensure the initial pane is registered in paneSessionMap
-  useEffect(() => {
-    if (!selectedSession) return
-    const paneIds = getPaneIds()
-    for (const id of paneIds) {
-      if (!paneSessionMap[id]) {
-        assignSession(id, selectedSession)
-        break
-      }
-    }
-  }, [selectedSession, getPaneIds, paneSessionMap, assignSession])
+  }, [sessions, selectedSession, getPaneIds, paneSessionMap, assignSession, setActivePaneId])
 
   // Keyboard shortcuts (desktop only)
   useEffect(() => {
@@ -192,20 +201,25 @@ function AppContent() {
   )
 
   const handleSelectSession = useCallback((name: string) => {
+    const previousSession = selectedSession
     setSelectedSession(name)
-    // Assign session to active pane (desktop)
-    if (!isMobile && activePaneId) {
-      // 如果该 session 已经在另一个窗格中打开，不重复分配
-      const currentPaneSession = paneSessionMap[activePaneId]
-      if (currentPaneSession === name) return // 已经是当前 session
-      if (isSessionInUse(name)) {
-        addToast(`Session "${name}" 已在其他窗格中打开`, 'error')
-        return
-      }
-      assignSession(activePaneId, name)
+
+    // Mobile: simple view switch
+    if (isMobile) {
+      setMobileView('terminal')
+      return
     }
-    if (isMobile) setMobileView('terminal')
-  }, [isMobile, activePaneId, assignSession, paneSessionMap, isSessionInUse, addToast])
+
+    // Desktop: intelligent layout switching
+    const switchResult = switchToSession(name, previousSession || undefined)
+
+    // Show visual feedback
+    if (switchResult === 'focus') {
+      addToast(`已切换到窗格中的 "${name}"`, 'success')
+    } else if (switchResult === 'restore') {
+      addToast(`恢复 "${name}" 的分屏布局`, 'success')
+    }
+  }, [isMobile, selectedSession, switchToSession, addToast])
 
   const handleMobileBack = useCallback(() => {
     setMobileView('sessions')
@@ -240,13 +254,34 @@ function AppContent() {
     [assignSession, isSessionInUse, addToast]
   )
 
-  if (depsLoading) {
+  // Auth loading
+  if (authLoading || depsLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <span className="animate-pulse text-sm text-[var(--color-fg-muted)]">
           {t('app.initializing')}
         </span>
       </div>
+    )
+  }
+
+  // Setup password (first time)
+  if (!authStatus?.initialized) {
+    return (
+      <>
+        <LocaleFontBridge />
+        <SetupPasswordModal onSubmit={setup} />
+      </>
+    )
+  }
+
+  // Login required
+  if (!authStatus?.authenticated) {
+    return (
+      <>
+        <LocaleFontBridge />
+        <LoginModal onSubmit={login} />
+      </>
     )
   }
 
@@ -273,6 +308,7 @@ function AppContent() {
       <Header
         connectionStatus={connectionStatus}
         onLogoClick={handleLogoClick}
+        onSettingsClick={() => setShowSettings(true)}
       />
 
       {/* Main area */}
@@ -319,9 +355,11 @@ function AppContent() {
                     sessionName={selectedSession}
                     fontSize={settings.fontSize}
                     focused
+                    terminalRef={mobileTerminalRef}
                   />
                 </div>
               )}
+              {mobileView === 'terminal' && <VirtualKeybar terminalRef={mobileTerminalRef} />}
             </div>
           )}
           <MobileNav activeView={mobileView} onViewChange={setMobileView} />
@@ -343,7 +381,8 @@ function AppContent() {
           {/* Workspace */}
           <main className="flex-1 flex flex-col min-h-0 min-w-0 bg-[var(--color-bg)]">
             {selectedSession ? (
-              <div className="flex-1 min-h-0">
+              <div className="flex-1 flex flex-col min-h-0">
+                  <WindowTabs sessionName={selectedSession} />
                   <SplitWorkspace
                     layout={layout}
                     sessionName={selectedSession}
@@ -358,6 +397,7 @@ function AppContent() {
                     onDropSession={handleDropSession}
                     onReplaceSession={handleReplaceSession}
                     isSessionInUse={isSessionInUse}
+                    activeTerminalRef={activeTerminalRef}
                   />
               </div>
             ) : (
@@ -379,7 +419,16 @@ function AppContent() {
         onSubmit={handleCreate}
       />
 
-      {/* Settings panel is now integrated in Header via ThemeConfigurator */}
+      {/* Settings modal */}
+      <SettingsModal
+        open={showSettings}
+        onClose={() => setShowSettings(false)}
+        onChangePassword={changePassword}
+        onLogout={() => {
+          logout()
+          setShowSettings(false)
+        }}
+      />
 
       {/* Toast notifications */}
       <ToastContainer toasts={toasts} onDismiss={removeToast} />

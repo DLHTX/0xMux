@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { Icon } from '@iconify/react'
 import { IconTrash, IconEdit } from '../../lib/icons'
 import type { TmuxSession } from '../../lib/types'
+import { extractProjectName, getProjectColor } from '../../hooks/useSplitLayout'
 
 interface SessionItemProps {
   session: TmuxSession
@@ -85,6 +86,10 @@ export function SessionItem({
     }
   }, [])
 
+  // Project color
+  const projectName = extractProjectName(session.name)
+  const projectColor = getProjectColor(projectName)
+
   const handleRename = () => {
     const trimmed = editValue.trim()
     if (trimmed && trimmed !== session.name) {
@@ -103,6 +108,11 @@ export function SessionItem({
     } else {
       setConfirmDelete(true)
     }
+  }
+
+  /** Prevent draggable parent from capturing mousedown and suppressing click */
+  const stopDragCapture = (e: React.MouseEvent | React.PointerEvent) => {
+    e.stopPropagation()
   }
 
   return (
@@ -128,17 +138,21 @@ export function SessionItem({
         }
       `}
     >
-      {/* Status dot */}
+      {/* Status dot with project color */}
       <div
-        className={`w-2 h-2 shrink-0 rounded-[var(--radius)] ${
-          session.attached
-            ? 'bg-[var(--color-success)]'
-            : 'bg-[var(--color-border-light)]'
-        }`}
-        style={session.attached ? {
-          animation: 'breathe 2s ease-in-out infinite',
-        } : undefined}
+        className="w-2.5 h-2.5 shrink-0 rounded-[var(--radius)]"
+        style={{
+          background: session.attached ? projectColor : 'var(--color-border-light)',
+          animation: session.attached ? 'breathe 2s ease-in-out infinite' : undefined,
+        }}
       />
+
+      {/* LIVE label for attached sessions */}
+      {session.attached && (
+        <span className="text-[9px] font-bold shrink-0" style={{ color: projectColor }}>
+          LIVE
+        </span>
+      )}
 
       {/* Name */}
       <div className="flex-1 min-w-0">
@@ -180,6 +194,8 @@ export function SessionItem({
       {/* Delete button */}
       <button
         onClick={handleDeleteClick}
+        onMouseDown={stopDragCapture}
+        onPointerDown={stopDragCapture}
         className={`
           shrink-0 w-5 h-5 flex items-center justify-center transition-all text-[10px]
           ${confirmDelete

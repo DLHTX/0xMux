@@ -320,6 +320,22 @@ pub fn kill_window(session: &str, index: u32) -> Result<(), AppError> {
     Ok(())
 }
 
+pub fn select_window(session: &str, index: u32) -> Result<(), AppError> {
+    let target = format!("{session}:{index}");
+    let status = tmux_cmd()
+        .args(["select-window", "-t", &target])
+        .status()
+        .map_err(|e| AppError::Internal(format!("Failed to select window: {e}")))?;
+
+    if !status.success() {
+        return Err(AppError::Internal(format!(
+            "tmux select-window failed for '{target}'"
+        )));
+    }
+
+    Ok(())
+}
+
 /// Check whether the active pane in `session` is dead.
 fn is_pane_dead(session: &str) -> Result<bool, AppError> {
     let output = tmux_cmd()

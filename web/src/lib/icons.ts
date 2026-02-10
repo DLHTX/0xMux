@@ -82,3 +82,30 @@ export {
 export {
   default as IconCornerRightDown,
 } from '@iconify-icons/lucide/corner-right-down'
+export {
+  default as IconChevronUp,
+} from '@iconify-icons/lucide/chevron-up'
+export {
+  default as IconEye,
+} from '@iconify-icons/lucide/eye'
+export {
+  default as IconEyeOff,
+} from '@iconify-icons/lucide/eye-off'
+export {
+  default as IconLock,
+} from '@iconify-icons/lucide/lock'
+export {
+  default as IconShield,
+} from '@iconify-icons/lucide/shield'
+export {
+  default as IconLogOut,
+} from '@iconify-icons/lucide/log-out'
+export {
+  default as IconGlobe,
+} from '@iconify-icons/lucide/globe'
+export {
+  default as IconAlertTriangle,
+} from '@iconify-icons/lucide/alert-triangle'
+export {
+  default as IconRefreshCw,
+} from '@iconify-icons/lucide/refresh-cw'

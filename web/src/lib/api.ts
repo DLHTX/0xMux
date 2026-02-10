@@ -13,15 +13,53 @@ import type {
   CwdResponse,
   NextNameResponse,
   ListDirsResponse,
+  AuthStatusResponse,
+  SetupPasswordRequest,
+  LoginRequest,
+  AuthTokenResponse,
+  ChangePasswordRequest,
 } from './types'
 
 const API_BASE = '/api'
 
+// Token管理
+let authToken: string | null = null
+
+export function setAuthToken(token: string | null) {
+  authToken = token
+  if (token) {
+    localStorage.setItem('mux_token', token)
+  } else {
+    localStorage.removeItem('mux_token')
+  }
+}
+
+export function getAuthToken(): string | null {
+  if (!authToken) {
+    authToken = localStorage.getItem('mux_token')
+  }
+  return authToken
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const headers: HeadersInit = { 'Content-Type': 'application/json' }
+
+  // 添加token到请求头
+  const token = getAuthToken()
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
     ...options,
+    headers: { ...headers, ...options?.headers },
   })
+
+  // 401自动清除token
+  if (res.status === 401) {
+    setAuthToken(null)
+  }
+
   if (!res.ok) {
     const error: AppError = await res.json().catch(() => ({
       error: 'unknown',
@@ -99,6 +137,16 @@ export async function createWindow(
   })
 }
 
+export async function selectWindow(
+  session: string,
+  index: number
+): Promise<void> {
+  return request<void>(
+    `/sessions/${encodeURIComponent(session)}/windows/${index}/select`,
+    { method: 'PUT' }
+  )
+}
+
 export async function deleteWindow(
   session: string,
   index: number
@@ -127,4 +175,31 @@ export async function getNextSessionName(dir?: string): Promise<NextNameResponse
 export async function listDirs(path?: string): Promise<ListDirsResponse> {
   const params = path ? `?path=${encodeURIComponent(path)}` : ''
   return request<ListDirsResponse>(`/dirs${params}`)
+}
+
+// ── Auth API ──
+
+export async function getAuthStatus(): Promise<AuthStatusResponse> {
+  return request<AuthStatusResponse>('/auth/status')
+}
+
+export async function setupPassword(data: SetupPasswordRequest): Promise<AuthTokenResponse> {
+  return request<AuthTokenResponse>('/auth/setup', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function login(data: LoginRequest): Promise<AuthTokenResponse> {
+  return request<AuthTokenResponse>('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function changePassword(data: ChangePasswordRequest): Promise<void> {
+  return request<void>('/auth/password', {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
 }

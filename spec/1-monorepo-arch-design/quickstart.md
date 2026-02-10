@@ -30,14 +30,12 @@ npm run dev
 ```
 
 这将同时启动：
-- **WEB** (cyan): Vite dev server → `http://localhost:3000`
-- **SERVER** (magenta): Rust/Axum server → `http://localhost:3001`
-
-前端通过 Vite proxy 自动转发 `/api/*` 和 `/ws` 到后端。
+- **WEB** (cyan): `vite build --watch` 持续编译到 `web/dist/`
+- **API** (magenta): Rust/Axum server → `http://localhost:1234`（同时服务 API + 静态文件）
 
 ### 3. 打开浏览器
 
-访问 `http://localhost:3000`
+访问 `http://localhost:1234`
 
 ---
 
@@ -125,9 +123,9 @@ cd server && cargo build --release --features embed-frontend
 
 | 命令 | 说明 |
 |------|------|
-| `npm run dev` | 同时启动前后端开发服务器 |
-| `npm run build` | 构建前端 + 后端 |
-| `npm run dev:web` | 仅启动前端 |
-| `npm run dev:server` | 仅启动后端（含 hot reload） |
+| `bun run dev` | 同时启动 vite build --watch + Rust server |
+| `bun run build` | 构建前端 + 后端（生产模式） |
+| `bun run dev:web` | 仅启动前端持续编译 |
+| `bun run dev:api` | 仅启动后端（含 hot reload） |
 | `cargo test -p oxmux-server` | 运行后端测试 |
 | `cd web && bun run lint` | 前端代码检查 |

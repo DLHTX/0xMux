@@ -6,7 +6,7 @@ description = "0xMux - Hacker-grade tmux session manager with web UI"
 license = "MIT"
 
 [dependencies]
-axum = { version = "0.8", features = ["ws"] }
+axum = { version = "0.8", features = ["ws", "multipart"] }
 tokio = { version = "1", features = ["full"] }
 tokio-stream = "0.1"
 tower-http = { version = "0.6", features = ["cors", "fs"] }
@@ -24,6 +24,16 @@ chrono = { version = "0.4", features = ["serde"] }
 dirs = "6"
 rust-embed = { version = "8.5", features = ["axum", "mime-guess"], optional = true }
 mime_guess = { version = "2.0", optional = true }
+infer = "0.16"
+home = "0.5"
+
+# Password hashing & auth
+argon2 = "0.5"
+rand = "0.8"
+hex = "0.4"
+sha2 = "0.10"
+hmac = "0.12"
+toml = "0.8"
 
 [features]
 embed-frontend = ["rust-embed", "mime_guess"]

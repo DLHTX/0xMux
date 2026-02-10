@@ -169,3 +169,29 @@ export interface PtySessionInfo {
   pid: number
   created_at: string
 }
+
+// ── Auth Types ──
+
+export interface AuthStatusResponse {
+  initialized: boolean
+  authenticated: boolean
+}
+
+export interface SetupPasswordRequest {
+  password: string
+  confirm: string
+}
+
+export interface LoginRequest {
+  password: string
+}
+
+export interface AuthTokenResponse {
+  token: string
+}
+
+export interface ChangePasswordRequest {
+  current_password: string
+  new_password: string
+  confirm_password: string
+}

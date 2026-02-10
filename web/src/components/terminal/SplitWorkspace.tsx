@@ -15,7 +15,7 @@ import {
 } from '../../lib/icons'
 import type { SplitLayout, SplitDirection } from '../../lib/types'
 import { useState, useCallback, useMemo, useSyncExternalStore, useEffect, useRef } from 'react'
-import { getAllLeafIds } from '../../hooks/useSplitLayout'
+import { getAllLeafIds, extractProjectName, getProjectColor } from '../../hooks/useSplitLayout'
 
 // ---------------------------------------------------------------------------
 // Container pool — manages persistent DOM elements outside of React state.
@@ -91,6 +91,7 @@ interface SplitWorkspaceProps {
   onDropSession?: (paneId: string, direction: SplitDirection, sessionName: string) => void
   onReplaceSession?: (paneId: string, sessionName: string) => void
   isSessionInUse?: (sessionName: string) => boolean
+  activeTerminalRef?: React.RefObject<import('@xterm/xterm').Terminal | null>
 }
 
 function ResizeHandle({ direction }: { direction: 'horizontal' | 'vertical' }) {
@@ -120,6 +121,7 @@ function PaneSlot({
   canSplit,
   paneCount,
   isDragging,
+  isActive,
   onSplit,
   onClose,
   onDropSession,
@@ -132,6 +134,7 @@ function PaneSlot({
   canSplit: boolean
   paneCount: number
   isDragging: boolean
+  isActive: boolean
   onSplit: (nodeId: string, direction: SplitDirection) => void
   onClose: (nodeId: string) => void
   onDropSession?: (paneId: string, direction: SplitDirection, sessionName: string) => void
@@ -139,6 +142,10 @@ function PaneSlot({
   isSessionInUse?: (sessionName: string) => boolean
 }) {
   const [dropZone, setDropZone] = useState<DropZone>(null)
+
+  // Calculate project color
+  const projectName = extractProjectName(sessionName)
+  const projectColor = getProjectColor(projectName)
 
   const detectZone = (e: React.DragEvent<HTMLDivElement>): DropZone => {
     const rect = e.currentTarget.getBoundingClientRect()
@@ -219,7 +226,14 @@ function PaneSlot({
     : ''
 
   return (
-    <div className="group/pane relative h-full w-full">
+    <div
+      className="group/pane relative h-full w-full"
+      style={{
+        border: isActive ? `2px solid ${projectColor}` : `1px solid var(--color-border-light)`,
+        boxShadow: isActive ? `0 0 0 1px ${projectColor}` : 'none',
+        transition: 'border 0.2s ease, box-shadow 0.2s ease',
+      }}
+    >
       {/* Terminal mount point — rendered behind overlays */}
       <div ref={mountRef} className="absolute inset-0" />
 
@@ -291,6 +305,7 @@ function renderLayoutStructure(
 ): React.ReactNode {
   if (node.type === 'leaf') {
     const sessionName = props.paneSessionMap[node.id] ?? props.sessionName
+    const isActive = props.activePaneId === node.id
     return (
       <PaneSlot
         key={node.id}
@@ -300,6 +315,7 @@ function renderLayoutStructure(
         canSplit={props.canSplit}
         paneCount={props.paneCount}
         isDragging={isDragging}
+        isActive={isActive}
         onSplit={props.onSplit}
         onClose={props.onClose}
         onDropSession={props.onDropSession}
@@ -463,6 +479,7 @@ export function SplitWorkspace(props: SplitWorkspaceProps) {
             sessionName={name}
             fontSize={props.fontSize}
             focused={!!focusedLeaf}
+            terminalRef={focusedLeaf ? props.activeTerminalRef : undefined}
             onFocus={() => {
               const paneId = leafIds.find(
                 (id) => (props.paneSessionMap[id] ?? props.sessionName) === name

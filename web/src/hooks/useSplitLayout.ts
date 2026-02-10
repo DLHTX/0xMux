@@ -12,6 +12,37 @@ function createLeaf(): SplitLayout {
   return { id: generateId(), type: 'leaf' }
 }
 
+/** Layout history entry for a session */
+export interface LayoutHistory {
+  layout: SplitLayout
+  paneSessionMap: Record<string, string>
+  activePaneId: string | null
+}
+
+/** Serialize layout to JSON (for deep comparison) */
+function serializeLayout(layout: SplitLayout, paneSessionMap: Record<string, string>): string {
+  return JSON.stringify({ layout, paneSessionMap })
+}
+
+/** Extract project name from session name (e.g., "myproject-1" -> "myproject") */
+export function extractProjectName(sessionName: string): string {
+  // Remove trailing numbers and hyphens
+  return sessionName.replace(/-\d+$/, '')
+}
+
+/** Generate a consistent color for a project name */
+export function getProjectColor(projectName: string): string {
+  // Simple hash function
+  let hash = 0
+  for (let i = 0; i < projectName.length; i++) {
+    hash = projectName.charCodeAt(i) + ((hash << 5) - hash)
+  }
+
+  // Generate HSL color with consistent hue
+  const hue = Math.abs(hash % 360)
+  return `hsl(${hue}, 70%, 60%)`
+}
+
 function countLeaves(node: SplitLayout): number {
   if (node.type === 'leaf') return 1
   return node.children.reduce((sum, child) => sum + countLeaves(child), 0)
@@ -74,8 +105,22 @@ export function getAllLeafIds(node: SplitLayout): string[] {
 }
 
 export function useSplitLayout() {
-  const [layout, setLayout] = useState<SplitLayout>(createLeaf)
+  // Create initial state in a way that ensures consistency
+  const [state] = useState(() => {
+    const leaf = createLeaf()
+    return {
+      layout: leaf,
+      activePaneId: leaf.id,
+    }
+  })
+
+  const [layout, setLayout] = useState<SplitLayout>(state.layout)
   const [paneSessionMap, setPaneSessionMap] = useState<Record<string, string>>({})
+  const [activePaneId, setActivePaneId] = useState<string | null>(state.activePaneId)
+
+  // Layout history: sessionName -> LayoutHistory
+  const layoutHistory = useRef<Map<string, LayoutHistory>>(new Map())
+
   const splitLock = useRef(false)
 
   /** Assign an existing session to a pane */
@@ -146,6 +191,73 @@ export function useSplitLayout() {
     return getAllLeafIds(layout)
   }, [layout])
 
+  /** Save current layout state for a session */
+  const saveLayoutHistory = useCallback((sessionName: string) => {
+    // Don't save if it's a single-pane layout
+    const leafIds = getAllLeafIds(layout)
+    if (leafIds.length === 1 && Object.keys(paneSessionMap).length <= 1) {
+      return
+    }
+
+    layoutHistory.current.set(sessionName, {
+      layout: JSON.parse(JSON.stringify(layout)), // deep clone
+      paneSessionMap: { ...paneSessionMap },
+      activePaneId,
+    })
+  }, [layout, paneSessionMap, activePaneId])
+
+  /** Restore layout from history for a session */
+  const restoreLayoutHistory = useCallback((sessionName: string): boolean => {
+    const history = layoutHistory.current.get(sessionName)
+    if (!history) return false
+
+    setLayout(history.layout)
+    setPaneSessionMap(history.paneSessionMap)
+    setActivePaneId(history.activePaneId)
+    return true
+  }, [])
+
+  /** Find pane ID that contains a specific session */
+  const findPaneBySession = useCallback(
+    (sessionName: string): string | null => {
+      for (const [paneId, name] of Object.entries(paneSessionMap)) {
+        if (name === sessionName) return paneId
+      }
+      return null
+    },
+    [paneSessionMap]
+  )
+
+  /** Switch to a session with smart layout management */
+  const switchToSession = useCallback(
+    (sessionName: string, currentSessionName?: string): 'focus' | 'restore' | 'replace' => {
+      // Save current layout if we're leaving a multi-pane setup
+      if (currentSessionName && currentSessionName !== sessionName) {
+        saveLayoutHistory(currentSessionName)
+      }
+
+      // Strategy 1: Session is already open in a pane → just focus it
+      const existingPaneId = findPaneBySession(sessionName)
+      if (existingPaneId) {
+        setActivePaneId(existingPaneId)
+        return 'focus'
+      }
+
+      // Strategy 2: Session has a saved layout → restore it
+      if (restoreLayoutHistory(sessionName)) {
+        return 'restore'
+      }
+
+      // Strategy 3: Replace current view with single pane
+      const singleLeaf = createLeaf()
+      setLayout(singleLeaf)
+      setPaneSessionMap({ [singleLeaf.id]: sessionName })
+      setActivePaneId(singleLeaf.id)
+      return 'replace'
+    },
+    [saveLayoutHistory, restoreLayoutHistory, findPaneBySession]
+  )
+
   const paneCount = countLeaves(layout)
   const canSplit = paneCount < MAX_PANES
 
@@ -159,5 +271,11 @@ export function useSplitLayout() {
     paneSessionMap,
     assignSession,
     unassignSession,
+    activePaneId,
+    setActivePaneId,
+    saveLayoutHistory,
+    restoreLayoutHistory,
+    findPaneBySession,
+    switchToSession,
   }
 }

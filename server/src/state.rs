@@ -1,6 +1,7 @@
 use crate::config::ServerConfig;
 use crate::models::pty::PtySession;
 use crate::services::install::InstallManager;
+use crate::services::auth_service::AuthService;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{RwLock, broadcast};
@@ -11,4 +12,5 @@ pub struct AppState {
     pub config: Arc<ServerConfig>,
     pub install_manager: Arc<InstallManager>,
     pub pty_sessions: Arc<RwLock<HashMap<String, PtySession>>>,
+    pub auth_service: Arc<AuthService>,
 }

@@ -38,10 +38,11 @@ export function useSessions() {
     setSessions((prev) => prev.filter((s) => s.name !== name))
     try {
       await api.deleteSession(name)
-    } catch {
+    } catch (e) {
       // 失败时重新获取真实列表
       const data = await api.getSessions()
       setSessions(data)
+      throw e
     }
   }, [])
 

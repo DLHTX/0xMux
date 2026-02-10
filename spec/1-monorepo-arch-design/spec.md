@@ -115,8 +115,9 @@
 通信约定：
 - REST API 路径统一前缀 `/api/`
 - WebSocket 端点为 `/ws`
-- 开发模式下前端通过 Vite proxy 转发请求到后端
-- 生产模式下 Rust 后端直接提供前端静态文件服务
+- 开发模式下 Rust 通过 `tower-http::ServeDir` 直接服务 `web/dist/`，`vite build --watch` 持续编译
+- 生产模式下 Rust 通过 `rust-embed` 嵌入前端静态文件
+- 统一单端口 `:1234`，无需 Vite proxy
 
 **验收标准**:
 

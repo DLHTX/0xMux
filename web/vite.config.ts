@@ -8,11 +8,10 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify('0.1.0'),
   },
   server: {
-    port: 1234,
     proxy: {
-      '/api': 'http://localhost:1235',
+      '/api': 'http://127.0.0.1:1234',
       '/ws': {
-        target: 'http://localhost:1235',
+        target: 'ws://127.0.0.1:1234',
         ws: true,
       },
     },

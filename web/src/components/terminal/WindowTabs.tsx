@@ -6,21 +6,18 @@ import * as api from '../../lib/api'
 
 interface WindowTabsProps {
   sessionName: string
-  activeWindowIndex: number
-  onWindowChange: (index: number) => void
 }
 
-export function WindowTabs({
-  sessionName,
-  activeWindowIndex,
-  onWindowChange,
-}: WindowTabsProps) {
+export function WindowTabs({ sessionName }: WindowTabsProps) {
   const [windows, setWindows] = useState<TmuxWindow[]>([])
+  const [activeIndex, setActiveIndex] = useState(0)
 
   const fetchWindows = useCallback(async () => {
     try {
       const data = await api.getWindows(sessionName)
       setWindows(data)
+      const active = data.find((w) => w.active)
+      if (active) setActiveIndex(active.index)
     } catch {
       // ignore - session might not exist yet
     }
@@ -30,11 +27,20 @@ export function WindowTabs({
     fetchWindows()
   }, [fetchWindows])
 
+  const handleSelect = async (index: number) => {
+    try {
+      await api.selectWindow(sessionName, index)
+      setActiveIndex(index)
+    } catch {
+      // ignore
+    }
+  }
+
   const handleCreate = async () => {
     try {
       const newWindow = await api.createWindow(sessionName)
       setWindows((prev) => [...prev, newWindow])
-      onWindowChange(newWindow.index)
+      setActiveIndex(newWindow.index)
     } catch {
       // ignore
     }
@@ -44,17 +50,20 @@ export function WindowTabs({
     if (windows.length <= 1) return
     try {
       await api.deleteWindow(sessionName, index)
-      setWindows((prev) => prev.filter((w) => w.index !== index))
-      if (activeWindowIndex === index) {
-        const remaining = windows.filter((w) => w.index !== index)
-        if (remaining.length > 0) {
-          onWindowChange(remaining[0].index)
-        }
+      const remaining = windows.filter((w) => w.index !== index)
+      setWindows(remaining)
+      if (activeIndex === index && remaining.length > 0) {
+        const next = remaining[0].index
+        await api.selectWindow(sessionName, next)
+        setActiveIndex(next)
       }
     } catch {
       // ignore
     }
   }
+
+  // Only show tabs when there are multiple windows
+  if (windows.length <= 1) return null
 
   return (
     <div className="flex items-center border-b-[length:var(--border-w)] border-[var(--color-border-light)] overflow-x-auto shrink-0 scrollbar-hide">
@@ -64,12 +73,12 @@ export function WindowTabs({
           className={`group flex items-center gap-1.5 px-3 py-1.5 text-xs cursor-pointer shrink-0
             border-r-[length:var(--border-w)] border-[var(--color-border-light)]
             ${
-              activeWindowIndex === win.index
+              activeIndex === win.index
                 ? 'bg-[var(--color-bg-alt)] border-b-2 border-b-[var(--color-success)] font-bold'
                 : 'hover:bg-[var(--color-bg-alt)]'
             }
             transition-colors`}
-          onClick={() => onWindowChange(win.index)}
+          onClick={() => handleSelect(win.index)}
         >
           <span className="text-[var(--color-fg-muted)]">{win.index}:</span>
           <span>{win.name}</span>

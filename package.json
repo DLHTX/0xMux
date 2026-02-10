@@ -4,9 +4,9 @@
   "private": true,
   "description": "Hacker-grade tmux session manager with web UI",
   "scripts": {
-    "dev": "concurrently -n WEB,API -c cyan.bold,magenta.bold --kill-others \"bun run dev:web\" \"bun run dev:api\"",
-    "dev:web": "cd web && bun dev",
-    "dev:api": "cd server && PORT=1235 cargo watch -q -c -w src -x run",
+    "dev": "concurrently -n WEB,API -c cyan.bold,magenta.bold \"bun run dev:web\" \"bun run dev:api\"",
+    "dev:web": "cd web && bunx vite build --watch",
+    "dev:api": "cd server && cargo watch -q -c -w src -x run",
     "build": "bun run build:web && bun run build:server",
     "build:web": "cd web && bun run build",
     "build:server": "cd server && cargo build --release --features embed-frontend",

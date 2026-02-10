@@ -24,6 +24,13 @@ pub async fn create_window_handler(
     Ok((StatusCode::CREATED, Json(window)))
 }
 
+pub async fn select_window_handler(
+    Path((name, index)): Path<(String, u32)>,
+) -> Result<impl IntoResponse, AppError> {
+    tmux::select_window(&name, index)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub async fn delete_window_handler(
     Path((name, index)): Path<(String, u32)>,
 ) -> Result<impl IntoResponse, AppError> {

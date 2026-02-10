@@ -9,6 +9,7 @@ interface TerminalPaneProps {
   fontSize?: number
   focused?: boolean
   onFocus?: () => void
+  terminalRef?: React.RefObject<import('@xterm/xterm').Terminal | null>
 }
 
 export function TerminalPane({
@@ -16,6 +17,7 @@ export function TerminalPane({
   fontSize = 14,
   focused = false,
   onFocus,
+  terminalRef: externalTerminalRef,
 }: TerminalPaneProps) {
   const [ptyStatus, setPtyStatus] = useState<ConnectionStatus>('disconnected')
   const [exitCode, setExitCode] = useState<number | null>(null)
@@ -57,6 +59,13 @@ export function TerminalPane({
     // Trigger fade-in after mount
     requestAnimationFrame(() => setMounted(true))
   }, [initTerminal])
+
+  // Sync terminal ref to parent component
+  useEffect(() => {
+    if (externalTerminalRef && terminal.current) {
+      (externalTerminalRef as React.MutableRefObject<typeof terminal.current>).current = terminal.current
+    }
+  }, [terminal, externalTerminalRef])
 
   // Sync actual terminal size to PTY after WebSocket connects.
   // Fixes: initial URL uses default 80x24, but terminal may already be larger.

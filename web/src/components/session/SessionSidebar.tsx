@@ -11,6 +11,7 @@ import {
 } from '../../lib/icons'
 import { SessionItem } from './SessionItem'
 import type { TmuxSession } from '../../lib/types'
+import { getProjectColor } from '../../hooks/useSplitLayout'
 
 interface SessionSidebarProps {
   sessions: TmuxSession[]
@@ -36,16 +37,31 @@ function getGroupName(sessionName: string): string {
 
 function groupByFolder(sessions: TmuxSession[]): FolderGroup[] {
   const map = new Map<string, TmuxSession[]>()
+  const ungrouped: TmuxSession[] = []
+
   for (const s of sessions) {
     const folder = getGroupName(s.name)
     const list = map.get(folder) || []
     list.push(s)
     map.set(folder, list)
   }
-  return Array.from(map.entries()).map(([folder, sessions]) => ({
-    folder,
-    sessions,
-  }))
+
+  // Only create folders for 2+ sessions, otherwise show ungrouped
+  const groups: FolderGroup[] = []
+  for (const [folder, sessions] of map.entries()) {
+    if (sessions.length > 1) {
+      groups.push({ folder, sessions })
+    } else {
+      ungrouped.push(...sessions)
+    }
+  }
+
+  // Show ungrouped sessions at the top (without folder)
+  if (ungrouped.length > 0) {
+    groups.unshift({ folder: '', sessions: ungrouped })
+  }
+
+  return groups
 }
 
 export function SessionSidebar({
@@ -133,14 +149,18 @@ export function SessionSidebar({
           {groups.length > 0 ? (
             groups.map((group) => {
               const isOpen = !collapsedFolders.has(group.folder)
+              const projectColor = getProjectColor(group.folder)
+
               return (
-                <div key={group.folder}>
-                  {/* Folder header */}
-                  <button
-                    onClick={() => toggleFolder(group.folder)}
-                    className="w-full flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider
-                      text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] transition-colors cursor-pointer"
-                  >
+                <div key={group.folder || 'ungrouped'}>
+                  {/* Folder header (only show if folder name exists) */}
+                  {group.folder && (
+                    <button
+                      onClick={() => toggleFolder(group.folder)}
+                      className="w-full flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider
+                        text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] transition-colors cursor-pointer"
+                      style={{ borderLeft: `3px solid ${projectColor}` }}
+                    >
                     <Icon
                       icon={isOpen ? IconChevronDown : IconChevronRight}
                       width={10}
@@ -152,10 +172,11 @@ export function SessionSidebar({
                     <span className="ml-auto text-[var(--color-fg-faint)]">
                       {group.sessions.length}
                     </span>
-                  </button>
+                    </button>
+                  )}
 
-                  {/* Sessions in this folder */}
-                  {isOpen &&
+                  {/* Sessions in this folder/ungrouped */}
+                  {(isOpen || !group.folder) &&
                     group.sessions.map((session) => (
                       <SessionItem
                         key={session.name}
