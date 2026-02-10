@@ -84,12 +84,11 @@ fn is_whitelisted(path: &str) -> bool {
 /// 从请求中提取token（按优先级：Bearer header > query param > cookie）
 fn extract_token(request: &Request<Body>) -> Option<String> {
     // 1. Authorization: Bearer <token>
-    if let Some(auth_header) = request.headers().get(header::AUTHORIZATION) {
-        if let Ok(auth_str) = auth_header.to_str() {
-            if let Some(token) = auth_str.strip_prefix("Bearer ") {
-                return Some(token.to_string());
-            }
-        }
+    if let Some(auth_header) = request.headers().get(header::AUTHORIZATION)
+        && let Ok(auth_str) = auth_header.to_str()
+        && let Some(token) = auth_str.strip_prefix("Bearer ")
+    {
+        return Some(token.to_string());
     }
 
     // 2. ?token=<token>
@@ -102,13 +101,13 @@ fn extract_token(request: &Request<Body>) -> Option<String> {
     }
 
     // 3. Cookie: mux_token=<token>
-    if let Some(cookie_header) = request.headers().get(header::COOKIE) {
-        if let Ok(cookie_str) = cookie_header.to_str() {
-            for cookie in cookie_str.split(';') {
-                let cookie = cookie.trim();
-                if let Some(value) = cookie.strip_prefix("mux_token=") {
-                    return Some(value.to_string());
-                }
+    if let Some(cookie_header) = request.headers().get(header::COOKIE)
+        && let Ok(cookie_str) = cookie_header.to_str()
+    {
+        for cookie in cookie_str.split(';') {
+            let cookie = cookie.trim();
+            if let Some(value) = cookie.strip_prefix("mux_token=") {
+                return Some(value.to_string());
             }
         }
     }
