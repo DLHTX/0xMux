@@ -79,7 +79,6 @@ function useSessionPool(sessionNames: string[]): Map<string, HTMLDivElement> {
 
 interface SplitWorkspaceProps {
   layout: SplitLayout
-  sessionName: string
   fontSize?: number
   canSplit: boolean
   activePaneId: string | null
@@ -87,10 +86,10 @@ interface SplitWorkspaceProps {
   onSplit: (nodeId: string, direction: SplitDirection) => void
   onClose: (nodeId: string) => void
   onPaneFocus: (nodeId: string) => void
-  paneSessionMap: Record<string, string>
+  paneWindowMap: Record<string, import('../../lib/types').PaneWindow>
   onDropSession?: (paneId: string, direction: SplitDirection, sessionName: string) => void
   onReplaceSession?: (paneId: string, sessionName: string) => void
-  isSessionInUse?: (sessionName: string) => boolean
+  isWindowInUse?: (sessionName: string, windowIndex: number) => boolean
   activeTerminalRef?: React.RefObject<import('@xterm/xterm').Terminal | null>
 }
 
@@ -304,7 +303,8 @@ function renderLayoutStructure(
   isDragging: boolean
 ): React.ReactNode {
   if (node.type === 'leaf') {
-    const sessionName = props.paneSessionMap[node.id] ?? props.sessionName
+    const pw = props.paneWindowMap[node.id]
+    const sessionName = pw ? `${pw.sessionName}:${pw.windowIndex}` : ''
     const isActive = props.activePaneId === node.id
     return (
       <PaneSlot
@@ -320,7 +320,7 @@ function renderLayoutStructure(
         onClose={props.onClose}
         onDropSession={props.onDropSession}
         onReplaceSession={props.onReplaceSession}
-        isSessionInUse={props.isSessionInUse}
+        isSessionInUse={props.isWindowInUse}
       />
     )
   }
@@ -356,21 +356,24 @@ export function SplitWorkspace(props: SplitWorkspaceProps) {
   // Stable leaf ID list
   const leafIds = useMemo(() => getAllLeafIds(layout), [layout])
 
-  // Session names currently displayed in panes
+  // Window keys currently displayed in panes (format: "sessionName:windowIndex")
   const currentSessionNames = useMemo(() => {
     const names = new Set<string>()
     for (const id of leafIds) {
-      names.add(props.paneSessionMap[id] ?? props.sessionName)
+      const pw = props.paneWindowMap[id]
+      if (pw) {
+        names.add(`${pw.sessionName}:${pw.windowIndex}`)
+      }
     }
     return [...names]
-  }, [leafIds, props.paneSessionMap, props.sessionName])
+  }, [leafIds, props.paneWindowMap])
 
   // Persistent container elements keyed by session name.
   // ensureInPool only ADDS — switched-away sessions stay "warm" in the pool
   // so switching back is instant (no WS reconnect needed).
   const sessionContainers = useSessionPool(currentSessionNames)
 
-  // Clean up orphaned sessions when panes are closed
+  // Clean up orphaned windows when panes are closed
   const prevLeafIdsRef = useRef(leafIds)
   useEffect(() => {
     const prev = prevLeafIdsRef.current
@@ -382,11 +385,14 @@ export function SplitWorkspace(props: SplitWorkspaceProps) {
 
     const usedNames = new Set<string>()
     for (const id of leafIds) {
-      usedNames.add(props.paneSessionMap[id] ?? props.sessionName)
+      const pw = props.paneWindowMap[id]
+      if (pw) {
+        usedNames.add(`${pw.sessionName}:${pw.windowIndex}`)
+      }
     }
     const orphaned = [...poolMap.keys()].filter((n) => !usedNames.has(n))
     if (orphaned.length > 0) removeFromPool(orphaned)
-  }, [leafIds, props.paneSessionMap, props.sessionName])
+  }, [leafIds, props.paneWindowMap])
 
   // Track global drag state so PaneSlot can show a drag overlay above xterm
   const [isDragging, setIsDragging] = useState(false)
@@ -463,27 +469,35 @@ export function SplitWorkspace(props: SplitWorkspaceProps) {
         {renderLayoutStructure(layout, props, sessionContainers, isDragging)}
       </div>
 
-      {/* Portaled terminals keyed by session name — includes "warm" sessions
+      {/* Portaled terminals keyed by window — includes "warm" windows
           that were switched away from but kept alive for instant switch-back */}
-      {[...sessionContainers.keys()].map((name) => {
-        const container = sessionContainers.get(name)
+      {[...sessionContainers.keys()].map((windowKey) => {
+        const container = sessionContainers.get(windowKey)
         if (!container) return null
-        // Determine if this session is focused in any pane
-        const focusedLeaf = leafIds.find(
-          (id) => (props.paneSessionMap[id] ?? props.sessionName) === name
-            && props.activePaneId === id
-        )
+
+        // Parse windowKey (format: "sessionName:windowIndex")
+        const [sessionName, windowIndexStr] = windowKey.split(':')
+        const windowIndex = parseInt(windowIndexStr, 10)
+
+        // Determine if this window is focused in any pane
+        const focusedLeaf = leafIds.find((id) => {
+          const pw = props.paneWindowMap[id]
+          return pw && `${pw.sessionName}:${pw.windowIndex}` === windowKey && props.activePaneId === id
+        })
+
         return createPortal(
           <TerminalPane
-            key={name}
-            sessionName={name}
+            key={windowKey}
+            sessionName={sessionName}
+            windowIndex={windowIndex}
             fontSize={props.fontSize}
             focused={!!focusedLeaf}
             terminalRef={focusedLeaf ? props.activeTerminalRef : undefined}
             onFocus={() => {
-              const paneId = leafIds.find(
-                (id) => (props.paneSessionMap[id] ?? props.sessionName) === name
-              )
+              const paneId = leafIds.find((id) => {
+                const pw = props.paneWindowMap[id]
+                return pw && `${pw.sessionName}:${pw.windowIndex}` === windowKey
+              })
               if (paneId) props.onPaneFocus(paneId)
             }}
           />,

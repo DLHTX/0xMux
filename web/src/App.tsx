@@ -20,6 +20,7 @@ import { FUSION_PIXEL_FONT, SILKSCREEN_FONT } from './lib/theme'
 import { Icon } from '@iconify/react'
 import { IconTerminal, IconChevronLeft } from './lib/icons'
 import type { Terminal } from '@xterm/xterm'
+import { getWindows, createWindow, deleteWindow } from './lib/api'
 
 /** Auto-switch font when locale changes (zh -> Fusion Pixel, en -> Silkscreen) */
 function LocaleFontBridge() {
@@ -45,7 +46,7 @@ function LocaleFontBridge() {
 
 function AppContent() {
   const { t } = useI18n()
-  const { status: authStatus, loading: authLoading, setup, login, logout, changePassword } = useAuth()
+  const { status: authStatus, loading: authLoading, setup, skip, login, logout, changePassword } = useAuth()
   const {
     sessions,
     loading,
@@ -59,9 +60,10 @@ function AppContent() {
 
   const [showCreate, setShowCreate] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
-  const [selectedSession, setSelectedSession] = useState<string | null>(null)
+  const [selectedWindow, setSelectedWindow] = useState<{ sessionName: string; windowIndex: number } | null>(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileView, setMobileView] = useState<MobileView>('sessions')
+  const [windows, setWindows] = useState<Map<string, import('./lib/types').TmuxWindow[]>>(new Map())
 
   const { settings } = useSettings()
   const {
@@ -71,11 +73,11 @@ function AppContent() {
     getPaneIds,
     paneCount,
     canSplit,
-    paneSessionMap,
-    assignSession,
+    paneWindowMap,
+    assignWindow,
     activePaneId,
     setActivePaneId,
-    switchToSession,
+    switchToWindow,
   } = useSplitLayout()
   const isMobile = useMobile()
   const { toasts, addToast, removeToast } = useToast()
@@ -87,23 +89,65 @@ function AppContent() {
 
   const needsSetup = deps && !allReady
 
-  // Auto-select first session if none selected and sessions exist
+  // Auto-select first window if none selected and sessions exist
   useEffect(() => {
-    if (selectedSession && sessions.some((s) => s.name === selectedSession)) return
+    if (selectedWindow && sessions.some((s) => s.name === selectedWindow.sessionName)) return
     if (sessions.length > 0) {
-      const firstSession = sessions[0].name
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setSelectedSession(firstSession)
-      // Initialize with single pane
-      const leafIds = getPaneIds()
-      if (leafIds.length === 1 && !paneSessionMap[leafIds[0]]) {
-        assignSession(leafIds[0], firstSession)
-        setActivePaneId(leafIds[0])
+      const firstSession = sessions[0]
+      const wins = windows.get(firstSession.name) || []
+      const firstWin = wins[0]
+
+      if (firstWin) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setSelectedWindow({ sessionName: firstSession.name, windowIndex: firstWin.index })
+        // Initialize with single pane
+        const leafIds = getPaneIds()
+        if (leafIds.length === 1 && !paneWindowMap[leafIds[0]]) {
+          assignWindow(leafIds[0], firstSession.name, firstWin.index)
+          setActivePaneId(leafIds[0])
+        }
       }
     } else {
-      setSelectedSession(null)
+      setSelectedWindow(null)
     }
-  }, [sessions, selectedSession, getPaneIds, paneSessionMap, assignSession, setActivePaneId])
+  }, [sessions, selectedWindow, windows, getPaneIds, paneWindowMap, assignWindow, setActivePaneId])
+
+  // Refresh windows list for all sessions
+  // Use a ref to track sessions to avoid re-triggering on deletion
+  const sessionsRef = useRef<TmuxSession[]>([])
+  useEffect(() => {
+    sessionsRef.current = sessions
+  }, [sessions])
+
+  useEffect(() => {
+    const fetchWindows = async () => {
+      // Read from ref to get latest sessions without triggering re-render
+      const currentSessions = sessionsRef.current
+      if (currentSessions.length === 0) return
+
+      const newWindows = new Map<string, import('./lib/types').TmuxWindow[]>()
+      for (const session of currentSessions) {
+        try {
+          const wins = await getWindows(session.name)
+          newWindows.set(session.name, wins)
+        } catch (error) {
+          // Skip deleted sessions silently (404 is expected during deletion)
+          if (error && typeof error === 'object' && 'status' in error && error.status === 404) {
+            continue
+          }
+          console.error(`Failed to get windows for session ${session.name}:`, error)
+        }
+      }
+      setWindows(newWindows)
+    }
+
+    // Initial fetch
+    fetchWindows()
+
+    // Poll every 2 seconds - independent of sessions changes
+    const interval = setInterval(fetchWindows, 2000)
+    return () => clearInterval(interval)
+  }, [])
 
   // Keyboard shortcuts (desktop only)
   useEffect(() => {
@@ -156,23 +200,33 @@ function AppContent() {
     return () => window.removeEventListener('keydown', handler)
   }, [isMobile, activePaneId, canSplit, splitPane, closePane, getPaneIds, setActivePaneId])
 
-  // Sync selectedSession with activePaneId
+  // Sync selectedWindow with activePaneId
   useEffect(() => {
     if (!activePaneId) return
-    const sessionName = paneSessionMap[activePaneId]
-    if (sessionName && sessionName !== selectedSession) {
-      setSelectedSession(sessionName)
+    const pw = paneWindowMap[activePaneId]
+    if (
+      pw &&
+      (selectedWindow?.sessionName !== pw.sessionName ||
+        selectedWindow?.windowIndex !== pw.windowIndex)
+    ) {
+      setSelectedWindow({ sessionName: pw.sessionName, windowIndex: pw.windowIndex })
     }
-  }, [activePaneId, paneSessionMap, selectedSession])
+  }, [activePaneId, paneWindowMap, selectedWindow])
 
   const handleCreate = async (name: string, startDirectory?: string) => {
     try {
       const session = await createSession(name, startDirectory)
-      setSelectedSession(session.name)
-      // Assign to active pane
-      const paneIds = getPaneIds()
-      if (activePaneId && paneIds.includes(activePaneId)) {
-        assignSession(activePaneId, session.name)
+      // Get the first window of the new session
+      const wins = await getWindows(session.name)
+      const firstWin = wins[0]
+
+      if (firstWin) {
+        setSelectedWindow({ sessionName: session.name, windowIndex: firstWin.index })
+        // Assign to active pane
+        const paneIds = getPaneIds()
+        if (activePaneId && paneIds.includes(activePaneId)) {
+          assignWindow(activePaneId, session.name, firstWin.index)
+        }
       }
     } catch {
       addToast(`Failed to create session "${name}"`, 'error')
@@ -190,29 +244,104 @@ function AppContent() {
   const handleRename = async (oldName: string, newName: string) => {
     try {
       await renameSession(oldName, newName)
-      if (selectedSession === oldName) {
-        setSelectedSession(newName)
+      if (selectedWindow?.sessionName === oldName) {
+        setSelectedWindow({ sessionName: newName, windowIndex: selectedWindow.windowIndex })
       }
     } catch {
       addToast(`Failed to rename session "${oldName}"`, 'error')
     }
   }
 
-  const handleLogoClick = () => {
-    setSelectedSession(null)
+  const handleCreateWindow = async (sessionName: string) => {
+    try {
+      const newWindow = await createWindow(sessionName)
+      // Refresh windows list for this session
+      const wins = await getWindows(sessionName)
+      setWindows((prev) => new Map(prev).set(sessionName, wins))
+      addToast(`Created window ${newWindow.index}`, 'success')
+    } catch {
+      addToast(`Failed to create window in "${sessionName}"`, 'error')
+    }
   }
 
-  /** Check if a session is already open in any pane */
-  const isSessionInUse = useCallback(
-    (sessionName: string): boolean => {
-      return Object.values(paneSessionMap).includes(sessionName)
+  const handleDeleteWindow = async (sessionName: string, windowIndex: number) => {
+    try {
+      // Check if this is the last window
+      const wins = windows.get(sessionName) || []
+      if (wins.length <= 1) {
+        // This is the last window, delete the entire session directly
+        await deleteSession(sessionName)
+        // Immediately remove from local state
+        setWindows((prev) => {
+          const next = new Map(prev)
+          next.delete(sessionName)
+          return next
+        })
+        setSessions((prev) => prev.filter((s) => s.name !== sessionName))
+        addToast(`Deleted session "${sessionName}"`, 'success')
+        return
+      }
+
+      // Normal window deletion - immediately remove from local state
+      await deleteWindow(sessionName, windowIndex)
+      setWindows((prev) => {
+        const next = new Map(prev)
+        const currentWins = next.get(sessionName) || []
+        const updated = currentWins.filter((w) => w.index !== windowIndex)
+        next.set(sessionName, updated)
+        return next
+      })
+      addToast(`Deleted window ${windowIndex}`, 'success')
+    } catch (error: any) {
+      if (error.error === 'last_window') {
+        // Fallback: if backend returns last_window error, delete the session
+        await deleteSession(sessionName)
+        // Immediately remove from local state
+        setWindows((prev) => {
+          const next = new Map(prev)
+          next.delete(sessionName)
+          return next
+        })
+        setSessions((prev) => prev.filter((s) => s.name !== sessionName))
+        addToast(`Deleted session "${sessionName}"`, 'success')
+      } else {
+        addToast(`Failed to delete window ${windowIndex}`, 'error')
+      }
+    }
+  }
+
+  const handleDeleteSession = async (sessionName: string) => {
+    try {
+      await deleteSession(sessionName)
+      // Immediately remove from local state
+      setWindows((prev) => {
+        const next = new Map(prev)
+        next.delete(sessionName)
+        return next
+      })
+      setSessions((prev) => prev.filter((s) => s.name !== sessionName))
+      addToast(`Deleted session "${sessionName}"`, 'success')
+    } catch {
+      addToast(`Failed to delete session "${sessionName}"`, 'error')
+    }
+  }
+
+  const handleLogoClick = () => {
+    setSelectedWindow(null)
+  }
+
+  /** Check if a window is already open in any pane */
+  const isWindowInUse = useCallback(
+    (sessionName: string, windowIndex: number): boolean => {
+      return Object.values(paneWindowMap).some(
+        (pw) => pw.sessionName === sessionName && pw.windowIndex === windowIndex
+      )
     },
-    [paneSessionMap]
+    [paneWindowMap]
   )
 
-  const handleSelectSession = useCallback((name: string) => {
-    const previousSession = selectedSession
-    setSelectedSession(name)
+  const handleSelectWindow = useCallback((sessionName: string, windowIndex: number) => {
+    setSelectedWindow({ sessionName, windowIndex })
 
     // Mobile: simple view switch
     if (isMobile) {
@@ -221,47 +350,38 @@ function AppContent() {
     }
 
     // Desktop: intelligent layout switching
-    const switchResult = switchToSession(name, previousSession || undefined)
+    const switchResult = switchToWindow(sessionName, windowIndex)
 
     // Show visual feedback
     if (switchResult === 'focus') {
-      addToast(`已切换到窗格中的 "${name}"`, 'success')
+      addToast(`已切换到窗格中的窗口 ${windowIndex}`, 'success')
     } else if (switchResult === 'restore') {
-      addToast(`恢复 "${name}" 的分屏布局`, 'success')
+      addToast(`恢复窗口 ${windowIndex} 的分屏布局`, 'success')
     }
-  }, [isMobile, selectedSession, switchToSession, addToast])
+  }, [isMobile, switchToWindow, addToast])
 
   const handleMobileBack = useCallback(() => {
     setMobileView('sessions')
   }, [])
 
-  /** Handle drag-and-drop of a session from sidebar onto a pane edge (split) */
+  /** Handle drag-and-drop of a window from sidebar onto a pane edge (split) */
   const handleDropSession = useCallback(
-    async (paneId: string, direction: import('./lib/types').SplitDirection, sessionName: string) => {
-      if (isSessionInUse(sessionName)) {
-        addToast(`Session "${sessionName}" 已在其他窗格中打开`, 'error')
-        return
-      }
-      const newPaneId = await splitPane(paneId, direction)
-      if (newPaneId) {
-        // Override the auto-created session — assign the dragged session instead
-        assignSession(newPaneId, sessionName)
-      }
+    async (_paneId: string, _direction: import('./lib/types').SplitDirection, _sessionName: string) => {
+      // TODO: Update for window-based architecture
+      // Drag-and-drop functionality needs to be redesigned for windows
+      addToast('Drag-and-drop not yet supported in new architecture', 'info')
     },
-    [splitPane, assignSession, isSessionInUse, addToast]
+    [addToast]
   )
 
-  /** Handle drag-and-drop of a session to center of a pane (replace) */
+  /** Handle drag-and-drop of a window to center of a pane (replace) */
   const handleReplaceSession = useCallback(
-    (paneId: string, sessionName: string) => {
-      if (isSessionInUse(sessionName)) {
-        addToast(`Session "${sessionName}" 已在其他窗格中打开`, 'error')
-        return
-      }
-      assignSession(paneId, sessionName)
-      setSelectedSession(sessionName)
+    (_paneId: string, _sessionName: string) => {
+      // TODO: Update for window-based architecture
+      // Drag-and-drop functionality needs to be redesigned for windows
+      addToast('Drag-and-drop not yet supported in new architecture', 'info')
     },
-    [assignSession, isSessionInUse, addToast]
+    [addToast]
   )
 
   // Auth loading
@@ -280,7 +400,7 @@ function AppContent() {
     return (
       <>
         <LocaleFontBridge />
-        <SetupPasswordModal onSubmit={setup} />
+        <SetupPasswordModal onSubmit={setup} onSkip={skip} />
       </>
     )
   }
@@ -335,21 +455,29 @@ function AppContent() {
         <div className="flex-1 flex flex-col overflow-hidden pb-14">
           {mobileView === 'sessions' ? (
             <div className="flex-1 overflow-y-auto">
-              {sessions.map((s) => (
-                <div
-                  key={s.name}
-                  onClick={() => handleSelectSession(s.name)}
-                  className={`flex items-center gap-3 px-4 py-3 cursor-pointer border-b-[length:var(--border-w)] border-[var(--color-border-light)]
-                    ${selectedSession === s.name ? 'bg-[var(--color-bg-alt)]' : 'hover:bg-[var(--color-bg-alt)]'}
-                    min-h-[56px] transition-colors`}
-                >
-                  <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${s.attached ? 'bg-[var(--color-success)]' : 'bg-[var(--color-border-light)]'}`} />
-                  <div className="flex-1 min-w-0">
-                    <span className="text-sm font-bold truncate block">{s.name}</span>
-                    <span className="text-[10px] text-[var(--color-fg-muted)]">{s.windows} windows</span>
+              {sessions.map((s) => {
+                const wins = windows.get(s.name) || []
+                const firstWin = wins[0]
+                return (
+                  <div
+                    key={s.name}
+                    onClick={() => {
+                      if (firstWin) {
+                        handleSelectWindow(s.name, firstWin.index)
+                      }
+                    }}
+                    className={`flex items-center gap-3 px-4 py-3 cursor-pointer border-b-[length:var(--border-w)] border-[var(--color-border-light)]
+                      ${selectedWindow?.sessionName === s.name ? 'bg-[var(--color-bg-alt)]' : 'hover:bg-[var(--color-bg-alt)]'}
+                      min-h-[56px] transition-colors`}
+                  >
+                    <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${s.attached ? 'bg-[var(--color-success)]' : 'bg-[var(--color-border-light)]'}`} />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-bold truncate block">{s.name}</span>
+                      <span className="text-[10px] text-[var(--color-fg-muted)]">{s.windows} windows</span>
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           ) : (
             <div className="flex-1 flex flex-col overflow-hidden">
@@ -357,12 +485,14 @@ function AppContent() {
                 <button onClick={handleMobileBack} className="p-1 text-[var(--color-fg-muted)]">
                   <Icon icon={IconChevronLeft} width={18} />
                 </button>
-                <span className="text-xs font-bold truncate">{selectedSession}</span>
+                <span className="text-xs font-bold truncate">
+                  {selectedWindow ? `${selectedWindow.sessionName}:${selectedWindow.windowIndex}` : ''}
+                </span>
               </div>
-              {selectedSession && (
+              {selectedWindow && (
                 <div className="flex-1 min-h-0">
                   <TerminalPane
-                    sessionName={selectedSession}
+                    sessionName={selectedWindow.sessionName}
                     fontSize={settings.fontSize}
                     focused
                     terminalRef={mobileTerminalRef}
@@ -379,23 +509,24 @@ function AppContent() {
         <div className="flex-1 flex overflow-hidden">
           <SessionSidebar
             sessions={sessions}
-            selectedSession={selectedSession}
-            onSelect={handleSelectSession}
-            onCreate={() => setShowCreate(true)}
-            onDelete={handleDelete}
-            onRename={handleRename}
+            windows={windows}
+            selectedWindow={selectedWindow}
+            onSelectWindow={handleSelectWindow}
+            onCreateSession={() => setShowCreate(true)}
+            onCreateWindow={handleCreateWindow}
+            onDeleteWindow={handleDeleteWindow}
+            onDeleteSession={handleDeleteSession}
             collapsed={sidebarCollapsed}
             onToggleCollapse={() => setSidebarCollapsed((prev) => !prev)}
           />
 
           {/* Workspace */}
           <main className="flex-1 flex flex-col min-h-0 min-w-0 bg-[var(--color-bg)]">
-            {selectedSession ? (
+            {selectedWindow ? (
               <div className="flex-1 flex flex-col min-h-0">
-                  <WindowTabs sessionName={selectedSession} />
+                  <WindowTabs sessionName={selectedWindow.sessionName} />
                   <SplitWorkspace
                     layout={layout}
-                    sessionName={selectedSession}
                     fontSize={settings.fontSize}
                     canSplit={canSplit}
                     activePaneId={activePaneId}
@@ -403,10 +534,10 @@ function AppContent() {
                     onSplit={splitPane}
                     onClose={closePane}
                     onPaneFocus={setActivePaneId}
-                    paneSessionMap={paneSessionMap}
+                    paneWindowMap={paneWindowMap}
                     onDropSession={handleDropSession}
                     onReplaceSession={handleReplaceSession}
-                    isSessionInUse={isSessionInUse}
+                    isWindowInUse={isWindowInUse}
                     activeTerminalRef={activeTerminalRef}
                   />
               </div>

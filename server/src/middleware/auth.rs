@@ -9,6 +9,7 @@ use axum::{
 use serde::Serialize;
 
 use crate::state::AppState;
+use crate::services::config_store::PersistentConfig;
 
 #[derive(Serialize)]
 struct ErrorResponse {
@@ -26,6 +27,13 @@ pub async fn auth_middleware(
     // 白名单端点（无需鉴权）
     if is_whitelisted(path) {
         return Ok(next.run(request).await);
+    }
+
+    // 如果跳过了密码设置，允许所有请求（无需token）
+    if let Ok(config) = PersistentConfig::load() {
+        if config.password_skipped {
+            return Ok(next.run(request).await);
+        }
     }
 
     // 提取token（按优先级）
@@ -65,6 +73,7 @@ fn is_whitelisted(path: &str) -> bool {
         "/api/health",
         "/api/auth/status",
         "/api/auth/setup",
+        "/api/auth/skip",
         "/api/auth/login",
     ];
 

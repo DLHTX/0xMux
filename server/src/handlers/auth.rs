@@ -4,6 +4,7 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use crate::state::AppState;
 use crate::services::auth_service::AuthService;
@@ -265,12 +266,73 @@ pub async fn change_password_handler(
     Ok(StatusCode::OK)
 }
 
+/// POST /api/auth/skip - 跳过密码设置
+pub async fn skip_setup_handler(
+    State(state): State<AppState>,
+) -> Result<Json<TokenResponse>, (StatusCode, Json<ErrorResponse>)> {
+    // 检查是否已初始化
+    let config = PersistentConfig::load().map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: format!("加载配置失败: {}", e),
+            }),
+        )
+    })?;
+
+    if config.is_initialized() {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: "已初始化".to_string(),
+            }),
+        ));
+    }
+
+    // 保存跳过标记
+    let new_config = PersistentConfig {
+        password_skipped: true,
+        ..config
+    };
+
+    new_config.save().map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: format!("保存配置失败: {}", e),
+            }),
+        )
+    })?;
+
+    // 生成一个特殊的"无密码"token（用随机密钥）
+    let dummy_hash = AuthService::hash_password(&format!("skip_{}", Uuid::new_v4()))
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse { error: e }),
+            )
+        })?;
+    state.auth_service.init_hmac_key(&dummy_hash).await;
+
+    let token = state.auth_service.generate_token().await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse { error: e }),
+        )
+    })?;
+
+    Ok(Json(TokenResponse { token }))
+}
+
 /// GET /api/auth/status - 查询鉴权状态
 pub async fn status_handler() -> Json<StatusResponse> {
     let config = PersistentConfig::load().unwrap_or_default();
 
+    // 如果跳过了密码设置，直接认为已认证（无需登录）
+    let authenticated = config.password_skipped;
+
     Json(StatusResponse {
         initialized: config.is_initialized(),
-        authenticated: false, // 这个端点不需要鉴权，所以authenticated字段在这里没有实际意义
+        authenticated,
     })
 }

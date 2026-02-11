@@ -9,6 +9,9 @@ pub struct PersistentConfig {
     pub password_hash: Option<String>,
 
     #[serde(default)]
+    pub password_skipped: bool,
+
+    #[serde(default)]
     pub external_access: bool,
 
     #[serde(default)]
@@ -61,6 +64,6 @@ impl PersistentConfig {
     }
 
     pub fn is_initialized(&self) -> bool {
-        self.password_hash.is_some()
+        self.password_hash.is_some() || self.password_skipped
     }
 }

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   getAuthStatus,
   setupPassword as apiSetupPassword,
+  skipPasswordSetup as apiSkipPasswordSetup,
   login as apiLogin,
   changePassword as apiChangePassword,
   setAuthToken,
@@ -46,6 +47,12 @@ export function useAuth() {
     setStatus({ initialized: true, authenticated: true })
   }, [])
 
+  const skip = useCallback(async () => {
+    const { token } = await apiSkipPasswordSetup()
+    setAuthToken(token)
+    setStatus({ initialized: true, authenticated: true })
+  }, [])
+
   const login = useCallback(async (data: LoginRequest) => {
     const { token } = await apiLogin(data)
     setAuthToken(token)
@@ -65,6 +72,7 @@ export function useAuth() {
     status,
     loading,
     setup,
+    skip,
     login,
     logout,
     changePassword: changePasswordFn,

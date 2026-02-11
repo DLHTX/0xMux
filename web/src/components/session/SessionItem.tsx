@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Icon } from '@iconify/react'
-import { IconTrash, IconEdit } from '../../lib/icons'
+import { IconTrash, IconEdit, IconLayoutGrid } from '../../lib/icons'
 import type { TmuxSession } from '../../lib/types'
 import { extractProjectName, getProjectColor } from '../../hooks/useSplitLayout'
 
@@ -10,6 +10,7 @@ interface SessionItemProps {
   onSelect: (name: string) => void
   onDelete: (name: string) => void
   onRename: (oldName: string, newName: string) => void
+  isNested?: boolean
 }
 
 export function SessionItem({
@@ -18,6 +19,7 @@ export function SessionItem({
   onSelect,
   onDelete,
   onRename,
+  isNested = false,
 }: SessionItemProps) {
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState(session.name)
@@ -36,11 +38,11 @@ export function SessionItem({
   }, [editing])
 
   // Reset confirm state after timeout
-  useEffect(() => {
-    if (!confirmDelete) return
-    const timer = setTimeout(() => setConfirmDelete(false), 3000)
-    return () => clearTimeout(timer)
-  }, [confirmDelete])
+  // useEffect(() => {
+  //   if (!confirmDelete) return
+  //   const timer = setTimeout(() => setConfirmDelete(false), 3000)
+  //   return () => clearTimeout(timer)
+  // }, [confirmDelete])
 
   // Close long-press menu on outside click
   useEffect(() => {
@@ -117,11 +119,11 @@ export function SessionItem({
 
   return (
     <div
-      draggable
-      onDragStart={(e) => {
-        e.dataTransfer.setData('text/session-name', session.name)
-        e.dataTransfer.effectAllowed = 'move'
-      }}
+      draggable={false}
+      // onDragStart={(e) => {
+      //   e.dataTransfer.setData('text/session-name', session.name)
+      //   e.dataTransfer.effectAllowed = 'move'
+      // }}
       onClick={() => {
         if (!longPressMenu) onSelect(session.name)
       }}
@@ -130,8 +132,9 @@ export function SessionItem({
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
       className={`
-        group relative flex items-center gap-2.5 px-3 py-2.5 cursor-grab transition-colors
+        group relative flex items-center gap-2.5 py-2.5 cursor-grab transition-colors
         border-l-[length:var(--border-w)] select-none
+        ${isNested ? 'pl-7 pr-3' : 'px-3'}
         ${selected
           ? 'bg-[var(--color-bg-alt)] border-l-[var(--color-primary)]'
           : 'border-l-transparent hover:bg-[var(--color-bg-alt)]'
@@ -187,15 +190,17 @@ export function SessionItem({
       </div>
 
       {/* Window count badge */}
-      <span className="text-[10px] text-[var(--color-fg-muted)] shrink-0 tabular-nums">
-        {session.windows}w
-      </span>
+      <div className="flex items-center gap-1 shrink-0">
+        <Icon icon={IconLayoutGrid} width={10} height={10} className="text-[var(--color-fg-muted)]" />
+        <span className="text-[10px] text-[var(--color-fg-muted)] tabular-nums">
+          {session.windows}
+        </span>
+      </div>
 
       {/* Delete button */}
       <button
         onClick={handleDeleteClick}
-        onMouseDown={stopDragCapture}
-        onPointerDown={stopDragCapture}
+        onMouseDown={(e) => e.stopPropagation()}
         className={`
           shrink-0 w-5 h-5 flex items-center justify-center transition-all text-[10px]
           ${confirmDelete

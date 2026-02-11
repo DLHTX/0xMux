@@ -1,95 +1,55 @@
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import { Icon } from '@iconify/react'
 import {
   IconPlus,
   IconSearch,
   IconPanelLeftClose,
   IconPanelLeftOpen,
-  IconFolder,
-  IconChevronDown,
-  IconChevronRight,
 } from '../../lib/icons'
-import { SessionItem } from './SessionItem'
-import type { TmuxSession } from '../../lib/types'
-import { getProjectColor } from '../../hooks/useSplitLayout'
+import { SessionFolder } from './SessionFolder'
+import type { TmuxSession, TmuxWindow } from '../../lib/types'
 
 interface SessionSidebarProps {
   sessions: TmuxSession[]
-  selectedSession: string | null
-  onSelect: (name: string) => void
-  onCreate: () => void
-  onDelete: (name: string) => void
-  onRename: (oldName: string, newName: string) => void
+  windows: Map<string, TmuxWindow[]>
+  selectedWindow: { sessionName: string; windowIndex: number } | null
+  onSelectWindow: (sessionName: string, windowIndex: number) => void
+  onCreateSession: () => void
+  onCreateWindow: (sessionName: string) => void
+  onDeleteWindow: (sessionName: string, windowIndex: number) => void
+  onDeleteSession: (sessionName: string) => void
   collapsed: boolean
   onToggleCollapse: () => void
 }
 
-interface FolderGroup {
-  folder: string
-  sessions: TmuxSession[]
-}
-
-/** Extract group name from session name by stripping trailing `-NN` suffix.
- *  e.g. "Download-01" → "Download", "my-project-03" → "my-project", "test" → "test" */
-function getGroupName(sessionName: string): string {
-  return sessionName.replace(/-\d+$/, '')
-}
-
-function groupByFolder(sessions: TmuxSession[]): FolderGroup[] {
-  const map = new Map<string, TmuxSession[]>()
-  const ungrouped: TmuxSession[] = []
-
-  for (const s of sessions) {
-    const folder = getGroupName(s.name)
-    const list = map.get(folder) || []
-    list.push(s)
-    map.set(folder, list)
-  }
-
-  // Only create folders for 2+ sessions, otherwise show ungrouped
-  const groups: FolderGroup[] = []
-  for (const [folder, sessions] of map.entries()) {
-    if (sessions.length > 1) {
-      groups.push({ folder, sessions })
-    } else {
-      ungrouped.push(...sessions)
-    }
-  }
-
-  // Show ungrouped sessions at the top (without folder)
-  if (ungrouped.length > 0) {
-    groups.unshift({ folder: '', sessions: ungrouped })
-  }
-
-  return groups
-}
-
 export function SessionSidebar({
   sessions,
-  selectedSession,
-  onSelect,
-  onCreate,
-  onDelete,
-  onRename,
+  windows,
+  selectedWindow,
+  onSelectWindow,
+  onCreateSession,
+  onCreateWindow,
+  onDeleteWindow,
+  onDeleteSession,
   collapsed,
   onToggleCollapse,
 }: SessionSidebarProps) {
   const [search, setSearch] = useState('')
-  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set())
+  const [expandedSessions, setExpandedSessions] = useState<Set<string>>(
+    new Set(sessions.map((s) => s.name))
+  )
 
   const filtered = sessions.filter((s) =>
     s.name.toLowerCase().includes(search.toLowerCase())
   )
 
-  const groups = useMemo(() => groupByFolder(filtered), [filtered])
-
-  const toggleFolder = (folder: string) => {
-    setCollapsedFolders((prev) => {
+  const toggleSession = (sessionName: string) => {
+    setExpandedSessions((prev) => {
       const next = new Set(prev)
-      if (next.has(folder)) {
-        next.delete(folder)
+      if (next.has(sessionName)) {
+        next.delete(sessionName)
       } else {
-        next.add(folder)
+        next.add(sessionName)
       }
       return next
     })
@@ -117,7 +77,7 @@ export function SessionSidebar({
             />
           </div>
           <button
-            onClick={onCreate}
+            onClick={onCreateSession}
             className="shrink-0 w-7 h-7 flex items-center justify-center border-[length:var(--border-w)] border-[var(--color-primary)]
               text-[var(--color-primary)] rounded-[var(--radius)] transition-colors cursor-pointer
               hover:bg-[var(--color-primary)] hover:text-[var(--color-primary-fg)]"
@@ -132,7 +92,7 @@ export function SessionSidebar({
       {collapsed && (
         <div className="p-1.5 flex justify-center border-b-[length:var(--border-w)] border-[var(--color-border-light)]">
           <button
-            onClick={onCreate}
+            onClick={onCreateSession}
             className="w-7 h-7 flex items-center justify-center border-[length:var(--border-w)] border-[var(--color-border)]
               rounded-[var(--radius)] transition-colors cursor-pointer
               hover:bg-[var(--color-primary)] hover:text-[var(--color-primary-fg)] hover:border-[var(--color-primary)]"
@@ -143,53 +103,24 @@ export function SessionSidebar({
         </div>
       )}
 
-      {/* Session list grouped by folder */}
+      {/* Session folders list */}
       {!collapsed && (
         <div className="flex-1 overflow-y-auto">
-          {groups.length > 0 ? (
-            groups.map((group) => {
-              const isOpen = !collapsedFolders.has(group.folder)
-              const projectColor = getProjectColor(group.folder)
-
-              return (
-                <div key={group.folder || 'ungrouped'}>
-                  {/* Folder header (only show if folder name exists) */}
-                  {group.folder && (
-                    <button
-                      onClick={() => toggleFolder(group.folder)}
-                      className="w-full flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider
-                        text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] transition-colors cursor-pointer"
-                      style={{ borderLeft: `3px solid ${projectColor}` }}
-                    >
-                    <Icon
-                      icon={isOpen ? IconChevronDown : IconChevronRight}
-                      width={10}
-                      height={10}
-                      className="shrink-0"
-                    />
-                    <Icon icon={IconFolder} width={12} height={12} className="shrink-0" />
-                    <span className="truncate">{group.folder}</span>
-                    <span className="ml-auto text-[var(--color-fg-faint)]">
-                      {group.sessions.length}
-                    </span>
-                    </button>
-                  )}
-
-                  {/* Sessions in this folder/ungrouped */}
-                  {(isOpen || !group.folder) &&
-                    group.sessions.map((session) => (
-                      <SessionItem
-                        key={session.name}
-                        session={session}
-                        selected={selectedSession === session.name}
-                        onSelect={onSelect}
-                        onDelete={onDelete}
-                        onRename={onRename}
-                      />
-                    ))}
-                </div>
-              )
-            })
+          {filtered.length > 0 ? (
+            filtered.map((session) => (
+              <SessionFolder
+                key={session.name}
+                session={session}
+                windows={windows.get(session.name) || []}
+                selectedWindow={selectedWindow}
+                onSelectWindow={onSelectWindow}
+                onCreateWindow={onCreateWindow}
+                onDeleteWindow={onDeleteWindow}
+                onDeleteSession={onDeleteSession}
+                collapsed={!expandedSessions.has(session.name)}
+                onToggle={() => toggleSession(session.name)}
+              />
+            ))
           ) : (
             <div className="p-4 text-center">
               <p className="text-xs text-[var(--color-fg-faint)]">
@@ -203,22 +134,33 @@ export function SessionSidebar({
       {/* Collapsed: minimal session indicators */}
       {collapsed && (
         <div className="flex-1 overflow-y-auto flex flex-col items-center gap-1 py-2">
-          {sessions.map((session) => (
-            <button
-              key={session.name}
-              onClick={() => onSelect(session.name)}
-              className={`w-7 h-7 flex items-center justify-center text-[10px] font-bold rounded-[var(--radius)]
-                transition-colors cursor-pointer
-                ${selectedSession === session.name
-                  ? 'bg-[var(--color-bg-alt)] border-[length:var(--border-w)] border-[var(--color-border)]'
-                  : 'border-[length:var(--border-w)] border-transparent hover:bg-[var(--color-bg-alt)]'
-                }
-              `}
-              title={session.name}
-            >
-              {session.name.charAt(0).toUpperCase()}
-            </button>
-          ))}
+          {sessions.map((session) => {
+            const isSelected = selectedWindow?.sessionName === session.name
+            return (
+              <button
+                key={session.name}
+                onClick={() => {
+                  // Select the first window or active window
+                  const wins = windows.get(session.name) || []
+                  const activeWin = wins.find((w) => w.active)
+                  const targetWin = activeWin || wins[0]
+                  if (targetWin) {
+                    onSelectWindow(session.name, targetWin.index)
+                  }
+                }}
+                className={`w-7 h-7 flex items-center justify-center text-[10px] font-bold rounded-[var(--radius)]
+                  transition-colors cursor-pointer
+                  ${isSelected
+                    ? 'bg-[var(--color-bg-alt)] border-[length:var(--border-w)] border-[var(--color-border)]'
+                    : 'border-[length:var(--border-w)] border-transparent hover:bg-[var(--color-bg-alt)]'
+                  }
+                `}
+                title={session.name}
+              >
+                {session.name.charAt(0).toUpperCase()}
+              </button>
+            )
+          })}
         </div>
       )}
 

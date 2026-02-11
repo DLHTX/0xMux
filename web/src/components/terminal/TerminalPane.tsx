@@ -6,6 +6,7 @@ import type { ConnectionStatus } from '../../lib/types'
 
 interface TerminalPaneProps {
   sessionName: string
+  windowIndex?: number
   fontSize?: number
   focused?: boolean
   onFocus?: () => void
@@ -14,6 +15,7 @@ interface TerminalPaneProps {
 
 export function TerminalPane({
   sessionName,
+  windowIndex,
   fontSize = 14,
   focused = false,
   onFocus,
@@ -42,6 +44,7 @@ export function TerminalPane({
 
   const { status, send, resize } = usePtySocket({
     session: sessionName,
+    window: windowIndex,
     onOutput: useCallback(
       (data: Uint8Array) => write(data),
       [write]

@@ -19,6 +19,7 @@ use crate::state::AppState;
 #[derive(Deserialize)]
 pub struct PtyQuery {
     pub session: String,
+    pub window: Option<u32>,
     pub cols: Option<u16>,
     pub rows: Option<u16>,
 }
@@ -40,9 +41,10 @@ pub async fn ws_pty_handler(
 
     let cols = query.cols.unwrap_or(80);
     let rows = query.rows.unwrap_or(24);
+    let window = query.window;
 
     Ok(ws.on_upgrade(move |socket| {
-        handle_pty_socket(socket, state, session_name, cols, rows)
+        handle_pty_socket(socket, state, session_name, window, cols, rows)
     }))
 }
 
@@ -50,6 +52,7 @@ async fn handle_pty_socket(
     socket: WebSocket,
     state: AppState,
     session_name: String,
+    window: Option<u32>,
     cols: u16,
     rows: u16,
 ) {
@@ -94,7 +97,13 @@ async fn handle_pty_socket(
     let mut cmd = CommandBuilder::new("tmux");
     cmd.arg("attach-session");
     cmd.arg("-t");
-    cmd.arg(&session_name);
+    // If window is specified, attach to session:window target
+    let target = if let Some(window_index) = window {
+        format!("{}:{}", session_name, window_index)
+    } else {
+        session_name.clone()
+    };
+    cmd.arg(&target);
     // Use a clean environment — inherited shell-theme vars (e.g. Powerlevel10k's
     // _P9K_TTY) cause zsh to fail inside the PTY and exit immediately.
     cmd.env_clear();

@@ -190,6 +190,12 @@ export async function setupPassword(data: SetupPasswordRequest): Promise<AuthTok
   })
 }
 
+export async function skipPasswordSetup(): Promise<AuthTokenResponse> {
+  return request<AuthTokenResponse>('/auth/skip', {
+    method: 'POST',
+  })
+}
+
 export async function login(data: LoginRequest): Promise<AuthTokenResponse> {
   return request<AuthTokenResponse>('/auth/login', {
     method: 'POST',

@@ -39,6 +39,7 @@ pub fn build(state: AppState) -> Router {
         // 认证端点（无需鉴权）
         .route("/api/auth/status", get(handlers::auth::status_handler))
         .route("/api/auth/setup", post(handlers::auth::setup_handler))
+        .route("/api/auth/skip", post(handlers::auth::skip_setup_handler))
         .route("/api/auth/login", post(handlers::auth::login_handler))
         // 需要鉴权的认证端点
         .route("/api/auth/password", put(handlers::auth::change_password_handler))

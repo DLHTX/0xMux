@@ -4,6 +4,7 @@ import { getAuthToken } from '../lib/api'
 
 export interface UsePtySocketOptions {
   session: string
+  window?: number
   cols?: number
   rows?: number
   onOutput?: (data: Uint8Array) => void
@@ -15,6 +16,7 @@ export interface UsePtySocketOptions {
 export function usePtySocket(options: UsePtySocketOptions) {
   const {
     session,
+    window: windowIndex,
     cols = 80,
     rows = 24,
     onOutput,
@@ -48,9 +50,17 @@ export function usePtySocket(options: UsePtySocketOptions) {
     setStatus('connecting')
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const token = getAuthToken()
-    const url = token
-      ? `${protocol}//${window.location.host}/ws/pty?session=${encodeURIComponent(session)}&cols=${cols}&rows=${rows}&token=${encodeURIComponent(token)}`
-      : `${protocol}//${window.location.host}/ws/pty?session=${encodeURIComponent(session)}&cols=${cols}&rows=${rows}`
+
+    // Build URL with window parameter if provided
+    let url = `${protocol}//${window.location.host}/ws/pty?session=${encodeURIComponent(session)}`
+    if (windowIndex !== undefined) {
+      url += `&window=${windowIndex}`
+    }
+    url += `&cols=${cols}&rows=${rows}`
+    if (token) {
+      url += `&token=${encodeURIComponent(token)}`
+    }
+
     const ws = new WebSocket(url)
     ws.binaryType = 'arraybuffer'
     wsRef.current = ws
@@ -95,7 +105,7 @@ export function usePtySocket(options: UsePtySocketOptions) {
       ws.close()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, cols, rows, enabled, onOutput, onExit, onError, cleanup])
+  }, [session, windowIndex, cols, rows, enabled, onOutput, onExit, onError, cleanup])
 
   const scheduleReconnect = useCallback(() => {
     if (!mountedRef.current || !enabled) return

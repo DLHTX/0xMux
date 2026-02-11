@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
-import type { SplitLayout, SplitDirection } from '../lib/types'
-import { createSession as apiCreateSession, getCwd, getNextSessionName } from '../lib/api'
+import type { SplitLayout, SplitDirection, PaneWindow } from '../lib/types'
+import { createSession as apiCreateSession, getCwd, getNextSessionName, createWindow } from '../lib/api'
 
 const MAX_PANES = 128
 
@@ -12,10 +12,10 @@ function createLeaf(): SplitLayout {
   return { id: generateId(), type: 'leaf' }
 }
 
-/** Layout history entry for a session */
+/** Layout history entry for a window */
 export interface LayoutHistory {
   layout: SplitLayout
-  paneSessionMap: Record<string, string>
+  paneWindowMap: Record<string, PaneWindow>
   activePaneId: string | null
 }
 
@@ -116,22 +116,22 @@ export function useSplitLayout() {
   })
 
   const [layout, setLayout] = useState<SplitLayout>(state.layout)
-  const [paneSessionMap, setPaneSessionMap] = useState<Record<string, string>>({})
+  const [paneWindowMap, setPaneWindowMap] = useState<Record<string, PaneWindow>>({})
   const [activePaneId, setActivePaneId] = useState<string | null>(state.activePaneId)
 
-  // Layout history: sessionName -> LayoutHistory
+  // Layout history: "sessionName:windowIndex" -> LayoutHistory
   const layoutHistory = useRef<Map<string, LayoutHistory>>(new Map())
 
   const splitLock = useRef(false)
 
-  /** Assign an existing session to a pane */
-  const assignSession = useCallback((paneId: string, sessionName: string) => {
-    setPaneSessionMap((prev) => ({ ...prev, [paneId]: sessionName }))
+  /** Assign an existing window to a pane */
+  const assignWindow = useCallback((paneId: string, sessionName: string, windowIndex: number) => {
+    setPaneWindowMap((prev) => ({ ...prev, [paneId]: { sessionName, windowIndex } }))
   }, [])
 
-  /** Remove a session assignment from a pane */
-  const unassignSession = useCallback((paneId: string) => {
-    setPaneSessionMap((prev) => {
+  /** Remove a window assignment from a pane */
+  const unassignWindow = useCallback((paneId: string) => {
+    setPaneWindowMap((prev) => {
       const next = { ...prev }
       delete next[paneId]
       return next
@@ -139,7 +139,7 @@ export function useSplitLayout() {
   }, [])
 
   /**
-   * Split a pane and automatically create a new tmux session for the new pane.
+   * Split a pane and automatically create a new tmux window in the same session.
    * Returns the new pane ID or null if split failed.
    */
   const splitPane = useCallback(
@@ -148,13 +148,14 @@ export function useSplitLayout() {
       splitLock.current = true
 
       try {
-        // Create a new tmux session
-        const cwdResp = await getCwd()
-        const nextName = await getNextSessionName(cwdResp.path)
-        const session = await apiCreateSession({
-          name: nextName.name,
-          start_directory: cwdResp.path,
-        })
+        // Find current pane's window
+        const currentWindow = paneWindowMap[nodeId]
+        if (!currentWindow) {
+          throw new Error('Current pane not found in window map')
+        }
+
+        // Create a new window in the same session
+        const newWindow = await createWindow(currentWindow.sessionName)
 
         let newPaneId: string | null = null
         setLayout((prev) => {
@@ -164,7 +165,13 @@ export function useSplitLayout() {
         })
 
         if (newPaneId) {
-          setPaneSessionMap((prev) => ({ ...prev, [newPaneId!]: session.name }))
+          setPaneWindowMap((prev) => ({
+            ...prev,
+            [newPaneId!]: {
+              sessionName: currentWindow.sessionName,
+              windowIndex: newWindow.index,
+            },
+          }))
         }
 
         return newPaneId
@@ -172,16 +179,16 @@ export function useSplitLayout() {
         splitLock.current = false
       }
     },
-    []
+    [paneWindowMap]
   )
 
-  /** Close a pane (removes from layout and paneSessionMap, does NOT kill the session) */
+  /** Close a pane (removes from layout and paneWindowMap, does NOT kill the window) */
   const closePane = useCallback((nodeId: string) => {
     setLayout((prev) => {
       const result = closeNode(prev, nodeId)
       return result ?? createLeaf()
     })
-    setPaneSessionMap((prev) => {
+    setPaneWindowMap((prev) => {
       const next = { ...prev }
       delete next[nodeId]
       return next
@@ -192,71 +199,78 @@ export function useSplitLayout() {
     return getAllLeafIds(layout)
   }, [layout])
 
-  /** Save current layout state for a session */
-  const saveLayoutHistory = useCallback((sessionName: string) => {
+  /** Save current layout state for a window */
+  const saveLayoutHistory = useCallback((key: string) => {
     // Don't save if it's a single-pane layout
     const leafIds = getAllLeafIds(layout)
-    if (leafIds.length === 1 && Object.keys(paneSessionMap).length <= 1) {
+    if (leafIds.length === 1 && Object.keys(paneWindowMap).length <= 1) {
       return
     }
 
-    layoutHistory.current.set(sessionName, {
+    layoutHistory.current.set(key, {
       layout: JSON.parse(JSON.stringify(layout)), // deep clone
-      paneSessionMap: { ...paneSessionMap },
+      paneWindowMap: { ...paneWindowMap },
       activePaneId,
     })
-  }, [layout, paneSessionMap, activePaneId])
+  }, [layout, paneWindowMap, activePaneId])
 
-  /** Restore layout from history for a session */
-  const restoreLayoutHistory = useCallback((sessionName: string): boolean => {
-    const history = layoutHistory.current.get(sessionName)
+  /** Restore layout from history for a window */
+  const restoreLayoutHistory = useCallback((key: string): boolean => {
+    const history = layoutHistory.current.get(key)
     if (!history) return false
 
     setLayout(history.layout)
-    setPaneSessionMap(history.paneSessionMap)
+    setPaneWindowMap(history.paneWindowMap)
     setActivePaneId(history.activePaneId)
     return true
   }, [])
 
-  /** Find pane ID that contains a specific session */
-  const findPaneBySession = useCallback(
-    (sessionName: string): string | null => {
-      for (const [paneId, name] of Object.entries(paneSessionMap)) {
-        if (name === sessionName) return paneId
+  /** Find pane ID that contains a specific window */
+  const findPaneByWindow = useCallback(
+    (sessionName: string, windowIndex: number): string | null => {
+      for (const [paneId, pw] of Object.entries(paneWindowMap)) {
+        if (pw.sessionName === sessionName && pw.windowIndex === windowIndex) {
+          return paneId
+        }
       }
       return null
     },
-    [paneSessionMap]
+    [paneWindowMap]
   )
 
-  /** Switch to a session with smart layout management */
-  const switchToSession = useCallback(
-    (sessionName: string, currentSessionName?: string): 'focus' | 'restore' | 'replace' => {
+  /** Switch to a window with smart layout management */
+  const switchToWindow = useCallback(
+    (sessionName: string, windowIndex: number): 'focus' | 'restore' | 'replace' => {
       // Save current layout if we're leaving a multi-pane setup
-      if (currentSessionName && currentSessionName !== sessionName) {
-        saveLayoutHistory(currentSessionName)
+      if (activePaneId) {
+        const current = paneWindowMap[activePaneId]
+        if (current) {
+          const key = `${current.sessionName}:${current.windowIndex}`
+          saveLayoutHistory(key)
+        }
       }
 
-      // Strategy 1: Session is already open in a pane → just focus it
-      const existingPaneId = findPaneBySession(sessionName)
+      // Strategy 1: Window is already open in a pane → just focus it
+      const existingPaneId = findPaneByWindow(sessionName, windowIndex)
       if (existingPaneId) {
         setActivePaneId(existingPaneId)
         return 'focus'
       }
 
-      // Strategy 2: Session has a saved layout → restore it
-      if (restoreLayoutHistory(sessionName)) {
+      // Strategy 2: Window has a saved layout → restore it
+      const key = `${sessionName}:${windowIndex}`
+      if (restoreLayoutHistory(key)) {
         return 'restore'
       }
 
       // Strategy 3: Replace current view with single pane
       const singleLeaf = createLeaf()
       setLayout(singleLeaf)
-      setPaneSessionMap({ [singleLeaf.id]: sessionName })
+      setPaneWindowMap({ [singleLeaf.id]: { sessionName, windowIndex } })
       setActivePaneId(singleLeaf.id)
       return 'replace'
     },
-    [saveLayoutHistory, restoreLayoutHistory, findPaneBySession]
+    [activePaneId, paneWindowMap, saveLayoutHistory, restoreLayoutHistory, findPaneByWindow]
   )
 
   const paneCount = countLeaves(layout)
@@ -269,14 +283,14 @@ export function useSplitLayout() {
     getPaneIds,
     paneCount,
     canSplit,
-    paneSessionMap,
-    assignSession,
-    unassignSession,
+    paneWindowMap,
+    assignWindow,
+    unassignWindow,
     activePaneId,
     setActivePaneId,
     saveLayoutHistory,
     restoreLayoutHistory,
-    findPaneBySession,
-    switchToSession,
+    findPaneByWindow,
+    switchToWindow,
   }
 }

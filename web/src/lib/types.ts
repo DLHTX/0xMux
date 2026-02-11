@@ -121,6 +121,11 @@ export interface TmuxWindow {
   panes: number
 }
 
+export interface PaneWindow {
+  sessionName: string
+  windowIndex: number
+}
+
 export interface TerminalInstance {
   instanceId: string
   sessionName: string

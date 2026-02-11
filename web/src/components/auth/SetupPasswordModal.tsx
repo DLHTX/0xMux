@@ -8,9 +8,10 @@ import type { SetupPasswordRequest } from '../../lib/types'
 
 interface SetupPasswordModalProps {
   onSubmit: (data: SetupPasswordRequest) => Promise<void>
+  onSkip: () => Promise<void>
 }
 
-export function SetupPasswordModal({ onSubmit }: SetupPasswordModalProps) {
+export function SetupPasswordModal({ onSubmit, onSkip }: SetupPasswordModalProps) {
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -41,6 +42,18 @@ export function SetupPasswordModal({ onSubmit }: SetupPasswordModalProps) {
       await onSubmit({ password, confirm })
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '设置密码失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSkip = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      await onSkip()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '跳过失败')
     } finally {
       setLoading(false)
     }
@@ -147,6 +160,16 @@ export function SetupPasswordModal({ onSubmit }: SetupPasswordModalProps) {
           >
             {loading ? '设置中...' : '设置密码'}
           </Button>
+
+          {/* Skip Button */}
+          <button
+            type="button"
+            onClick={handleSkip}
+            disabled={loading}
+            className="w-full mt-2 px-4 py-2 text-xs text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? '跳过中...' : '暂时跳过（不设置密码）'}
+          </button>
         </form>
       </div>
     </div>
