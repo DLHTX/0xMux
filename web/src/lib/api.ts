@@ -209,3 +209,16 @@ export async function changePassword(data: ChangePasswordRequest): Promise<void>
     body: JSON.stringify(data),
   })
 }
+
+// ── Layout Persistence ──
+
+export async function getLayouts(): Promise<import('./types').LayoutStore> {
+  return request<import('./types').LayoutStore>('/layouts')
+}
+
+export async function saveLayouts(data: import('./types').LayoutStore): Promise<void> {
+  return request<void>('/layouts', {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+}

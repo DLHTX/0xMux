@@ -22,7 +22,7 @@ use services::install::InstallManager;
 use services::auth_service::AuthService;
 use services::config_store::PersistentConfig;
 use state::AppState;
-use ws::sessions::spawn_session_watcher;
+use ws::sessions::{spawn_session_watcher, spawn_group_gc};
 
 #[tokio::main]
 async fn main() {
@@ -33,6 +33,9 @@ async fn main() {
         )
         .init();
 
+    // Clean up orphaned grouped sessions from previous server crashes
+    services::tmux::cleanup_orphaned_groups();
+
     let config = ServerConfig::parse();
     let addr = config.addr();
     let banner_host = config.host.clone();
@@ -40,6 +43,7 @@ async fn main() {
 
     let (session_tx, _) = broadcast::channel::<String>(64);
     spawn_session_watcher(session_tx.clone());
+    spawn_group_gc();
 
     // 初始化认证服务
     let auth_service = Arc::new(AuthService::new());
@@ -67,11 +71,37 @@ async fn main() {
     banner::print_banner(&banner_host, banner_port);
     tracing::info!("0xMux server listening on {addr}");
 
+    // Graceful shutdown: listen for SIGINT (Ctrl-C) and SIGTERM
+    let shutdown = async {
+        #[cfg(unix)]
+        {
+            use tokio::signal::unix::{SignalKind, signal};
+            let mut sigterm = signal(SignalKind::terminate())
+                .expect("failed to register SIGTERM handler");
+            tokio::select! {
+                _ = tokio::signal::ctrl_c() => {},
+                _ = sigterm.recv() => {},
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            tokio::signal::ctrl_c().await.ok();
+        }
+        tracing::info!("Shutdown signal received, draining connections…");
+    };
+
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     axum::serve(
         listener,
         app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
     )
+    .with_graceful_shutdown(shutdown)
     .await
     .unwrap();
+
+    // Final safety net: kill any remaining grouped sessions after all WS
+    // connections have been drained.
+    tracing::info!("Cleaning up remaining grouped sessions…");
+    services::tmux::cleanup_orphaned_groups();
+    tracing::info!("0xMux server stopped.");
 }

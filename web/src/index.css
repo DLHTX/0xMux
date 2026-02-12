@@ -56,6 +56,10 @@ body {
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   transition: background 0.2s, color 0.2s;
+  /* Mobile: prevent pull-to-refresh and overscroll bounce */
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -130,6 +134,11 @@ input[type="range"].brutalist-slider:hover::-moz-range-thumb {
   height: 100% !important;
 }
 .xterm .xterm-viewport {
-  overflow-y: auto !important;
+  overflow-y: hidden !important;
   overflow-x: hidden !important;
+  /* Scrollback is handled by tmux; local scrollbar is disabled via scrollback:0 */
+  scrollbar-width: none; /* Firefox */
+}
+.xterm .xterm-viewport::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Edge */
 }

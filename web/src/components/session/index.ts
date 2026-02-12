@@ -1,5 +1,4 @@
 export { SessionSidebar } from './SessionSidebar'
-export { SessionItem } from './SessionItem'
-export { SessionCard } from './SessionCard'
-export { SessionGrid } from './SessionGrid'
+export { SessionFolder } from './SessionFolder'
+export { WindowItem } from './WindowItem'
 export { CreateSessionModal } from './CreateSessionModal'

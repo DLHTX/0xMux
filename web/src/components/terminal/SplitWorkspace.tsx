@@ -12,10 +12,12 @@ import {
   IconSplitVertical,
   IconX,
   IconReplace,
+  IconTerminal,
 } from '../../lib/icons'
 import type { SplitLayout, SplitDirection } from '../../lib/types'
-import { useState, useCallback, useMemo, useSyncExternalStore, useEffect, useRef } from 'react'
-import { getAllLeafIds, extractProjectName, getProjectColor } from '../../hooks/useSplitLayout'
+import { useState, useCallback, useMemo, useSyncExternalStore, useEffect } from 'react'
+import { getAllLeafIds } from '../../hooks/useSplitLayout'
+import { SPLIT_GROUP_COLOR } from '../../lib/session-utils'
 
 // ---------------------------------------------------------------------------
 // Container pool — manages persistent DOM elements outside of React state.
@@ -87,10 +89,13 @@ interface SplitWorkspaceProps {
   onClose: (nodeId: string) => void
   onPaneFocus: (nodeId: string) => void
   paneWindowMap: Record<string, import('../../lib/types').PaneWindow>
-  onDropSession?: (paneId: string, direction: SplitDirection, sessionName: string) => void
-  onReplaceSession?: (paneId: string, sessionName: string) => void
+  onDropWindow?: (paneId: string, sessionName: string, windowIndex: number) => void
+  onSplitDrop?: (paneId: string, zone: 'left' | 'right' | 'top' | 'bottom', sessionName: string, windowIndex: number) => void
   isWindowInUse?: (sessionName: string, windowIndex: number) => boolean
   activeTerminalRef?: React.RefObject<import('@xterm/xterm').Terminal | null>
+  /** Returns all window keys tracked by any pane or saved layout.
+   *  Used to decide which pool containers to keep alive across session switches. */
+  getAllTrackedWindowKeys?: () => Set<string>
 }
 
 function ResizeHandle({ direction }: { direction: 'horizontal' | 'vertical' }) {
@@ -98,8 +103,8 @@ function ResizeHandle({ direction }: { direction: 'horizontal' | 'vertical' }) {
     <PanelResizeHandle
       className={`
         group relative flex items-center justify-center
-        ${direction === 'horizontal' ? 'w-[3px]' : 'h-[3px]'}
-        bg-[var(--color-border-light)]
+        ${direction === 'horizontal' ? 'w-[1px]' : 'h-[1px]'}
+        bg-[var(--color-border-light)]/40
         hover:bg-[var(--color-success)] active:bg-[var(--color-success)]
         transition-colors
       `}
@@ -108,7 +113,121 @@ function ResizeHandle({ direction }: { direction: 'horizontal' | 'vertical' }) {
 }
 
 // ---------------------------------------------------------------------------
-// PaneSlot: drag-drop + hover buttons + terminal mount point (no TerminalPane)
+// EmptyPaneSlot: shown when a split pane has no window assigned
+// ---------------------------------------------------------------------------
+
+function EmptyPaneSlot({
+  nodeId,
+  canSplit,
+  paneCount,
+  isActive,
+  isDragging,
+  onSplit,
+  onClose,
+  onPaneFocus,
+  onDropWindow,
+}: {
+  nodeId: string
+  canSplit: boolean
+  paneCount: number
+  isActive: boolean
+  isDragging: boolean
+  onSplit: (nodeId: string, direction: SplitDirection) => void
+  onClose: (nodeId: string) => void
+  onPaneFocus: (nodeId: string) => void
+  onDropWindow?: (paneId: string, sessionName: string, windowIndex: number) => void
+}) {
+  const [isDropOver, setIsDropOver] = useState(false)
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    if (!e.dataTransfer.types.includes('text/window-key')) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setIsDropOver(true)
+  }
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    setIsDropOver(false)
+    const windowKey = e.dataTransfer.getData('text/window-key')
+    if (!windowKey) return
+    const [sessionName, windowIndexStr] = windowKey.split(':')
+    const windowIndex = parseInt(windowIndexStr, 10)
+    if (sessionName && !isNaN(windowIndex)) {
+      onDropWindow?.(nodeId, sessionName, windowIndex)
+    }
+  }
+
+  return (
+    <div
+      className={`group/pane flex flex-col h-full w-full cursor-pointer
+        ${isDropOver ? 'bg-[var(--color-primary)]/10 border-2 border-dashed border-[var(--color-primary)]/50' : ''}
+      `}
+      style={{
+        border: isActive ? '1px solid color-mix(in srgb, var(--color-primary) 50%, transparent)' : '1px solid var(--color-border-light)',
+        transition: 'border 0.2s ease',
+      }}
+      onClick={() => onPaneFocus(nodeId)}
+      onDragOver={handleDragOver}
+      onDragLeave={() => setIsDropOver(false)}
+      onDrop={handleDrop}
+    >
+      {/* Top toolbar — fixed at pane top */}
+      <div className="shrink-0 flex items-center gap-0.5
+        bg-[var(--color-bg)] border-b border-b-[var(--color-border-light)]/40
+        px-1 py-0.5"
+      >
+        <button
+          onClick={(e) => { e.stopPropagation(); onSplit(nodeId, 'horizontal') }}
+          disabled={!canSplit}
+          className="p-0.5 text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] disabled:opacity-30 transition-colors cursor-pointer"
+          title="Split horizontal"
+        >
+          <Icon icon={IconSplitHorizontal} width={14} />
+        </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); onSplit(nodeId, 'vertical') }}
+          disabled={!canSplit}
+          className="p-0.5 text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] disabled:opacity-30 transition-colors cursor-pointer"
+          title="Split vertical"
+        >
+          <Icon icon={IconSplitVertical} width={14} />
+        </button>
+        {paneCount > 1 && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onClose(nodeId) }}
+            className="p-0.5 text-[var(--color-fg-muted)] hover:text-[var(--color-danger)] transition-colors cursor-pointer"
+            title="Close pane"
+          >
+            <Icon icon={IconX} width={14} />
+          </button>
+        )}
+      </div>
+
+      {/* Empty state prompt */}
+      <div className="flex-1 min-h-0 relative flex items-center justify-center">
+        <div className="flex flex-col items-center gap-2 text-[var(--color-fg-muted)] select-none pointer-events-none">
+          <Icon icon={IconTerminal} width={28} className="text-[var(--color-border-light)]" />
+          <span className="text-xs font-bold">Select a window</span>
+          <span className="text-[10px] text-[var(--color-fg-faint)]">Click a window in the sidebar</span>
+        </div>
+
+        {/* Drag overlay for empty pane */}
+        {isDragging && (
+          <div
+            className={`absolute inset-0 z-20 ${isDropOver ? 'bg-[var(--color-primary)]/20 border-2 border-dashed border-[var(--color-primary)]/50' : ''}`}
+            onDragOver={handleDragOver}
+            onDragLeave={() => setIsDropOver(false)}
+            onDrop={handleDrop}
+          />
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// PaneSlot: drag-drop + hover buttons + terminal mount point
 // ---------------------------------------------------------------------------
 
 type DropZone = 'left' | 'right' | 'top' | 'bottom' | 'center' | null
@@ -116,51 +235,60 @@ type DropZone = 'left' | 'right' | 'top' | 'bottom' | 'center' | null
 function PaneSlot({
   nodeId,
   sessionContainers,
-  sessionName,
+  windowKey,
   canSplit,
   paneCount,
   isDragging,
   isActive,
   onSplit,
   onClose,
-  onDropSession,
-  onReplaceSession,
-  isSessionInUse,
+  onPaneFocus,
+  onDropWindow,
+  onSplitDrop,
 }: {
   nodeId: string
   sessionContainers: Map<string, HTMLDivElement>
-  sessionName: string
+  windowKey: string
   canSplit: boolean
   paneCount: number
   isDragging: boolean
   isActive: boolean
   onSplit: (nodeId: string, direction: SplitDirection) => void
   onClose: (nodeId: string) => void
-  onDropSession?: (paneId: string, direction: SplitDirection, sessionName: string) => void
-  onReplaceSession?: (paneId: string, sessionName: string) => void
-  isSessionInUse?: (sessionName: string) => boolean
+  onPaneFocus: (nodeId: string) => void
+  onDropWindow?: (paneId: string, sessionName: string, windowIndex: number) => void
+  onSplitDrop?: (paneId: string, zone: 'left' | 'right' | 'top' | 'bottom', sessionName: string, windowIndex: number) => void
 }) {
   const [dropZone, setDropZone] = useState<DropZone>(null)
 
-  // Calculate project color
-  const projectName = extractProjectName(sessionName)
-  const projectColor = getProjectColor(projectName)
+  // In split mode (2+ panes), use a uniform color for all panes
+  const inSplit = paneCount > 1
 
   const detectZone = (e: React.DragEvent<HTMLDivElement>): DropZone => {
     const rect = e.currentTarget.getBoundingClientRect()
     const x = e.clientX - rect.left
     const y = e.clientY - rect.top
-    const threshold = 50
 
-    if (x < threshold) return 'left'
-    if (x > rect.width - threshold) return 'right'
-    if (y < threshold) return 'top'
-    if (y > rect.height - threshold) return 'bottom'
-    return 'center'
+    // Normalized distance from each edge (0 = at edge, 0.5 = center)
+    const fromLeft   = x / rect.width
+    const fromRight  = 1 - fromLeft
+    const fromTop    = y / rect.height
+    const fromBottom = 1 - fromTop
+
+    // Find the closest edge
+    const minDist = Math.min(fromLeft, fromRight, fromTop, fromBottom)
+
+    // If the closest edge is beyond 30% from the edge, it's the center zone
+    if (minDist > 0.30) return 'center'
+
+    if (minDist === fromLeft)  return 'left'
+    if (minDist === fromRight) return 'right'
+    if (minDist === fromTop)   return 'top'
+    return 'bottom'
   }
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    if (!e.dataTransfer.types.includes('text/session-name')) return
+    if (!e.dataTransfer.types.includes('text/window-key')) return
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
     const zone = detectZone(e)
@@ -173,80 +301,82 @@ function PaneSlot({
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
-    const droppedSession = e.dataTransfer.getData('text/session-name')
-    if (!droppedSession || !dropZone) {
+    const droppedKey = e.dataTransfer.getData('text/window-key')
+    if (!droppedKey || !dropZone) {
       setDropZone(null)
       return
     }
 
-    if (isSessionInUse?.(droppedSession)) {
+    const [droppedSession, droppedWindowStr] = droppedKey.split(':')
+    const droppedWindowIndex = parseInt(droppedWindowStr, 10)
+    if (!droppedSession || isNaN(droppedWindowIndex)) {
       setDropZone(null)
       return
     }
 
     if (dropZone === 'center') {
-      onReplaceSession?.(nodeId, droppedSession)
-    } else if (onDropSession) {
-      const direction: SplitDirection =
-        dropZone === 'left' || dropZone === 'right' ? 'horizontal' : 'vertical'
-      onDropSession(nodeId, direction, droppedSession)
+      // Replace current pane's window
+      onDropWindow?.(nodeId, droppedSession, droppedWindowIndex)
+    } else {
+      // Edge drop — split the pane and assign the dropped window
+      onSplitDrop?.(nodeId, dropZone, droppedSession, droppedWindowIndex)
     }
     setDropZone(null)
   }
 
   // Ref callback to mount the session container into this slot.
-  // When sessionName or sessionContainers change, the callback identity changes,
-  // so React re-invokes it — swapping the container in the commit phase
-  // (before TerminalPane effects run, ensuring xterm.js has a DOM context).
   const mountRef = useCallback(
     (el: HTMLDivElement | null) => {
       if (!el) return
-      const container = sessionContainers.get(sessionName)
+      const container = sessionContainers.get(windowKey)
       if (container && container.parentElement !== el) {
         while (el.firstChild) el.removeChild(el.firstChild)
         el.appendChild(container)
       }
     },
-    [sessionName, sessionContainers]
+    [windowKey, sessionContainers]
   )
 
-  const dropHighlight = dropZone
-    ? dropZone === 'center'
-      ? 'bg-[var(--color-primary)]/20 border-2 border-dashed border-[var(--color-primary)]/50'
-      : `${
-          dropZone === 'left'
-            ? 'border-l-4 border-l-[var(--color-primary)]'
-            : dropZone === 'right'
-              ? 'border-r-4 border-r-[var(--color-primary)]'
-              : dropZone === 'top'
-                ? 'border-t-4 border-t-[var(--color-primary)]'
-                : 'border-b-4 border-b-[var(--color-primary)]'
-        }`
-    : ''
+  // Compute the edge drop-zone overlay style: covers ~50% of the pane
+  // in the direction of the split, previewing where the new pane will appear.
+  const edgeOverlayStyle: React.CSSProperties | null =
+    dropZone && dropZone !== 'center'
+      ? {
+          position: 'absolute',
+          top:    dropZone === 'bottom' ? '50%' : 0,
+          bottom: dropZone === 'top'    ? '50%' : 0,
+          left:   dropZone === 'right'  ? '50%' : 0,
+          right:  dropZone === 'left'   ? '50%' : 0,
+          zIndex: 25,
+          pointerEvents: 'none' as const,
+          borderRadius: 0,
+          transition: 'all 0.15s ease',
+        }
+      : null
 
   return (
     <div
-      className="group/pane relative h-full w-full"
+      className="group/pane flex flex-col h-full w-full"
       style={{
-        border: isActive ? `2px solid ${projectColor}` : `1px solid var(--color-border-light)`,
-        boxShadow: isActive ? `0 0 0 1px ${projectColor}` : 'none',
-        transition: 'border 0.2s ease, box-shadow 0.2s ease',
+        border: inSplit
+          ? `2px solid ${SPLIT_GROUP_COLOR}${isActive ? '' : '55'}`
+          : isActive
+            ? '2px solid var(--color-primary)'
+            : '1px solid var(--color-border-light)',
+        transition: 'border 0.2s ease',
       }}
+      onClick={() => onPaneFocus(nodeId)}
     >
-      {/* Terminal mount point — rendered behind overlays */}
-      <div ref={mountRef} className="absolute inset-0" />
-
-      {/* Action buttons — pure CSS visibility via group-hover, z-30 above terminal */}
-      <div className="absolute top-1 left-1 z-30 flex items-center gap-0.5
-        bg-[var(--color-bg)]/80 border-[length:var(--border-w)] border-[var(--color-border-light)]
-        rounded-[var(--radius)] px-0.5 py-0.5 backdrop-blur-sm
-        opacity-0 group-hover/pane:opacity-100 transition-opacity pointer-events-none group-hover/pane:pointer-events-auto"
+      {/* Top toolbar — fixed at pane top */}
+      <div className="shrink-0 flex items-center gap-0.5
+        bg-[var(--color-bg)] border-b border-b-[var(--color-border-light)]/40
+        px-1 py-0.5"
       >
         <button
           onClick={(e) => { e.stopPropagation(); onSplit(nodeId, 'horizontal') }}
           disabled={!canSplit}
           className="p-0.5 text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] disabled:opacity-30 transition-colors cursor-pointer"
-          title="水平分屏"
+          title="Split horizontal"
         >
           <Icon icon={IconSplitHorizontal} width={14} />
         </button>
@@ -254,7 +384,7 @@ function PaneSlot({
           onClick={(e) => { e.stopPropagation(); onSplit(nodeId, 'vertical') }}
           disabled={!canSplit}
           className="p-0.5 text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] disabled:opacity-30 transition-colors cursor-pointer"
-          title="垂直分屏"
+          title="Split vertical"
         >
           <Icon icon={IconSplitVertical} width={14} />
         </button>
@@ -262,38 +392,59 @@ function PaneSlot({
           <button
             onClick={(e) => { e.stopPropagation(); onClose(nodeId) }}
             className="p-0.5 text-[var(--color-fg-muted)] hover:text-[var(--color-danger)] transition-colors cursor-pointer"
-            title="关闭窗格"
+            title="Close pane"
           >
             <Icon icon={IconX} width={14} />
           </button>
         )}
+        <div className="flex-1" />
+        <div className="flex items-center gap-1 pr-0.5">
+          <span className="text-[10px] font-mono text-[var(--color-fg-muted)]">{windowKey}</span>
+        </div>
       </div>
 
-      {/* Drag overlay — transparent layer above terminal, only active during drag */}
-      {isDragging && (
-        <div
-          className={`absolute inset-0 z-20 ${dropHighlight}`}
-          onDragOver={handleDragOver}
-          onDragLeave={() => setDropZone(null)}
-          onDrop={handleDrop}
-        />
-      )}
+      {/* Terminal area */}
+      <div className="flex-1 min-h-0 relative">
+        {/* Terminal mount point */}
+        <div ref={mountRef} className="absolute inset-0" />
 
-      {/* Center replace hint */}
-      {dropZone === 'center' && (
-        <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none">
-          <div className="flex items-center gap-1.5 bg-[var(--color-bg)]/90 border-[length:var(--border-w)] border-[var(--color-primary)] rounded-[var(--radius)] px-3 py-1.5">
-            <Icon icon={IconReplace} width={14} className="text-[var(--color-primary)]" />
-            <span className="text-xs font-bold text-[var(--color-primary)]">替换窗口</span>
-          </div>
-        </div>
-      )}
+        {/* Drag overlay — transparent layer above terminal, only active during drag */}
+        {isDragging && (
+          <div
+            className="absolute inset-0 z-20"
+            onDragOver={handleDragOver}
+            onDragLeave={() => setDropZone(null)}
+            onDrop={handleDrop}
+          />
+        )}
+
+        {/* Center drop indicator — full pane translucent highlight + "Replace" label */}
+        {dropZone === 'center' && (
+          <>
+            <div className="absolute inset-0 z-25 bg-[var(--color-primary)]/15 border-2 border-dashed border-[var(--color-primary)]/50 pointer-events-none" />
+            <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none">
+              <div className="flex items-center gap-1.5 bg-[var(--color-bg)]/90 border-[length:var(--border-w)] border-[var(--color-primary)] rounded-[var(--radius)] px-3 py-1.5">
+                <Icon icon={IconReplace} width={14} className="text-[var(--color-primary)]" />
+                <span className="text-xs font-bold text-[var(--color-primary)]">Replace window</span>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Edge drop indicator — half-pane translucent overlay previewing split position */}
+        {edgeOverlayStyle && (
+          <div
+            className="bg-[var(--color-primary)]/15 border-2 border-[var(--color-primary)]/40"
+            style={edgeOverlayStyle}
+          />
+        )}
+      </div>
     </div>
   )
 }
 
 // ---------------------------------------------------------------------------
-// Layout tree renderer — PaneSlots only, no TerminalPane inside the tree
+// Layout tree renderer
 // ---------------------------------------------------------------------------
 
 function renderLayoutStructure(
@@ -304,23 +455,42 @@ function renderLayoutStructure(
 ): React.ReactNode {
   if (node.type === 'leaf') {
     const pw = props.paneWindowMap[node.id]
-    const sessionName = pw ? `${pw.sessionName}:${pw.windowIndex}` : ''
     const isActive = props.activePaneId === node.id
+
+    // Unassigned pane — show empty state
+    if (!pw) {
+      return (
+        <EmptyPaneSlot
+          key={node.id}
+          nodeId={node.id}
+          canSplit={props.canSplit}
+          paneCount={props.paneCount}
+          isActive={isActive}
+          isDragging={isDragging}
+          onSplit={props.onSplit}
+          onClose={props.onClose}
+          onPaneFocus={props.onPaneFocus}
+          onDropWindow={props.onDropWindow}
+        />
+      )
+    }
+
+    const windowKey = `${pw.sessionName}:${pw.windowIndex}`
     return (
       <PaneSlot
         key={node.id}
         nodeId={node.id}
         sessionContainers={sessionContainers}
-        sessionName={sessionName}
+        windowKey={windowKey}
         canSplit={props.canSplit}
         paneCount={props.paneCount}
         isDragging={isDragging}
         isActive={isActive}
         onSplit={props.onSplit}
         onClose={props.onClose}
-        onDropSession={props.onDropSession}
-        onReplaceSession={props.onReplaceSession}
-        isSessionInUse={props.isWindowInUse}
+        onPaneFocus={props.onPaneFocus}
+        onDropWindow={props.onDropWindow}
+        onSplitDrop={props.onSplitDrop}
       />
     )
   }
@@ -353,46 +523,37 @@ function renderLayoutStructure(
 export function SplitWorkspace(props: SplitWorkspaceProps) {
   const { layout, canSplit, activePaneId, onSplit, onClose } = props
 
-  // Stable leaf ID list
+  // Stable leaf ID list — derive pane count from actual layout tree
+  // to guarantee consistency within a single render pass.
   const leafIds = useMemo(() => getAllLeafIds(layout), [layout])
+  const localPaneCount = leafIds.length
 
-  // Window keys currently displayed in panes (format: "sessionName:windowIndex")
-  const currentSessionNames = useMemo(() => {
-    const names = new Set<string>()
+  // Window keys currently assigned to panes (format: "sessionName:windowIndex")
+  const currentWindowKeys = useMemo(() => {
+    const keys = new Set<string>()
     for (const id of leafIds) {
       const pw = props.paneWindowMap[id]
       if (pw) {
-        names.add(`${pw.sessionName}:${pw.windowIndex}`)
+        keys.add(`${pw.sessionName}:${pw.windowIndex}`)
       }
     }
-    return [...names]
+    return [...keys]
   }, [leafIds, props.paneWindowMap])
 
-  // Persistent container elements keyed by session name.
-  // ensureInPool only ADDS — switched-away sessions stay "warm" in the pool
+  // Persistent container elements keyed by window key.
+  // ensureInPool only ADDS — switched-away windows stay "warm" in the pool
   // so switching back is instant (no WS reconnect needed).
-  const sessionContainers = useSessionPool(currentSessionNames)
+  const sessionContainers = useSessionPool(currentWindowKeys)
 
-  // Clean up orphaned windows when panes are closed
-  const prevLeafIdsRef = useRef(leafIds)
+  // Smart pool cleanup: only remove containers that are not tracked by ANY
+  // pane in the current layout OR any saved layout (session switch history).
+  // This fixes the old bug where session-switch would destroy all old
+  // containers and force a full WebSocket reconnect.
   useEffect(() => {
-    const prev = prevLeafIdsRef.current
-    prevLeafIdsRef.current = leafIds
-
-    // Only clean up when a pane was removed
-    const hadRemoval = prev.some((id) => !leafIds.includes(id))
-    if (!hadRemoval) return
-
-    const usedNames = new Set<string>()
-    for (const id of leafIds) {
-      const pw = props.paneWindowMap[id]
-      if (pw) {
-        usedNames.add(`${pw.sessionName}:${pw.windowIndex}`)
-      }
-    }
-    const orphaned = [...poolMap.keys()].filter((n) => !usedNames.has(n))
+    const trackedKeys = props.getAllTrackedWindowKeys?.() ?? new Set(currentWindowKeys)
+    const orphaned = [...poolMap.keys()].filter((k) => !trackedKeys.has(k))
     if (orphaned.length > 0) removeFromPool(orphaned)
-  }, [leafIds, props.paneWindowMap])
+  }, [leafIds, props.paneWindowMap, props.getAllTrackedWindowKeys, currentWindowKeys])
 
   // Track global drag state so PaneSlot can show a drag overlay above xterm
   const [isDragging, setIsDragging] = useState(false)
@@ -434,7 +595,7 @@ export function SplitWorkspace(props: SplitWorkspaceProps) {
   const targetPaneId = contextMenu?.paneId ?? activePaneId
   const contextMenuItems = [
     {
-      label: '水平分屏',
+      label: 'Split horizontal',
       icon: IconSplitHorizontal,
       disabled: !canSplit,
       onClick: () => {
@@ -442,7 +603,7 @@ export function SplitWorkspace(props: SplitWorkspaceProps) {
       },
     },
     {
-      label: '垂直分屏',
+      label: 'Split vertical',
       icon: IconSplitVertical,
       disabled: !canSplit,
       onClick: () => {
@@ -450,9 +611,9 @@ export function SplitWorkspace(props: SplitWorkspaceProps) {
       },
     },
     {
-      label: '关闭窗格',
+      label: 'Close pane',
       icon: IconX,
-      disabled: props.paneCount <= 1,
+      disabled: localPaneCount <= 1,
       onClick: () => {
         if (targetPaneId) onClose(targetPaneId)
       },
@@ -466,7 +627,7 @@ export function SplitWorkspace(props: SplitWorkspaceProps) {
         className="flex-1 min-h-0"
         onContextMenu={handleContextMenu}
       >
-        {renderLayoutStructure(layout, props, sessionContainers, isDragging)}
+        {renderLayoutStructure(layout, { ...props, paneCount: localPaneCount }, sessionContainers, isDragging)}
       </div>
 
       {/* Portaled terminals keyed by window — includes "warm" windows
@@ -476,8 +637,9 @@ export function SplitWorkspace(props: SplitWorkspaceProps) {
         if (!container) return null
 
         // Parse windowKey (format: "sessionName:windowIndex")
-        const [sessionName, windowIndexStr] = windowKey.split(':')
-        const windowIndex = parseInt(windowIndexStr, 10)
+        const colonIdx = windowKey.lastIndexOf(':')
+        const sessionName = windowKey.substring(0, colonIdx)
+        const windowIndex = parseInt(windowKey.substring(colonIdx + 1), 10)
 
         // Determine if this window is focused in any pane
         const focusedLeaf = leafIds.find((id) => {

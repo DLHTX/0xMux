@@ -1,11 +1,12 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Icon } from '@iconify/react'
-import { IconX, IconShield, IconLogOut, IconGlobe, IconRefreshCw, IconAlertTriangle, IconEye, IconEyeOff } from '../../lib/icons'
+import { IconX, IconShield, IconLogOut, IconGlobe, IconEye, IconEyeOff } from '../../lib/icons'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { Tabs } from '../ui/Tabs'
 import { useTheme } from '../../hooks/useTheme'
 import { useI18n } from '../../hooks/useI18n'
+import { getConfig } from '../../lib/api'
 import {
   PRESETS,
   FONT_OPTIONS,
@@ -92,7 +93,7 @@ export function SettingsModal({ open, onClose, onChangePassword, onLogout }: Set
               },
               {
                 id: 'external',
-                label: '外部访问',
+                label: '网络',
                 content: <ExternalAccessTab />,
               },
             ]}
@@ -457,99 +458,113 @@ function SecurityTab({ onChangePassword, onLogout }: {
   )
 }
 
-// ── 外部访问 Tab ──
+// ── 网络信息 Tab ──
 
 function ExternalAccessTab() {
-  const [externalAccess, setExternalAccess] = useState(false)
-  const [allowInstall, setAllowInstall] = useState(false)
-  const [allowRestart, setAllowRestart] = useState(false)
+  const [serverInfo, setServerInfo] = useState<{ port: number; host: string; version: string; local_ips: string[] } | null>(null)
+  const [copied, setCopied] = useState<string | null>(null)
+
+  useEffect(() => {
+    getConfig()
+      .then((data) => setServerInfo(data))
+      .catch(() => {})
+  }, [])
+
+  const currentUrl = window.location.origin
+  const currentPort = window.location.port || (window.location.protocol === 'https:' ? '443' : '80')
+
+  const handleCopy = (url: string) => {
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(url)
+      setTimeout(() => setCopied(null), 2000)
+    })
+  }
 
   return (
     <div className="flex flex-col gap-6">
-      {/* 外部访问开关 */}
+      {/* Network info header */}
       <div>
-        <div className="flex items-start justify-between mb-2">
-          <div className="flex-1">
-            <h3 className="text-sm font-bold flex items-center gap-2 mb-1">
-              <Icon icon={IconGlobe} width={16} />
-              允许外部访问
-            </h3>
-            <p className="text-xs text-[var(--color-fg-muted)]">
-              开启后，其他设备可通过局域网访问此终端
-            </p>
-          </div>
-          <label className="relative inline-flex items-center cursor-pointer">
-            <input
-              type="checkbox"
-              checked={externalAccess}
-              onChange={(e) => setExternalAccess(e.target.checked)}
-              className="sr-only peer"
-            />
-            <div className="w-11 h-6 bg-[var(--color-border-light)] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[var(--color-primary)]"></div>
-          </label>
-        </div>
+        <h3 className="text-sm font-bold flex items-center gap-2 mb-1">
+          <Icon icon={IconGlobe} width={16} />
+          访问地址
+        </h3>
+        <p className="text-xs text-[var(--color-fg-muted)]">
+          其他设备可通过局域网地址访问此终端
+        </p>
       </div>
 
-      {/* 网络信息 */}
-      {externalAccess && (
-        <>
-          <div className="px-3 py-2 bg-[var(--color-warning)]/10 border-[length:var(--border-w)] border-[var(--color-warning)] rounded-[var(--radius)] flex items-start gap-2">
-            <Icon icon={IconAlertTriangle} width={16} className="text-[var(--color-warning)] mt-0.5" />
-            <div className="text-xs text-[var(--color-fg-muted)]">
-              <p className="font-bold text-[var(--color-warning)] mb-1">安全提醒</p>
-              <p>外部访问已开启，请确保在可信网络环境下使用</p>
-            </div>
-          </div>
+      {/* URLs */}
+      <div className="flex flex-col gap-2 text-xs">
+        {/* Current / localhost */}
+        <UrlRow
+          label="本机"
+          url={currentUrl}
+          copied={copied === currentUrl}
+          onCopy={() => handleCopy(currentUrl)}
+        />
 
-          <div>
-            <h4 className="text-xs font-bold text-[var(--color-fg-muted)] mb-2">访问地址</h4>
-            <div className="flex flex-col gap-2 text-xs">
-              <div className="flex items-center justify-between py-1.5 px-3 bg-[var(--color-bg-alt)] rounded-[var(--radius)]">
-                <span className="text-[var(--color-fg-muted)]">本机</span>
-                <code className="font-mono text-[var(--color-primary)]">http://localhost:3000</code>
+        {/* LAN URLs — one row per detected private IP */}
+        {serverInfo?.local_ips.map((ip) => {
+          const lanUrl = `${window.location.protocol}//${ip}:${currentPort}`
+          if (lanUrl === currentUrl) return null
+          return (
+            <UrlRow
+              key={ip}
+              label="局域网"
+              url={lanUrl}
+              copied={copied === lanUrl}
+              onCopy={() => handleCopy(lanUrl)}
+            />
+          )
+        })}
+      </div>
+
+      {/* Server info */}
+      {serverInfo && (
+        <div className="pt-4 border-t-[length:var(--border-w)] border-[var(--color-border-light)]">
+          <h4 className="text-xs font-bold text-[var(--color-fg-muted)] mb-2">服务器信息</h4>
+          <div className="flex flex-col gap-1.5 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-[var(--color-fg-muted)]">绑定地址</span>
+              <code className="font-mono">{serverInfo.host}:{serverInfo.port}</code>
+            </div>
+            {serverInfo.local_ips.length > 0 && (
+              <div className="flex items-center justify-between">
+                <span className="text-[var(--color-fg-muted)]">局域网 IP</span>
+                <code className="font-mono">{serverInfo.local_ips.join(', ')}</code>
               </div>
-              <div className="flex items-center justify-between py-1.5 px-3 bg-[var(--color-bg-alt)] rounded-[var(--radius)]">
-                <span className="text-[var(--color-fg-muted)]">局域网</span>
-                <code className="font-mono text-[var(--color-primary)]">http://192.168.1.100:3000</code>
-              </div>
+            )}
+            <div className="flex items-center justify-between">
+              <span className="text-[var(--color-fg-muted)]">版本</span>
+              <code className="font-mono">{serverInfo.version}</code>
             </div>
           </div>
-
-          {/* 危险操作 */}
-          <div className="pt-4 border-t-[length:var(--border-w)] border-[var(--color-border-light)]">
-            <h4 className="text-xs font-bold text-[var(--color-danger)] mb-3">危险操作</h4>
-            <div className="flex flex-col gap-3">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={allowInstall}
-                  onChange={(e) => setAllowInstall(e.target.checked)}
-                  className="w-4 h-4"
-                />
-                <span className="text-xs text-[var(--color-fg-muted)]">允许远程安装软件包</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={allowRestart}
-                  onChange={(e) => setAllowRestart(e.target.checked)}
-                  className="w-4 h-4"
-                />
-                <span className="text-xs text-[var(--color-fg-muted)]">允许远程重启服务</span>
-              </label>
-            </div>
-          </div>
-
-          {/* 立即重启 */}
-          <Button
-            variant="outline"
-            className="w-full flex items-center justify-center gap-2"
-          >
-            <Icon icon={IconRefreshCw} width={14} />
-            立即重启以应用设置
-          </Button>
-        </>
+        </div>
       )}
+    </div>
+  )
+}
+
+/** Single URL row with copy button */
+function UrlRow({ label, url, copied, onCopy }: {
+  label: string
+  url: string
+  copied: boolean
+  onCopy: () => void
+}) {
+  return (
+    <div className="flex items-center justify-between py-1.5 px-3 bg-[var(--color-bg-alt)] rounded-[var(--radius)]">
+      <span className="text-[var(--color-fg-muted)] shrink-0 mr-3">{label}</span>
+      <div className="flex items-center gap-2 min-w-0">
+        <code className="font-mono text-[var(--color-primary)] truncate">{url}</code>
+        <button
+          onClick={onCopy}
+          className="shrink-0 px-1.5 py-0.5 text-[10px] font-bold border-[length:var(--border-w)] border-[var(--color-border-light)] rounded-[var(--radius)]
+            hover:border-[var(--color-primary)] hover:text-[var(--color-primary)] transition-colors cursor-pointer"
+        >
+          {copied ? '✓' : 'copy'}
+        </button>
+      </div>
     </div>
   )
 }

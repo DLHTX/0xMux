@@ -1,11 +1,15 @@
 import { Icon } from '@iconify/react'
 import { IconTrash } from '../../lib/icons'
 import type { TmuxWindow } from '../../lib/types'
+import { SPLIT_GROUP_COLOR } from '../../lib/session-utils'
 
 interface WindowItemProps {
   sessionName: string
   window: TmuxWindow
   selected: boolean
+  inUse?: boolean
+  /** True when this window belongs to the current split group */
+  inSplitGroup?: boolean
   onSelect: (sessionName: string, windowIndex: number) => void
   onDelete: (sessionName: string, windowIndex: number) => void
 }
@@ -14,6 +18,8 @@ export function WindowItem({
   sessionName,
   window,
   selected,
+  inUse,
+  inSplitGroup,
   onSelect,
   onDelete,
 }: WindowItemProps) {
@@ -22,17 +28,30 @@ export function WindowItem({
     onDelete(sessionName, window.index)
   }
 
+  const handleDragStart = (e: React.DragEvent) => {
+    // Set the window key for drag-and-drop onto workspace panes
+    const windowKey = `${sessionName}:${window.index}`
+    e.dataTransfer.setData('text/window-key', windowKey)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
   return (
     <div
       onClick={() => onSelect(sessionName, window.index)}
+      draggable
+      onDragStart={handleDragStart}
       className={`
         group relative flex items-center gap-2.5 py-2 pl-9 pr-3 cursor-pointer transition-colors
-        border-l-[length:var(--border-w)] select-none
-        ${selected
-          ? 'bg-[var(--color-bg-alt)] border-l-[var(--color-primary)]'
-          : 'border-l-transparent hover:bg-[var(--color-bg-alt)]'
-        }
+        select-none
+        ${selected ? 'bg-[var(--color-bg-alt)]' : 'hover:bg-[var(--color-bg-alt)]'}
       `}
+      style={{
+        borderLeft: inSplitGroup
+          ? `3px solid ${SPLIT_GROUP_COLOR}`
+          : selected
+            ? '3px solid var(--color-primary)'
+            : '3px solid transparent',
+      }}
     >
       {/* Window index and name */}
       <div className="flex-1 min-w-0">
@@ -42,10 +61,6 @@ export function WindowItem({
         </span>
       </div>
 
-      {/* Active indicator */}
-      {window.active && (
-        <div className="w-1.5 h-1.5 shrink-0 rounded-full bg-[var(--color-success)]" />
-      )}
 
       {/* Delete button */}
       <button

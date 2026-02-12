@@ -1,22 +1,23 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { TmuxSession, WsMessage, SessionsUpdateData } from '../lib/types'
+import type { TmuxSession } from '../lib/types'
 import * as api from '../lib/api'
-import { useWebSocket } from './useWebSocket'
+import { useMux } from '../contexts/MuxContext'
 
 export function useSessions() {
   const [sessions, setSessions] = useState<TmuxSession[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const handleWsMessage = useCallback((msg: WsMessage) => {
-    if (msg.type === 'sessions_update') {
-      const data = msg.data as SessionsUpdateData
-      setSessions(data.sessions)
-    }
-  }, [])
+  const mux = useMux()
 
-  const { status } = useWebSocket({ onMessage: handleWsMessage })
+  // Subscribe to real-time session updates via MuxSocket
+  useEffect(() => {
+    return mux.onSessionsUpdate((updatedSessions) => {
+      setSessions(updatedSessions)
+    })
+  }, [mux])
 
+  // Initial fetch via REST
   useEffect(() => {
     api.getSessions()
       .then((data) => {
@@ -34,12 +35,12 @@ export function useSessions() {
   }, [])
 
   const deleteSession = useCallback(async (name: string) => {
-    // 乐观删除：先从 UI 移除，再异步请求服务器
+    // Optimistic delete: remove from UI first, then request server
     setSessions((prev) => prev.filter((s) => s.name !== name))
     try {
       await api.deleteSession(name)
     } catch (e) {
-      // 失败时重新获取真实列表
+      // On failure, re-fetch the real list
       const data = await api.getSessions()
       setSessions(data)
       throw e
@@ -56,7 +57,7 @@ export function useSessions() {
     sessions,
     loading,
     error,
-    connectionStatus: status,
+    connectionStatus: mux.status,
     createSession,
     deleteSession,
     renameSession,

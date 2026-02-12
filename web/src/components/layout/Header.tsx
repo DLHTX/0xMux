@@ -33,8 +33,7 @@ export function Header({ connectionStatus, onSettingsClick, onLogoClick }: Heade
   return (
     <>
       <header
-        className="flex items-center justify-between px-4 border-b-[length:var(--border-w)] border-[var(--color-border)] bg-[var(--color-bg)] shrink-0"
-        style={{ height: 48 }}
+        className="flex items-center justify-between px-3 md:px-4 border-b-[length:var(--border-w)] border-[var(--color-border)] bg-[var(--color-bg)] shrink-0 h-10 md:h-12"
       >
         {/* Left: Logo */}
         <Logo onClick={onLogoClick} />

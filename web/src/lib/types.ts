@@ -108,6 +108,7 @@ export interface ConfigResponse {
   port: number
   host: string
   version: string
+  local_ips: string[]
 }
 
 export type ConnectionStatus = 'connected' | 'connecting' | 'disconnected'
@@ -199,4 +200,17 @@ export interface ChangePasswordRequest {
   current_password: string
   new_password: string
   confirm_password: string
+}
+
+// ── Layout Persistence ──
+
+export interface LayoutState {
+  layout: SplitLayout
+  paneWindowMap: Record<string, PaneWindow>
+  activePaneId: string | null
+}
+
+export interface LayoutStore {
+  layouts: Record<string, LayoutState>
+  primarySession: string | null
 }

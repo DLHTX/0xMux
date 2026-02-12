@@ -1,6 +1,6 @@
 use axum::{
     Router,
-    http::{Method, HeaderValue},
+    http::Method,
     routing::{delete, get, post, put},
     middleware,
 };
@@ -12,28 +12,28 @@ use crate::state::AppState;
 use crate::ws;
 
 pub fn build(state: AppState) -> Router {
-    // 收紧CORS策略
-    let cors = CorsLayer::new()
-        .allow_origin(
-            // 开发模式允许localhost:3000，生产模式只允许同源
-            #[cfg(debug_assertions)]
-            {
-                vec![
-                    "http://localhost:3000".parse::<HeaderValue>().unwrap(),
-                    "http://127.0.0.1:3000".parse::<HeaderValue>().unwrap(),
-                ]
-            },
-            #[cfg(not(debug_assertions))]
-            {
-                vec![]
-            },
-        )
-        .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::PUT])
-        .allow_headers(vec![
-            axum::http::header::AUTHORIZATION,
-            axum::http::header::CONTENT_TYPE,
-        ])
-        .allow_credentials(true);
+    let cors = {
+        // Dev mode: allow any origin so LAN access works with Vite dev server
+        #[cfg(debug_assertions)]
+        {
+            CorsLayer::new()
+                .allow_origin(tower_http::cors::Any)
+                .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::PUT])
+                .allow_headers(tower_http::cors::Any)
+        }
+        // Production: same-origin only (credentials allowed, no extra origins)
+        #[cfg(not(debug_assertions))]
+        {
+            CorsLayer::new()
+                .allow_origin(Vec::<axum::http::HeaderValue>::new())
+                .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::PUT])
+                .allow_headers(vec![
+                    axum::http::header::AUTHORIZATION,
+                    axum::http::header::CONTENT_TYPE,
+                ])
+                .allow_credentials(true)
+        }
+    };
 
     let app = Router::new()
         // 认证端点（无需鉴权）
@@ -64,6 +64,11 @@ pub fn build(state: AppState) -> Router {
         .route("/api/system/restart", post(handlers::system::system_restart_handler))
         .route("/api/upload/image", post(handlers::upload::upload_image_handler))
         .route(
+            "/api/layouts",
+            get(handlers::layout::get_layouts)
+                .put(handlers::layout::save_layouts),
+        )
+        .route(
             "/api/sessions/{name}/windows",
             get(handlers::window::list_windows_handler)
                 .post(handlers::window::create_window_handler),
@@ -76,10 +81,8 @@ pub fn build(state: AppState) -> Router {
             "/api/sessions/{name}/windows/{index}/select",
             put(handlers::window::select_window_handler),
         )
-        .route("/api/pty/sessions", get(ws::pty::list_pty_sessions_handler))
-        .route("/ws", get(ws::sessions::ws_handler))
+        .route("/ws/mux", get(ws::mux::ws_mux_handler))
         .route("/ws/install/{task_id}", get(ws::install::ws_install_handler))
-        .route("/ws/pty", get(ws::pty::ws_pty_handler))
         // 添加鉴权中间件
         .layer(middleware::from_fn_with_state(state.clone(), auth_middleware))
         .layer(cors)

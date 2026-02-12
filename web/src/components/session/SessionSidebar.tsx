@@ -13,11 +13,15 @@ interface SessionSidebarProps {
   sessions: TmuxSession[]
   windows: Map<string, TmuxWindow[]>
   selectedWindow: { sessionName: string; windowIndex: number } | null
+  selectedSession: string | null
+  onSelectSession: (sessionName: string) => void
   onSelectWindow: (sessionName: string, windowIndex: number) => void
   onCreateSession: () => void
   onCreateWindow: (sessionName: string) => void
   onDeleteWindow: (sessionName: string, windowIndex: number) => void
   onDeleteSession: (sessionName: string) => void
+  isWindowInUse?: (sessionName: string, windowIndex: number) => boolean
+  isInSplitGroup?: (sessionName: string, windowIndex: number) => boolean
   collapsed: boolean
   onToggleCollapse: () => void
 }
@@ -26,11 +30,15 @@ export function SessionSidebar({
   sessions,
   windows,
   selectedWindow,
+  selectedSession,
+  onSelectSession,
   onSelectWindow,
   onCreateSession,
   onCreateWindow,
   onDeleteWindow,
   onDeleteSession,
+  isWindowInUse,
+  isInSplitGroup,
   collapsed,
   onToggleCollapse,
 }: SessionSidebarProps) {
@@ -113,10 +121,14 @@ export function SessionSidebar({
                 session={session}
                 windows={windows.get(session.name) || []}
                 selectedWindow={selectedWindow}
+                isSelected={selectedSession === session.name}
+                onSelectSession={onSelectSession}
                 onSelectWindow={onSelectWindow}
                 onCreateWindow={onCreateWindow}
                 onDeleteWindow={onDeleteWindow}
                 onDeleteSession={onDeleteSession}
+                isWindowInUse={isWindowInUse}
+                isInSplitGroup={isInSplitGroup}
                 collapsed={!expandedSessions.has(session.name)}
                 onToggle={() => toggleSession(session.name)}
               />
@@ -135,19 +147,11 @@ export function SessionSidebar({
       {collapsed && (
         <div className="flex-1 overflow-y-auto flex flex-col items-center gap-1 py-2">
           {sessions.map((session) => {
-            const isSelected = selectedWindow?.sessionName === session.name
+            const isSelected = selectedSession === session.name
             return (
               <button
                 key={session.name}
-                onClick={() => {
-                  // Select the first window or active window
-                  const wins = windows.get(session.name) || []
-                  const activeWin = wins.find((w) => w.active)
-                  const targetWin = activeWin || wins[0]
-                  if (targetWin) {
-                    onSelectWindow(session.name, targetWin.index)
-                  }
-                }}
+                onClick={() => onSelectSession(session.name)}
                 className={`w-7 h-7 flex items-center justify-center text-[10px] font-bold rounded-[var(--radius)]
                   transition-colors cursor-pointer
                   ${isSelected

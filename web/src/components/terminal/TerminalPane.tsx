@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTerminal } from '../../hooks/useTerminal'
-import { usePtySocket } from '../../hooks/usePtySocket'
+import { useMux } from '../../contexts/MuxContext'
 import { useMobile } from '../../hooks/useMobile'
-import type { ConnectionStatus } from '../../lib/types'
+import { consumePendingInit } from '../../lib/init-commands'
+import type { MuxChannelHandle } from '../../hooks/useMuxSocket'
 
 interface TerminalPaneProps {
   sessionName: string
@@ -11,6 +12,8 @@ interface TerminalPaneProps {
   focused?: boolean
   onFocus?: () => void
   terminalRef?: React.RefObject<import('@xterm/xterm').Terminal | null>
+  /** Extra bottom space to reserve on mobile (e.g. for a fixed VirtualKeybar) */
+  mobileBottomOffset?: number
 }
 
 export function TerminalPane({
@@ -20,8 +23,12 @@ export function TerminalPane({
   focused = false,
   onFocus,
   terminalRef: externalTerminalRef,
+  mobileBottomOffset = 0,
 }: TerminalPaneProps) {
-  const [ptyStatus, setPtyStatus] = useState<ConnectionStatus>('disconnected')
+  const mux = useMux()
+  const chRef = useRef<MuxChannelHandle | null>(null)
+
+  const [channelOpen, setChannelOpen] = useState(false)
   const [exitCode, setExitCode] = useState<number | null>(null)
   const [viewportHeight, setViewportHeight] = useState<number | null>(null)
   const [mounted, setMounted] = useState(false)
@@ -38,24 +45,42 @@ export function TerminalPane({
     setFontSize,
   } = useTerminal({
     fontSize,
-    onData: (data) => send(data),
-    onResize: (cols, rows) => resize(cols, rows),
+    onData: (data) => chRef.current?.send(data),
+    onResize: (cols, rows) => chRef.current?.resize(cols, rows),
   })
 
-  const { status, send, resize } = usePtySocket({
-    session: sessionName,
-    window: windowIndex,
-    onOutput: useCallback(
-      (data: Uint8Array) => write(data),
-      [write]
-    ),
-    onExit: useCallback((code: number) => setExitCode(code), []),
-    onError: useCallback(() => {}, []),
-  })
-
+  // Open a mux channel when the pane mounts (or session/window changes)
   useEffect(() => {
-    setPtyStatus(status)
-  }, [status])
+    const winIdx = windowIndex ?? 0
+    const handle = mux.openChannel({
+      session: sessionName,
+      window: winIdx,
+      cols: terminal.current?.cols ?? 80,
+      rows: terminal.current?.rows ?? 24,
+      onOutput: (data: Uint8Array) => write(data),
+      onOpen: () => {
+        setChannelOpen(true)
+        // If this window was freshly created with an init command, send it
+        const cmd = consumePendingInit(sessionName, winIdx)
+        if (cmd) {
+          // Small delay so the shell prompt is ready
+          setTimeout(() => handle.send(cmd + '\n'), 600)
+        }
+      },
+      onClose: (code: number) => setExitCode(code),
+      onError: () => {},
+    })
+    chRef.current = handle
+    setChannelOpen(false)
+    setExitCode(null)
+
+    return () => {
+      // Close the channel when this TerminalPane unmounts
+      handle.close()
+      chRef.current = null
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionName, windowIndex])
 
   useEffect(() => {
     initTerminal()
@@ -71,18 +96,18 @@ export function TerminalPane({
     }
   }, [terminal, externalTerminalRef])
 
-  // Sync actual terminal size to PTY after WebSocket connects.
-  // Fixes: initial URL uses default 80x24, but terminal may already be larger.
+  // Sync actual terminal size to PTY after channel opens.
+  // Fixes: initial open uses default 80x24, but terminal may already be larger.
   useEffect(() => {
-    if (status === 'connected' && terminal.current) {
+    if (channelOpen && terminal.current) {
       requestAnimationFrame(() => {
         fit()
         if (terminal.current) {
-          resize(terminal.current.cols, terminal.current.rows)
+          chRef.current?.resize(terminal.current.cols, terminal.current.rows)
         }
       })
     }
-  }, [status, fit, resize, terminal])
+  }, [channelOpen, fit, terminal])
 
   useEffect(() => {
     if (focused) focus()
@@ -105,7 +130,7 @@ export function TerminalPane({
     const handleResize = () => {
       // When keyboard opens, visualViewport.height shrinks
       const wrapperTop = wrapperRef.current?.getBoundingClientRect().top ?? 0
-      const available = vv.height - wrapperTop
+      const available = vv.height - wrapperTop - mobileBottomOffset
       setViewportHeight(Math.max(available, 100))
       // Re-fit terminal after layout change
       requestAnimationFrame(() => fit())
@@ -119,7 +144,11 @@ export function TerminalPane({
       vv.removeEventListener('scroll', handleResize)
       setViewportHeight(null)
     }
-  }, [isMobile, fit])
+  }, [isMobile, fit, mobileBottomOffset])
+
+  // Derive connection status from mux status + channel state
+  const isConnecting = mux.status === 'connecting' || (mux.status === 'connected' && !channelOpen && exitCode === null)
+  const isDisconnected = mux.status === 'disconnected' && exitCode === null
 
   return (
     <div
@@ -137,7 +166,7 @@ export function TerminalPane({
         style={{ background: '#0a0a0a' }}
       />
 
-      {ptyStatus === 'connecting' && (
+      {isConnecting && (
         <div className="absolute inset-0 flex items-center justify-center bg-[#0a0a0a]/80 z-10">
           <span className="text-xs text-[#00ff41] animate-pulse font-mono">
             Connecting...
@@ -145,7 +174,7 @@ export function TerminalPane({
         </div>
       )}
 
-      {ptyStatus === 'disconnected' && exitCode === null && (
+      {isDisconnected && (
         <div className="absolute inset-0 flex items-center justify-center bg-[#0a0a0a]/80 z-10">
           <div className="text-center">
             <span className="text-xs text-[var(--color-warning)] font-mono block mb-2">

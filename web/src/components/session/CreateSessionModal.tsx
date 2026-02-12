@@ -8,9 +8,10 @@ import {
   IconChevronRight,
   IconCheck,
   IconCornerRightDown,
+  IconTerminal,
 } from '../../lib/icons'
 import { useI18n } from '../../hooks/useI18n'
-import { getNextSessionName, listDirs } from '../../lib/api'
+import { listDirs } from '../../lib/api'
 import type { DirEntry } from '../../lib/types'
 
 const HISTORY_KEY = '0xmux-dir-history'
@@ -56,10 +57,19 @@ function toBreadcrumbs(p: string): { label: string; path: string }[] {
   return crumbs
 }
 
+/** Preset init commands shown as clickable chips. */
+const INIT_CMD_PRESETS = [
+  { label: 'claude', cmd: 'claude' },
+  { label: 'claude --dangerously-skip-permissions', cmd: 'claude --dangerously-skip-permissions' },
+]
+
+/** Key for persisting the last-used init command. */
+const LAST_INIT_CMD_KEY = '0xmux-last-init-cmd'
+
 interface CreateSessionModalProps {
   open: boolean
   onClose: () => void
-  onSubmit: (name: string, startDirectory?: string) => void
+  onSubmit: (name: string, startDirectory?: string, initCommand?: string) => void
 }
 
 const NAME_RE = /^[a-zA-Z0-9_.-]+$/
@@ -77,7 +87,7 @@ export function CreateSessionModal({
   const [dirs, setDirs] = useState<DirEntry[]>([])
   const [dirsLoading, setDirsLoading] = useState(false)
   const [history] = useState<string[]>(() => loadHistory())
-  const [nameLoading, setNameLoading] = useState(false)
+  const [initCommand, setInitCommand] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
   // Load dirs for a path
@@ -87,7 +97,6 @@ export function CreateSessionModal({
       const resp = await listDirs(path)
       setDirs(resp.dirs)
       setBrowsePath(resp.path)
-      // resp.parent available if needed
     } catch {
       setDirs([])
     } finally {
@@ -95,17 +104,12 @@ export function CreateSessionModal({
     }
   }, [])
 
-  // Update session name when directory changes
-  const updateName = useCallback(async (dir: string) => {
-    setNameLoading(true)
-    try {
-      const resp = await getNextSessionName(dir)
-      setName(resp.name)
-    } catch {
-      // keep current name
-    } finally {
-      setNameLoading(false)
-    }
+  // Derive session name from a directory path (use basename, sanitised)
+  const deriveNameFromDir = useCallback((dir: string) => {
+    const raw = basename(dir)
+    // Sanitise: replace invalid chars, trim to 50
+    const safe = raw.replace(/[^a-zA-Z0-9_.-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
+    setName(safe || 'session')
   }, [])
 
   // Navigate into a directory (browse only, don't select)
@@ -120,9 +124,9 @@ export function CreateSessionModal({
   const selectDir = useCallback(
     (path: string) => {
       setSelectedDir(path)
-      updateName(path)
+      deriveNameFromDir(path)
     },
-    [updateName]
+    [deriveNameFromDir]
   )
 
   // Navigate + select (for history shortcuts and home)
@@ -130,9 +134,9 @@ export function CreateSessionModal({
     (path: string) => {
       loadDirs(path)
       setSelectedDir(path)
-      updateName(path)
+      deriveNameFromDir(path)
     },
-    [loadDirs, updateName]
+    [loadDirs, deriveNameFromDir]
   )
 
   // On open: load home dir
@@ -140,13 +144,10 @@ export function CreateSessionModal({
     if (open) {
       setError('')
       setSelectedDir('')
-      loadDirs().then(() => {
-        // default: select ~ (browsePath from the initial load)
-      })
-      // Get default name
-      getNextSessionName()
-        .then((resp) => setName(resp.name))
-        .catch(() => setName(''))
+      setName('')
+      // Restore last-used init command
+      setInitCommand(localStorage.getItem(LAST_INIT_CMD_KEY) || '')
+      loadDirs()
       setTimeout(() => inputRef.current?.focus(), 100)
     }
   }, [open, loadDirs])
@@ -155,8 +156,9 @@ export function CreateSessionModal({
   useEffect(() => {
     if (browsePath && !selectedDir) {
       setSelectedDir(browsePath)
+      deriveNameFromDir(browsePath)
     }
-  }, [browsePath, selectedDir])
+  }, [browsePath, selectedDir, deriveNameFromDir])
 
   const validate = (n: string) => {
     if (!n) return ''
@@ -180,7 +182,10 @@ export function CreateSessionModal({
     if (selectedDir) {
       saveHistory(selectedDir)
     }
-    onSubmit(trimmed, selectedDir || undefined)
+    const cmd = initCommand.trim()
+    // Persist last-used init command for next time
+    localStorage.setItem(LAST_INIT_CMD_KEY, cmd)
+    onSubmit(trimmed, selectedDir || undefined, cmd || undefined)
     onClose()
   }
 
@@ -195,7 +200,7 @@ export function CreateSessionModal({
       onClick={onClose}
     >
       <div
-        className="bg-[var(--color-bg)] border-[length:var(--border-w)] border-[var(--color-border)] rounded-[var(--radius)] p-5 w-full max-w-lg mx-4 max-h-[80vh] flex flex-col"
+        className="bg-[var(--color-bg)] border-[length:var(--border-w)] border-[var(--color-border)] rounded-[var(--radius)] p-5 w-full max-w-lg mx-4 max-h-[80vh] flex flex-col overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header: command hint */}
@@ -334,30 +339,71 @@ export function CreateSessionModal({
         </div>
 
         {/* ── Session Name Input ── */}
-        <div className="flex items-center gap-2 mb-2">
-          <span className="font-bold text-sm">{'>'}</span>
-          <input
-            ref={inputRef}
-            value={name}
-            onChange={(e) => handleNameChange(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleSubmit()
-              if (e.key === 'Escape') onClose()
-            }}
-            placeholder={nameLoading ? '...' : t('create.placeholder')}
-            disabled={nameLoading}
-            className="flex-1 bg-transparent outline-none text-sm
-              border-b-[length:var(--border-w)] border-[var(--color-border-light)] focus:border-[var(--color-primary)] py-1
-              placeholder:text-[var(--color-fg-faint)] disabled:opacity-50"
-          />
+        <div className="mb-3">
+          <div className="text-[10px] text-[var(--color-fg-faint)] uppercase tracking-wider mb-1.5 font-bold">
+            SESSION NAME
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-sm">{'>'}</span>
+            <input
+              ref={inputRef}
+              value={name}
+              onChange={(e) => handleNameChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSubmit()
+                if (e.key === 'Escape') onClose()
+              }}
+              placeholder={t('create.placeholder')}
+              className="flex-1 bg-transparent outline-none text-sm
+                border-b-[length:var(--border-w)] border-[var(--color-border-light)] focus:border-[var(--color-primary)] py-1
+                placeholder:text-[var(--color-fg-faint)]"
+            />
+          </div>
+          {error && (
+            <p className="text-xs text-[var(--color-danger)] mt-1 ml-5">{error}</p>
+          )}
         </div>
 
-        {error && (
-          <p className="text-xs text-[var(--color-danger)] mt-1 ml-5">{error}</p>
-        )}
+        {/* ── Init Command ── */}
+        <div className="mb-3">
+          <div className="text-[10px] text-[var(--color-fg-faint)] uppercase tracking-wider mb-1.5 font-bold">
+            INIT COMMAND <span className="normal-case font-normal">(runs on every new window)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Icon icon={IconTerminal} width={14} className="text-[var(--color-fg-muted)] shrink-0" />
+            <input
+              value={initCommand}
+              onChange={(e) => setInitCommand(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSubmit()
+                if (e.key === 'Escape') onClose()
+              }}
+              placeholder="e.g. claude, npm run dev ..."
+              className="flex-1 bg-transparent outline-none text-xs font-mono
+                border-b border-[var(--color-border-light)] focus:border-[var(--color-primary)] py-1
+                placeholder:text-[var(--color-fg-faint)]"
+            />
+          </div>
+          {/* Preset chips */}
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            {INIT_CMD_PRESETS.map((p) => (
+              <button
+                key={p.cmd}
+                onClick={() => setInitCommand(p.cmd)}
+                className={`text-[10px] font-mono px-2 py-1 border transition-colors cursor-pointer
+                  ${initCommand === p.cmd
+                    ? 'border-[var(--color-primary)] text-[var(--color-primary)] bg-[var(--color-primary)]/10'
+                    : 'border-[var(--color-border-light)] text-[var(--color-fg-muted)] hover:border-[var(--color-border)] hover:text-[var(--color-fg)]'
+                  }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
         {/* Actions */}
-        <div className="flex justify-end gap-2 mt-4 text-xs">
+        <div className="flex justify-end gap-2 mt-2 text-xs">
           <button
             onClick={onClose}
             className="px-3 py-1.5 text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] transition-colors"
@@ -366,9 +412,8 @@ export function CreateSessionModal({
           </button>
           <button
             onClick={handleSubmit}
-            disabled={nameLoading}
             className="px-3 py-1.5 border-[length:var(--border-w)] border-[var(--color-border)] rounded-[var(--radius)] font-bold
-              hover:bg-[var(--color-primary)] hover:text-[var(--color-primary-fg)] transition-colors disabled:opacity-50"
+              hover:bg-[var(--color-primary)] hover:text-[var(--color-primary-fg)] transition-colors"
           >
             {t('create.submit')}
           </button>

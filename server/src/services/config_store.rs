@@ -67,3 +67,31 @@ impl PersistentConfig {
         self.password_hash.is_some() || self.password_skipped
     }
 }
+
+// ── Layout persistence (raw JSON, no Rust struct needed) ──
+
+/// Path to the layouts JSON file: `~/.config/0xmux/layouts.json`
+pub fn layout_path() -> io::Result<PathBuf> {
+    let home = dirs::home_dir().ok_or_else(|| {
+        io::Error::new(io::ErrorKind::NotFound, "Cannot determine home directory")
+    })?;
+    let config_dir = home.join(".config").join("0xmux");
+    fs::create_dir_all(&config_dir)?;
+    Ok(config_dir.join("layouts.json"))
+}
+
+/// Load saved layouts as a raw JSON string. Returns `"{}"` if file does not exist.
+pub fn load_layouts() -> io::Result<String> {
+    let path = layout_path()?;
+    if !path.exists() {
+        return Ok("{}".to_string());
+    }
+    fs::read_to_string(&path)
+}
+
+/// Save layouts JSON string to disk.
+pub fn save_layouts(json: &str) -> io::Result<()> {
+    let path = layout_path()?;
+    fs::write(&path, json)?;
+    Ok(())
+}

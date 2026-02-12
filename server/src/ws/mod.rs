@@ -1,3 +1,3 @@
 pub mod install;
-pub mod pty;
+pub mod mux;
 pub mod sessions;

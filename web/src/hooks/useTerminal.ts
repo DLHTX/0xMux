@@ -33,6 +33,10 @@ export function useTerminal(options: UseTerminalOptions = {}) {
         ...options.theme,
       },
       allowProposedApi: true,
+      // Scrollback is handled by tmux on the server side, so we don't need
+      // a local buffer. Setting this to 0 also tells FitAddon to skip the
+      // 14px scrollbar-width reservation, letting the canvas fill 100% width.
+      scrollback: 0,
     })
 
     const fitAddon = new FitAddon()

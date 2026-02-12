@@ -10,7 +10,10 @@ export function useToast() {
   const [toasts, setToasts] = useState<ToastItem[]>([])
 
   const addToast = useCallback((message: string, type: ToastItem['type'] = 'error') => {
-    const id = crypto.randomUUID()
+    // crypto.randomUUID() is unavailable over plain HTTP on LAN; use fallback
+    const id = typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('')
     setToasts((prev) => [...prev, { id, message, type }])
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id))

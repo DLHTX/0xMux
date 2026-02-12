@@ -2,6 +2,7 @@ use crate::error::AppError;
 use crate::models::session::TmuxSession;
 use crate::models::window::TmuxWindow;
 use regex::Regex;
+use std::collections::{HashMap, HashSet};
 use std::process::Command;
 use std::sync::LazyLock;
 
@@ -47,6 +48,50 @@ fn validate_name(name: &str) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Kill any orphaned `_0xmux_` grouped sessions left over from a previous
+/// server crash or unclean shutdown.  Should be called once at startup.
+pub fn cleanup_orphaned_groups() {
+    let output = tmux_cmd()
+        .args(["list-sessions", "-F", "#{session_name}"])
+        .output();
+
+    if let Ok(out) = output {
+        if out.status.success() {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            for name in stdout.lines() {
+                if name.starts_with("_0xmux_") {
+                    let _ = tmux_cmd()
+                        .args(["kill-session", "-t", name])
+                        .status();
+                    tracing::info!("Cleaned up orphaned grouped session: {name}");
+                }
+            }
+        }
+    }
+}
+
+/// Kill `_0xmux_*` sessions that exist in tmux but are NOT in the `active` set.
+/// Called periodically by the background GC task while the server is running.
+pub fn gc_orphaned_groups(active: &HashSet<String>) {
+    let output = tmux_cmd()
+        .args(["list-sessions", "-F", "#{session_name}"])
+        .output();
+
+    if let Ok(out) = output {
+        if out.status.success() {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            for name in stdout.lines() {
+                if name.starts_with("_0xmux_") && !active.contains(name) {
+                    let _ = tmux_cmd()
+                        .args(["kill-session", "-t", name])
+                        .status();
+                    tracing::info!("GC: reaped orphaned grouped session: {name}");
+                }
+            }
+        }
+    }
+}
+
 pub fn list_sessions() -> Result<Vec<TmuxSession>, AppError> {
     let output = tmux_cmd()
         .args([
@@ -64,8 +109,13 @@ pub fn list_sessions() -> Result<Vec<TmuxSession>, AppError> {
                 .filter_map(|line| {
                     let parts: Vec<&str> = line.split('|').collect();
                     if parts.len() >= 4 {
+                        let name = parts[0].to_string();
+                        // Hide temporary grouped sessions created by PTY connections
+                        if name.starts_with("_0xmux_") {
+                            return None;
+                        }
                         Some(TmuxSession {
-                            name: parts[0].to_string(),
+                            name,
                             windows: parts[1].parse().unwrap_or(0),
                             created: parts[2].to_string(),
                             attached: parts[3] == "1",
@@ -253,6 +303,45 @@ pub fn list_windows(session: &str) -> Result<Vec<TmuxWindow>, AppError> {
         .collect())
 }
 
+/// List all windows across all sessions in a single tmux call.
+/// Returns a map from session name to its window list.
+/// Used by the session watcher for efficient change detection.
+pub fn list_all_windows() -> Result<HashMap<String, Vec<TmuxWindow>>, AppError> {
+    let output = tmux_cmd()
+        .args([
+            "list-windows",
+            "-a",
+            "-F",
+            "#{session_name}|#{window_index}|#{window_name}|#{window_active}|#{window_panes}",
+        ])
+        .output()
+        .map_err(|e| AppError::Internal(format!("Failed to run tmux: {e}")))?;
+
+    if !output.status.success() {
+        // No sessions at all → empty result
+        return Ok(HashMap::new());
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut result: HashMap<String, Vec<TmuxWindow>> = HashMap::new();
+
+    for line in stdout.lines() {
+        let parts: Vec<&str> = line.split('|').collect();
+        if parts.len() == 5 {
+            let session_name = parts[0].to_string();
+            let window = TmuxWindow {
+                index: parts[1].parse().unwrap_or(0),
+                name: parts[2].to_string(),
+                active: parts[3] == "1",
+                panes: parts[4].parse().unwrap_or(1),
+            };
+            result.entry(session_name).or_default().push(window);
+        }
+    }
+
+    Ok(result)
+}
+
 pub fn new_window(session: &str, name: Option<&str>) -> Result<TmuxWindow, AppError> {
     // Check that session exists first
     let sessions = list_sessions()?;
@@ -336,13 +425,14 @@ pub fn select_window(session: &str, index: u32) -> Result<(), AppError> {
     Ok(())
 }
 
-/// Check whether the active pane in `session` is dead.
-fn is_pane_dead(session: &str) -> Result<bool, AppError> {
+/// Check whether the active pane in the given tmux target is dead.
+/// `target` can be "session", "session:window", or "session:window.pane".
+fn is_pane_dead(target: &str) -> Result<bool, AppError> {
     let output = tmux_cmd()
         .args([
             "display-message",
             "-t",
-            session,
+            target,
             "-p",
             "#{pane_dead}",
         ])
@@ -357,40 +447,43 @@ fn is_pane_dead(session: &str) -> Result<bool, AppError> {
     }
 }
 
-/// If the active pane in `session` is dead, respawn it and verify it stays
+/// If the active pane in `target` is dead, respawn it and verify it stays
 /// alive before returning.  Retries up to 2 times if the new shell exits
 /// immediately (e.g. due to .zshrc incompatibilities in detached mode).
-pub fn ensure_pane_alive(session: &str) -> Result<(), AppError> {
-    if !is_pane_dead(session)? {
+///
+/// `target` accepts any tmux target format: "session", "session:window",
+/// or "session:window.pane".
+pub fn ensure_pane_alive(target: &str) -> Result<(), AppError> {
+    if !is_pane_dead(target)? {
         return Ok(());
     }
 
     for attempt in 0..2 {
-        tracing::info!("Respawning dead pane in '{session}' (attempt {attempt})");
+        tracing::info!("Respawning dead pane in '{target}' (attempt {attempt})");
 
         let status = tmux_cmd()
-            .args(["respawn-pane", "-k", "-t", session])
+            .args(["respawn-pane", "-k", "-t", target])
             .status()
             .map_err(|e| AppError::Internal(format!("Failed to respawn pane: {e}")))?;
 
         if !status.success() {
-            tracing::warn!("respawn-pane failed for '{session}'");
+            tracing::warn!("respawn-pane failed for '{target}'");
             continue;
         }
 
         // Give the shell a moment to initialise (or crash).
         std::thread::sleep(std::time::Duration::from_millis(500));
 
-        if !is_pane_dead(session)? {
+        if !is_pane_dead(target)? {
             return Ok(());
         }
 
-        tracing::warn!("Pane in '{session}' died again after respawn");
+        tracing::warn!("Pane in '{target}' died again after respawn");
     }
 
     // Last resort: still dead after retries — return error so the WS handler
     // can inform the client instead of attaching to a dead session.
     Err(AppError::Internal(format!(
-        "Pane in '{session}' could not be revived"
+        "Pane in '{target}' could not be revived"
     )))
 }

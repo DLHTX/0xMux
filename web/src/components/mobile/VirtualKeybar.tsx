@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { Icon } from '@iconify/react'
 import {
   IconChevronLeft,
@@ -8,9 +8,14 @@ import {
   IconX,
 } from '../../lib/icons'
 
+/** Approximate height of the VirtualKeybar in px (border + padding + button) */
+export const VIRTUAL_KEYBAR_HEIGHT = 58
+
 interface VirtualKeybarProps {
   /** xterm Terminal instance to send keys to */
   terminalRef: React.RefObject<import('@xterm/xterm').Terminal | null>
+  /** Called when the back/close button is pressed (go back to sessions) */
+  onBack?: () => void
 }
 
 type KeyAction =
@@ -37,9 +42,31 @@ const KEY_ACTIONS: KeyAction[] = [
   { type: 'ctrl', key: '\x12', label: 'Ctrl+R' },
 ]
 
-export function VirtualKeybar({ terminalRef }: VirtualKeybarProps) {
+export function VirtualKeybar({ terminalRef, onBack }: VirtualKeybarProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [ctrlPressed, setCtrlPressed] = useState(false)
+  const [bottomOffset, setBottomOffset] = useState(0)
+
+  // Track visual viewport so the bar floats above the virtual keyboard
+  useEffect(() => {
+    const vv = window.visualViewport
+    if (!vv) return
+
+    const update = () => {
+      // Distance from bottom of layout viewport to bottom of visual viewport
+      const offset = window.innerHeight - vv.height - vv.offsetTop
+      setBottomOffset(Math.max(0, Math.round(offset)))
+    }
+
+    vv.addEventListener('resize', update)
+    vv.addEventListener('scroll', update)
+    update()
+
+    return () => {
+      vv.removeEventListener('resize', update)
+      vv.removeEventListener('scroll', update)
+    }
+  }, [])
 
   const sendKey = (action: KeyAction) => {
     const term = terminalRef.current
@@ -109,7 +136,10 @@ export function VirtualKeybar({ terminalRef }: VirtualKeybarProps) {
   }
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 bg-[var(--color-bg)]/95 backdrop-blur-sm border-t-[length:var(--border-w)] border-[var(--color-border-light)] shadow-lg">
+    <div
+      className="fixed left-0 right-0 z-50 bg-[var(--color-bg)] border-t-[length:var(--border-w)] border-[var(--color-border-light)]"
+      style={{ bottom: `${bottomOffset}px` }}
+    >
       {/* Ctrl indicator */}
       {ctrlPressed && (
         <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-full mb-1 px-2 py-0.5 bg-[var(--color-success)] text-[var(--color-bg)] text-[10px] font-bold rounded-sm">
@@ -128,6 +158,20 @@ export function VirtualKeybar({ terminalRef }: VirtualKeybarProps) {
         }}
       >
         <div className="flex gap-2 w-max">
+          {/* Back / close terminal view button */}
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="shrink-0 h-10 px-3 bg-[var(--color-bg-alt)] border-[length:var(--border-w)] border-[var(--color-border-light)]
+                         hover:bg-[var(--color-border-light)] active:bg-[var(--color-fg)] active:text-[var(--color-bg)]
+                         transition-colors font-bold text-xs flex items-center justify-center gap-1 min-w-[44px]
+                         shadow-[2px_2px_0_var(--color-border-light)]"
+              style={{ touchAction: 'manipulation' }}
+            >
+              <Icon icon={IconChevronLeft} width={14} />
+              <span>Back</span>
+            </button>
+          )}
           {KEY_ACTIONS.map((action, idx) => renderButton(action, idx))}
         </div>
       </div>

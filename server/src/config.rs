@@ -6,7 +6,7 @@ pub struct ServerConfig {
     #[arg(short, long, default_value = "1234", env = "PORT")]
     pub port: u16,
 
-    #[arg(long, default_value = "127.0.0.1", env = "HOST")]
+    #[arg(long, default_value = "0.0.0.0", env = "HOST")]
     pub host: String,
 }
 
