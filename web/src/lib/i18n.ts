@@ -89,7 +89,7 @@ const en = {
   'theme.language': 'Language',
 } as const
 
-const zh: typeof en = {
+const zh: { [K in keyof typeof en]: string } = {
   'header.subtitle': 'tmux 会话管理器',
   'header.active': '活跃',
   'header.settings': '主题设置',
@@ -165,7 +165,9 @@ const zh: typeof en = {
 
 export type MessageKey = keyof typeof en
 
-const messages: Record<Locale, typeof en> = { en, zh }
+type Messages = { [K in keyof typeof en]: string }
+
+const messages: Record<Locale, Messages> = { en, zh }
 
 export function getMessage(locale: Locale, key: MessageKey, params?: Record<string, string | number>): string {
   let text: string = messages[locale][key] ?? messages.en[key] ?? key

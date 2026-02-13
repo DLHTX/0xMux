@@ -13,7 +13,7 @@ import {
   type PresetName,
   type ThemeTokens,
 } from '../../lib/theme'
-import { LOCALES } from '../../lib/i18n'
+import { LOCALES, type Locale, type MessageKey } from '../../lib/i18n'
 import type { ChangePasswordRequest } from '../../lib/types'
 
 const PRESET_KEYS = Object.keys(PRESETS) as PresetName[]
@@ -122,13 +122,13 @@ function AppearanceTab({
   tokens: ThemeTokens
   preset: PresetName
   mode: 'light' | 'dark'
-  locale: string
+  locale: Locale
   setToken: (key: keyof ThemeTokens, value: string) => void
   setPreset: (preset: PresetName) => void
   toggleMode: () => void
-  setLocale: (locale: string) => void
+  setLocale: (locale: Locale) => void
   resetOverrides: () => void
-  t: (key: string) => string
+  t: (key: MessageKey, params?: Record<string, string | number>) => string
 }) {
   const [section, setSection] = useState<string | null>('lang')
 

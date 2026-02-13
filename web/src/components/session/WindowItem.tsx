@@ -18,7 +18,6 @@ export function WindowItem({
   sessionName,
   window,
   selected,
-  inUse,
   inSplitGroup,
   onSelect,
   onDelete,
