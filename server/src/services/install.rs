@@ -11,7 +11,9 @@ const ALLOWED_PACKAGES: &[&str] = &["tmux", "claude-code"];
 
 fn get_install_command(package: &str) -> Result<(String, Vec<String>), AppError> {
     let pm = detect_package_manager().ok_or_else(|| {
-        AppError::ServiceUnavailable("No supported package manager found on this system".to_string())
+        AppError::ServiceUnavailable(
+            "No supported package manager found on this system".to_string(),
+        )
     })?;
 
     let (bin, args) = match (pm.as_str(), package) {
@@ -28,7 +30,10 @@ fn get_install_command(package: &str) -> Result<(String, Vec<String>), AppError>
         }
     };
 
-    Ok((bin.to_string(), args.into_iter().map(String::from).collect()))
+    Ok((
+        bin.to_string(),
+        args.into_iter().map(String::from).collect(),
+    ))
 }
 
 pub struct InstallManager {

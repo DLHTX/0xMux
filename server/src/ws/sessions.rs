@@ -1,36 +1,35 @@
 use tokio::sync::broadcast;
 
-use crate::services::tmux;
 use super::mux;
+use crate::services::tmux;
 
 pub fn spawn_session_watcher(tx: broadcast::Sender<String>) {
     tokio::spawn(async move {
         let mut last_snapshot: Option<String> = None;
+        let interval = std::time::Duration::from_secs(3);
         loop {
-            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+            if let Ok(sessions) = tmux::list_sessions() {
+                let all_windows = tmux::list_all_windows().unwrap_or_default();
 
-            let sessions = match tmux::list_sessions() {
-                Ok(s) => s,
-                Err(_) => continue,
-            };
-            let all_windows = tmux::list_all_windows().unwrap_or_default();
-
-            // Build a combined snapshot for change detection.
-            // This detects both session-level AND window-level changes.
-            let snapshot = serde_json::json!({
-                "sessions": &sessions,
-                "windows": &all_windows,
-            });
-            let json = snapshot.to_string();
-
-            if last_snapshot.as_ref() != Some(&json) {
-                last_snapshot = Some(json);
-                let msg = serde_json::json!({
-                    "type": "sessions_update",
-                    "data": snapshot,
+                // Build a combined snapshot for change detection.
+                // This detects both session-level AND window-level changes.
+                let snapshot = serde_json::json!({
+                    "sessions": &sessions,
+                    "windows": &all_windows,
                 });
-                let _ = tx.send(msg.to_string());
+                let json = snapshot.to_string();
+
+                if last_snapshot.as_ref() != Some(&json) {
+                    last_snapshot = Some(json);
+                    let msg = serde_json::json!({
+                        "type": "sessions_update",
+                        "data": snapshot,
+                    });
+                    let _ = tx.send(msg.to_string());
+                }
             }
+
+            tokio::time::sleep(interval).await;
         }
     });
 }

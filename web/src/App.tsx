@@ -5,6 +5,7 @@ import { SplitWorkspace, TerminalPane } from './components/terminal'
 import { VirtualKeybar, VIRTUAL_KEYBAR_HEIGHT } from './components/mobile/VirtualKeybar'
 import { SetupWizard } from './components/setup'
 import { SetupPasswordModal, LoginModal, SettingsModal } from './components/auth'
+import { PluginModal } from './components/plugins'
 import { ToastContainer } from './components/ui/Toast'
 import { useSessions } from './hooks/useSessions'
 import { useDeps } from './hooks/useDeps'
@@ -21,8 +22,16 @@ import { FUSION_PIXEL_FONT, SILKSCREEN_FONT } from './lib/theme'
 import { Icon } from '@iconify/react'
 import { IconTerminal, IconChevronLeft, IconChevronRight, IconPlus, IconTrash, IconX } from './lib/icons'
 import type { Terminal } from '@xterm/xterm'
-import type { TmuxSession, TmuxWindow } from './lib/types'
-import { getWindows, createWindow, deleteWindow } from './lib/api'
+import type {
+  TmuxWindow,
+  AiStatusResponse,
+  AiCatalogResponse,
+  AiSyncResponse,
+  AiUninstallResponse,
+  AiSyncType,
+  AiProvider,
+} from './lib/types'
+import { getWindows, createWindow, deleteWindow, getAiStatus, getAiCatalog, syncAi, uninstallAi } from './lib/api'
 import { setInitCommand, markWindowPending } from './lib/init-commands'
 
 /** Auto-switch font when locale changes (zh -> Fusion Pixel, en -> Silkscreen) */
@@ -63,10 +72,17 @@ function AppContent() {
 
   const [showCreate, setShowCreate] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [showPluginCenter, setShowPluginCenter] = useState(false)
   const [selectedWindow, setSelectedWindow] = useState<{ sessionName: string; windowIndex: number } | null>(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileView, setMobileView] = useState<MobileView>('sessions')
   const [windows, setWindows] = useState<Map<string, TmuxWindow[]>>(new Map())
+  const [aiStatus, setAiStatus] = useState<AiStatusResponse | null>(null)
+  const [aiCatalog, setAiCatalog] = useState<AiCatalogResponse | null>(null)
+  const [aiSyncResult, setAiSyncResult] = useState<AiSyncResponse | null>(null)
+  const [aiUninstallResult, setAiUninstallResult] = useState<AiUninstallResponse | null>(null)
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiSyncing, setAiSyncing] = useState(false)
 
   const { settings } = useSettings()
   const {
@@ -94,6 +110,101 @@ function AppContent() {
   const mobileTerminalRef = useRef<Terminal | null>(null)
   const activeTerminalRef = useRef<Terminal | null>(null)
 
+  const refreshAiData = useCallback(async () => {
+    setAiLoading(true)
+    try {
+      const status = await getAiStatus()
+      setAiStatus(status)
+      if (status.show_plugin_button) {
+        const catalog = await getAiCatalog()
+        setAiCatalog(catalog)
+      } else {
+        setAiCatalog(null)
+      }
+    } catch {
+      // Ignore plugin data errors to avoid blocking main UI
+    } finally {
+      setAiLoading(false)
+    }
+  }, [])
+
+  const runAiSync = useCallback(
+    async ({
+      providers,
+      types,
+      ids,
+    }: {
+      providers: AiProvider[]
+      types: AiSyncType[]
+      ids?: string[]
+    }) => {
+      if (providers.length === 0) {
+        addToast('未检测到可用的 Claude/Codex', 'error')
+        return
+      }
+
+      setAiSyncing(true)
+      try {
+        const result = await syncAi({
+          providers,
+          types,
+          ids,
+          dry_run: false,
+        })
+        setAiSyncResult(result)
+        setAiUninstallResult(null)
+        if (result.summary.failed > 0) {
+          addToast(`同步完成，但有 ${result.summary.failed} 项失败`, 'error')
+        } else {
+          addToast('同步完成', 'success')
+        }
+        await refreshAiData()
+      } catch {
+        addToast('同步失败，请检查后端日志', 'error')
+      } finally {
+        setAiSyncing(false)
+      }
+    },
+    [addToast, refreshAiData]
+  )
+
+  const runAiUninstall = useCallback(
+    async ({
+      providers,
+      types,
+      ids,
+      removeSource,
+    }: {
+      providers: AiProvider[]
+      types: AiSyncType[]
+      ids?: string[]
+      removeSource?: boolean
+    }) => {
+      if (providers.length === 0 && !removeSource) {
+        addToast('未检测到可用的 Claude/Codex', 'error')
+        return
+      }
+
+      setAiSyncing(true)
+      try {
+        const result = await uninstallAi({ providers, types, ids, remove_source: removeSource })
+        setAiUninstallResult(result)
+        setAiSyncResult(null)
+        if (result.summary.failed > 0) {
+          addToast(`卸载完成，但有 ${result.summary.failed} 项失败`, 'error')
+        } else {
+          addToast('卸载完成', 'success')
+        }
+        await refreshAiData()
+      } catch {
+        addToast('卸载失败，请检查后端日志', 'error')
+      } finally {
+        setAiSyncing(false)
+      }
+    },
+    [addToast, refreshAiData]
+  )
+
   // Enable image paste feature
   useImagePaste(activeTerminalRef)
 
@@ -108,6 +219,11 @@ function AppContent() {
   )
 
   const needsSetup = deps && !allReady
+
+  useEffect(() => {
+    if (!authStatus?.authenticated || needsSetup) return
+    refreshAiData()
+  }, [authStatus?.authenticated, needsSetup, refreshAiData])
 
   // Keep a ref to windows for use in stable callbacks
   const windowsRef = useRef(windows)
@@ -161,12 +277,6 @@ function AppContent() {
     }
   }, [sessions, primarySession, windows, switchSession])
 
-  // Refresh windows list for all sessions
-  const sessionsRef = useRef<TmuxSession[]>([])
-  useEffect(() => {
-    sessionsRef.current = sessions
-  }, [sessions])
-
   // Real-time window updates via WebSocket
   useEffect(() => {
     return mux.onWindowsUpdate((windowsBySession) => {
@@ -181,21 +291,28 @@ function AppContent() {
   // Fallback polling (initial fetch + slow interval for resilience)
   useEffect(() => {
     const fetchWindows = async () => {
-      const currentSessions = sessionsRef.current
-      if (currentSessions.length === 0) return
+      if (sessions.length === 0) return
+
+      const entries = await Promise.all(
+        sessions.map(async (session) => {
+          try {
+            const wins = await getWindows(session.name)
+            return [session.name, wins] as const
+          } catch (error) {
+            // Skip deleted sessions silently (404 is expected during deletion)
+            if (error && typeof error === 'object' && 'status' in error && error.status === 404) {
+              return null
+            }
+            console.error(`Failed to get windows for session ${session.name}:`, error)
+            return null
+          }
+        })
+      )
 
       const newWindows = new Map<string, TmuxWindow[]>()
-      for (const session of currentSessions) {
-        try {
-          const wins = await getWindows(session.name)
-          newWindows.set(session.name, wins)
-        } catch (error) {
-          // Skip deleted sessions silently (404 is expected during deletion)
-          if (error && typeof error === 'object' && 'status' in error && error.status === 404) {
-            continue
-          }
-          console.error(`Failed to get windows for session ${session.name}:`, error)
-        }
+      for (const entry of entries) {
+        if (!entry) continue
+        newWindows.set(entry[0], entry[1])
       }
       setWindows(newWindows)
     }
@@ -206,7 +323,7 @@ function AppContent() {
     // Slow fallback poll (WebSocket provides real-time updates)
     const interval = setInterval(fetchWindows, 10000)
     return () => clearInterval(interval)
-  }, [])
+  }, [sessions])
 
   // Keyboard shortcuts (desktop only)
   useEffect(() => {
@@ -342,8 +459,14 @@ function AppContent() {
         return next
       })
       addToast(`Deleted window ${windowIndex}`, 'success')
-    } catch (error: any) {
-      if (error.error === 'last_window') {
+    } catch (error: unknown) {
+      const isLastWindowError =
+        typeof error === 'object' &&
+        error !== null &&
+        'error' in error &&
+        (error as { error?: string }).error === 'last_window'
+
+      if (isLastWindowError) {
         // Fallback: if backend returns last_window error, delete the session
         await deleteSession(sessionName)
         setWindows((prev) => {
@@ -489,13 +612,15 @@ function AppContent() {
   const hasSessions = !loading && sessions.length > 0
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden">
+    <div className="h-screen flex flex-col overflow-hidden" style={{ height: '100dvh' }}>
       <LocaleFontBridge />
 
       {/* Header */}
       <Header
         connectionStatus={connectionStatus}
         onLogoClick={handleLogoClick}
+        onPluginClick={() => setShowPluginCenter(true)}
+        showPluginButton={aiStatus?.show_plugin_button ?? false}
         onSettingsClick={() => setShowSettings(true)}
       />
 
@@ -687,7 +812,7 @@ function AppContent() {
                   <TerminalPane
                     sessionName={selectedWindow.sessionName}
                     windowIndex={selectedWindow.windowIndex}
-                    fontSize={Math.min(settings.fontSize, 12)}
+                    fontSize={Math.min(settings.fontSize, 10)}
                     focused
                     terminalRef={mobileTerminalRef}
                     mobileBottomOffset={VIRTUAL_KEYBAR_HEIGHT}
@@ -758,6 +883,34 @@ function AppContent() {
         open={showCreate}
         onClose={() => setShowCreate(false)}
         onSubmit={handleCreate}
+      />
+
+      {/* Plugin center modal */}
+      <PluginModal
+        open={showPluginCenter}
+        onClose={() => setShowPluginCenter(false)}
+        status={aiStatus}
+        catalog={aiCatalog}
+        loading={aiLoading}
+        syncing={aiSyncing}
+        lastResultText={
+          aiSyncResult
+            ? `同步结果：总计 ${aiSyncResult.summary.total} / 更新 ${aiSyncResult.summary.updated} / 最新 ${aiSyncResult.summary.up_to_date} / 跳过 ${aiSyncResult.summary.skipped} / 失败 ${aiSyncResult.summary.failed}`
+            : aiUninstallResult
+              ? `卸载结果：总计 ${aiUninstallResult.summary.total} / 删除 ${aiUninstallResult.summary.removed} / 跳过 ${aiUninstallResult.summary.skipped} / 未找到 ${aiUninstallResult.summary.not_found} / 失败 ${aiUninstallResult.summary.failed}`
+              : null
+        }
+        onRefresh={refreshAiData}
+        onSyncAll={(providers) => runAiSync({ providers, types: ['skills', 'mcp'] })}
+        onSyncItem={(kind, id, providers) =>
+          runAiSync({ providers, types: [kind], ids: [id] })
+        }
+        onUninstallAll={(providers) => runAiUninstall({ providers, types: ['skills', 'mcp'] })}
+        onUninstallItem={(kind, id, providers) => runAiUninstall({ providers, types: [kind], ids: [id] })}
+        onDeleteAll={(providers) => runAiUninstall({ providers, types: ['skills', 'mcp'], removeSource: true })}
+        onDeleteItem={(kind, id, providers) =>
+          runAiUninstall({ providers, types: [kind], ids: [id], removeSource: true })
+        }
       />
 
       {/* Settings modal */}

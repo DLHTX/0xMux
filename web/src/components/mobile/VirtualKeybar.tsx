@@ -1,15 +1,21 @@
 import { useRef, useState, useEffect } from 'react'
 import { Icon } from '@iconify/react'
+import type { IconifyIcon } from '@iconify/types'
 import {
   IconChevronLeft,
   IconChevronRight,
   IconChevronDown,
   IconChevronUp,
   IconX,
+  IconSettings,
+  IconPlus,
 } from '../../lib/icons'
 
-/** Approximate height of the VirtualKeybar in px (border + padding + button) */
-export const VIRTUAL_KEYBAR_HEIGHT = 58
+/** Approximate height of the compact VirtualKeybar in px (border + padding + button) */
+export const VIRTUAL_KEYBAR_HEIGHT = 50
+
+const STORAGE_KEY = '0xmux-mobile-keybar-actions'
+const MAX_CUSTOM_ACTIONS = 18
 
 interface VirtualKeybarProps {
   /** xterm Terminal instance to send keys to */
@@ -18,34 +24,96 @@ interface VirtualKeybarProps {
   onBack?: () => void
 }
 
-type KeyAction =
-  | { type: 'key'; key: string }
-  | { type: 'ctrl'; key: string; label: string }
-  | { type: 'sequence'; sequence: string; label: string }
+type KeyAction = {
+  id: string
+  label: string
+  sequence: string
+  icon?: string | IconifyIcon
+}
 
-const KEY_ACTIONS: KeyAction[] = [
-  // 方向键
-  { type: 'key', key: '\x1b[A' }, // ↑
-  { type: 'key', key: '\x1b[B' }, // ↓
-  { type: 'key', key: '\x1b[D' }, // ←
-  { type: 'key', key: '\x1b[C' }, // →
-
-  // 特殊键
-  { type: 'key', key: '\t' }, // Tab
-  { type: 'key', key: '\x1b' }, // Esc
-
-  // Ctrl组合键
-  { type: 'ctrl', key: '\x03', label: 'Ctrl+C' },
-  { type: 'ctrl', key: '\x04', label: 'Ctrl+D' },
-  { type: 'ctrl', key: '\x1a', label: 'Ctrl+Z' },
-  { type: 'ctrl', key: '\x0c', label: 'Ctrl+L' },
-  { type: 'ctrl', key: '\x12', label: 'Ctrl+R' },
+const NAV_ACTIONS: KeyAction[] = [
+  { id: 'arrow-up', label: '↑', sequence: '\x1b[A', icon: IconChevronUp },
+  { id: 'arrow-down', label: '↓', sequence: '\x1b[B', icon: IconChevronDown },
+  { id: 'arrow-left', label: '←', sequence: '\x1b[D', icon: IconChevronLeft },
+  { id: 'arrow-right', label: '→', sequence: '\x1b[C', icon: IconChevronRight },
 ]
+
+const QUICK_ACTIONS: KeyAction[] = [
+  { id: 'tab', label: 'Tab', sequence: '\t' },
+  { id: 'esc', label: 'Esc', sequence: '\x1b', icon: IconX },
+  { id: 'ctrl-c', label: 'Ctrl+C', sequence: '\x03' },
+  { id: 'ctrl-d', label: 'Ctrl+D', sequence: '\x04' },
+  { id: 'slash', label: '/', sequence: '/' },
+  { id: 'dollar', label: '$', sequence: '$' },
+  { id: 'pipe', label: '|', sequence: '|' },
+]
+
+const DEFAULT_CUSTOM_ACTIONS: KeyAction[] = [
+  QUICK_ACTIONS[0],
+  QUICK_ACTIONS[1],
+  QUICK_ACTIONS[2],
+  QUICK_ACTIONS[4],
+  QUICK_ACTIONS[5],
+]
+
+function randomId() {
+  return `k_${Math.random().toString(36).slice(2, 10)}`
+}
+
+function sanitizeAction(raw: unknown): KeyAction | null {
+  if (!raw || typeof raw !== 'object') return null
+
+  const action = raw as Partial<KeyAction>
+  const label = (action.label ?? '').toString().trim().slice(0, 16)
+  const sequence = (action.sequence ?? '').toString().slice(0, 16)
+
+  if (!label || !sequence) return null
+
+  return {
+    id: action.id?.toString().trim() || randomId(),
+    label,
+    sequence,
+  }
+}
+
+function loadCustomActions(): KeyAction[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return DEFAULT_CUSTOM_ACTIONS.map((action) => ({ ...action, id: randomId() }))
+
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return DEFAULT_CUSTOM_ACTIONS.map((action) => ({ ...action, id: randomId() }))
+
+    const next = parsed
+      .map(sanitizeAction)
+      .filter((action): action is KeyAction => action !== null)
+      .slice(0, MAX_CUSTOM_ACTIONS)
+
+    return next.length > 0 ? next : DEFAULT_CUSTOM_ACTIONS.map((action) => ({ ...action, id: randomId() }))
+  } catch {
+    return DEFAULT_CUSTOM_ACTIONS.map((action) => ({ ...action, id: randomId() }))
+  }
+}
+
+function saveCustomActions(actions: KeyAction[]) {
+  try {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify(actions.map((action) => ({ id: action.id, label: action.label, sequence: action.sequence })))
+    )
+  } catch {
+    // ignore storage errors on mobile browsers
+  }
+}
 
 export function VirtualKeybar({ terminalRef, onBack }: VirtualKeybarProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [ctrlPressed, setCtrlPressed] = useState(false)
   const [bottomOffset, setBottomOffset] = useState(0)
+  const [editorOpen, setEditorOpen] = useState(false)
+  const [customActions, setCustomActions] = useState<KeyAction[]>(loadCustomActions)
+  const [draftLabel, setDraftLabel] = useState('')
+  const [draftSequence, setDraftSequence] = useState('')
 
   // Track visual viewport so the bar floats above the virtual keyboard
   useEffect(() => {
@@ -68,69 +136,73 @@ export function VirtualKeybar({ terminalRef, onBack }: VirtualKeybarProps) {
     }
   }, [])
 
+  useEffect(() => {
+    saveCustomActions(customActions)
+  }, [customActions])
+
   const sendKey = (action: KeyAction) => {
     const term = terminalRef.current
     if (!term) return
 
-    if (action.type === 'key') {
-      term.input(action.key, true)
-    } else if (action.type === 'ctrl' || action.type === 'sequence') {
-      term.input(action.key, true)
-    }
+    term.input(action.sequence, true)
 
-    // Visual feedback
-    if (action.type === 'ctrl') {
+    if (action.label.startsWith('Ctrl+')) {
       setCtrlPressed(true)
       setTimeout(() => setCtrlPressed(false), 150)
     }
   }
 
-  const renderButton = (action: KeyAction, index: number) => {
-    let icon = null
-    let label = ''
+  const actionExists = (candidate: KeyAction) => {
+    return customActions.some(
+      (action) => action.label.toLowerCase() === candidate.label.toLowerCase() || action.sequence === candidate.sequence
+    )
+  }
 
-    if (action.type === 'key') {
-      switch (action.key) {
-        case '\x1b[A':
-          icon = IconChevronUp
-          label = '↑'
-          break
-        case '\x1b[B':
-          icon = IconChevronDown
-          label = '↓'
-          break
-        case '\x1b[D':
-          icon = IconChevronLeft
-          label = '←'
-          break
-        case '\x1b[C':
-          icon = IconChevronRight
-          label = '→'
-          break
-        case '\t':
-          label = 'Tab'
-          break
-        case '\x1b':
-          label = 'Esc'
-          icon = IconX
-          break
-      }
-    } else if (action.type === 'ctrl' || action.type === 'sequence') {
-      label = action.label
+  const addQuickAction = (template: KeyAction) => {
+    if (customActions.length >= MAX_CUSTOM_ACTIONS) return
+    if (actionExists(template)) return
+
+    setCustomActions((prev) => [...prev, { ...template, id: randomId() }])
+  }
+
+  const addCustomAction = () => {
+    if (customActions.length >= MAX_CUSTOM_ACTIONS) return
+
+    const sequence = draftSequence.trim().slice(0, 16)
+    const label = (draftLabel.trim() || sequence).slice(0, 16)
+
+    if (!sequence || !label) return
+
+    const next: KeyAction = {
+      id: randomId(),
+      label,
+      sequence,
     }
 
+    if (actionExists(next)) return
+
+    setCustomActions((prev) => [...prev, next])
+    setDraftLabel('')
+    setDraftSequence('')
+  }
+
+  const removeCustomAction = (id: string) => {
+    setCustomActions((prev) => prev.filter((action) => action.id !== id))
+  }
+
+  const renderButton = (action: KeyAction) => {
     return (
       <button
-        key={index}
+        key={action.id}
         onClick={() => sendKey(action)}
-        className="shrink-0 h-10 px-4 bg-[var(--color-bg-alt)] border-[length:var(--border-w)] border-[var(--color-border-light)]
+        className="shrink-0 h-8 px-2.5 bg-[var(--color-bg-alt)] border-[length:var(--border-w)] border-[var(--color-border-light)]
                    hover:bg-[var(--color-border-light)] active:bg-[var(--color-fg)] active:text-[var(--color-bg)]
-                   transition-colors font-bold text-xs flex items-center justify-center gap-1.5 min-w-[44px]
-                   shadow-[2px_2px_0_var(--color-border-light)]"
+                   transition-colors font-bold text-[11px] flex items-center justify-center gap-1 min-w-[36px]
+                   shadow-[1px_1px_0_var(--color-border-light)]"
         style={{ touchAction: 'manipulation' }}
       >
-        {icon && <Icon icon={icon} width={14} />}
-        {label && <span>{label}</span>}
+        {action.icon && <Icon icon={action.icon} width={12} />}
+        <span>{action.label}</span>
       </button>
     )
   }
@@ -147,32 +219,114 @@ export function VirtualKeybar({ terminalRef, onBack }: VirtualKeybarProps) {
         </div>
       )}
 
+      {editorOpen && (
+        <div className="px-2.5 pt-2 pb-2 border-b-[length:var(--border-w)] border-[var(--color-border-light)] bg-[var(--color-bg-alt)]/40">
+          <div className="text-[10px] font-bold text-[var(--color-fg-muted)] mb-1.5">
+            自定义快捷按键（同步保存在当前浏览器）
+          </div>
+
+          <div className="flex gap-1 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+            {QUICK_ACTIONS.map((action) => {
+              const exists = actionExists(action)
+              return (
+                <button
+                  key={`quick-${action.id}`}
+                  onClick={() => addQuickAction(action)}
+                  disabled={exists || customActions.length >= MAX_CUSTOM_ACTIONS}
+                  className="shrink-0 h-7 px-2 text-[10px] font-bold border-[length:var(--border-w)] border-[var(--color-border-light)]
+                             bg-[var(--color-bg)] disabled:opacity-35 disabled:cursor-not-allowed"
+                >
+                  {action.label}
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="flex gap-1.5 mt-1.5">
+            <input
+              value={draftLabel}
+              onChange={(e) => setDraftLabel(e.target.value)}
+              placeholder="显示名(可选)"
+              className="w-[38%] h-7 px-2 text-[11px] bg-[var(--color-bg)] border-[length:var(--border-w)] border-[var(--color-border-light)] outline-none"
+            />
+            <input
+              value={draftSequence}
+              onChange={(e) => setDraftSequence(e.target.value)}
+              placeholder="发送内容，如 / 或 $"
+              className="flex-1 h-7 px-2 text-[11px] bg-[var(--color-bg)] border-[length:var(--border-w)] border-[var(--color-border-light)] outline-none"
+            />
+            <button
+              onClick={addCustomAction}
+              disabled={!draftSequence.trim() || customActions.length >= MAX_CUSTOM_ACTIONS}
+              className="shrink-0 h-7 w-7 flex items-center justify-center border-[length:var(--border-w)] border-[var(--color-border-light)]
+                         bg-[var(--color-bg)] disabled:opacity-35 disabled:cursor-not-allowed"
+              title="添加"
+            >
+              <Icon icon={IconPlus} width={12} />
+            </button>
+          </div>
+
+          {customActions.length > 0 && (
+            <div className="mt-1.5 flex gap-1 overflow-x-auto pb-0.5" style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+              {customActions.map((action) => (
+                <button
+                  key={`remove-${action.id}`}
+                  onClick={() => removeCustomAction(action.id)}
+                  className="shrink-0 h-6 px-2 text-[10px] font-bold border-[length:var(--border-w)] border-[var(--color-border-light)]
+                             bg-[var(--color-bg)]/85 flex items-center gap-1"
+                  title={`移除 ${action.label}`}
+                >
+                  <span>{action.label}</span>
+                  <Icon icon={IconX} width={10} />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Scrollable button row */}
       <div
         ref={scrollContainerRef}
-        className="overflow-x-auto overflow-y-hidden py-2 px-3"
+        className="overflow-x-auto overflow-y-hidden py-1.5 px-2"
         style={{
           scrollbarWidth: 'none',
           msOverflowStyle: 'none',
           WebkitOverflowScrolling: 'touch',
         }}
       >
-        <div className="flex gap-2 w-max">
+        <div className="flex gap-1.5 w-max">
           {/* Back / close terminal view button */}
           {onBack && (
             <button
               onClick={onBack}
-              className="shrink-0 h-10 px-3 bg-[var(--color-bg-alt)] border-[length:var(--border-w)] border-[var(--color-border-light)]
+              className="shrink-0 h-8 px-2 bg-[var(--color-bg-alt)] border-[length:var(--border-w)] border-[var(--color-border-light)]
                          hover:bg-[var(--color-border-light)] active:bg-[var(--color-fg)] active:text-[var(--color-bg)]
-                         transition-colors font-bold text-xs flex items-center justify-center gap-1 min-w-[44px]
-                         shadow-[2px_2px_0_var(--color-border-light)]"
+                         transition-colors font-bold text-[11px] flex items-center justify-center gap-1 min-w-[36px]
+                         shadow-[1px_1px_0_var(--color-border-light)]"
               style={{ touchAction: 'manipulation' }}
             >
-              <Icon icon={IconChevronLeft} width={14} />
+              <Icon icon={IconChevronLeft} width={12} />
               <span>Back</span>
             </button>
           )}
-          {KEY_ACTIONS.map((action, idx) => renderButton(action, idx))}
+
+          {NAV_ACTIONS.map((action) => renderButton(action))}
+          {customActions.map((action) => renderButton(action))}
+
+          <button
+            onClick={() => setEditorOpen((prev) => !prev)}
+            className={`shrink-0 h-8 px-2 border-[length:var(--border-w)] transition-colors font-bold text-[11px] flex items-center justify-center gap-1 min-w-[36px]
+              ${editorOpen
+                ? 'border-[var(--color-primary)] bg-[var(--color-primary)] text-[var(--color-primary-fg)]'
+                : 'border-[var(--color-border-light)] bg-[var(--color-bg-alt)] text-[var(--color-fg)] active:bg-[var(--color-border-light)]'
+              }`}
+            style={{ touchAction: 'manipulation' }}
+            title="管理按键"
+          >
+            <Icon icon={IconSettings} width={12} />
+            <span>键盘</span>
+          </button>
         </div>
       </div>
 

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Icon } from '@iconify/react'
-import { IconSettings } from '../../lib/icons'
+import { IconPuzzle, IconSettings } from '../../lib/icons'
 import type { ConnectionStatus } from '../../lib/types'
 import { ThemeConfigurator } from '../settings/ThemeConfigurator'
 import { Logo } from './Logo'
@@ -8,10 +8,18 @@ import { Logo } from './Logo'
 interface HeaderProps {
   connectionStatus: ConnectionStatus
   onSettingsClick?: () => void
+  onPluginClick?: () => void
+  showPluginButton?: boolean
   onLogoClick?: () => void
 }
 
-export function Header({ connectionStatus, onSettingsClick, onLogoClick }: HeaderProps) {
+export function Header({
+  connectionStatus,
+  onSettingsClick,
+  onPluginClick,
+  showPluginButton = false,
+  onLogoClick,
+}: HeaderProps) {
   const [showConfig, setShowConfig] = useState(false)
 
   const statusConfig: Record<ConnectionStatus, { dotClass: string; label: string }> = {
@@ -47,6 +55,18 @@ export function Header({ connectionStatus, onSettingsClick, onLogoClick }: Heade
               {status.label}
             </span>
           </div>
+
+          {showPluginButton && (
+            <button
+              onClick={onPluginClick}
+              className="w-8 h-8 flex items-center justify-center border-[length:var(--border-w)] border-[var(--color-border)]
+                rounded-[var(--radius)] transition-colors cursor-pointer
+                hover:bg-[var(--color-primary)] hover:text-[var(--color-primary-fg)] hover:border-[var(--color-primary)]"
+              aria-label="Plugins"
+            >
+              <Icon icon={IconPuzzle} width={16} height={16} />
+            </button>
+          )}
 
           {/* Settings button */}
           <button

@@ -1,7 +1,7 @@
 use axum::{
+    Json,
     http::StatusCode,
     response::{IntoResponse, Response},
-    Json,
 };
 use serde_json::json;
 
@@ -25,9 +25,7 @@ impl IntoResponse for AppError {
                 (StatusCode::SERVICE_UNAVAILABLE, "service_unavailable", msg)
             }
             AppError::LastWindow(msg) => (StatusCode::CONFLICT, "last_window", msg),
-            AppError::Internal(msg) => {
-                (StatusCode::INTERNAL_SERVER_ERROR, "internal_error", msg)
-            }
+            AppError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, "internal_error", msg),
         };
 
         let body = json!({

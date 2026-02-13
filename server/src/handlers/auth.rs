@@ -1,14 +1,10 @@
-use axum::{
-    extract::State,
-    http::StatusCode,
-    Json,
-};
+use axum::{Json, extract::State, http::StatusCode};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::state::AppState;
 use crate::services::auth_service::AuthService;
 use crate::services::config_store::PersistentConfig;
+use crate::state::AppState;
 
 #[derive(Deserialize)]
 pub struct SetupRequest {
@@ -305,8 +301,8 @@ pub async fn skip_setup_handler(
     })?;
 
     // 生成一个特殊的"无密码"token（用随机密钥）
-    let dummy_hash = AuthService::hash_password(&format!("skip_{}", Uuid::new_v4()))
-        .map_err(|e| {
+    let dummy_hash =
+        AuthService::hash_password(&format!("skip_{}", Uuid::new_v4())).map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorResponse { error: e }),

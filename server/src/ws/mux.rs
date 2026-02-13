@@ -1,5 +1,8 @@
 use axum::{
-    extract::{State, ws::{Message, WebSocket, WebSocketUpgrade}},
+    extract::{
+        State,
+        ws::{Message, WebSocket, WebSocketUpgrade},
+    },
     response::IntoResponse,
 };
 use futures::{SinkExt, StreamExt};
@@ -8,7 +11,7 @@ use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 use std::io::Read;
 use std::sync::{Arc, LazyLock, Mutex};
-use tokio::sync::{mpsc, Notify};
+use tokio::sync::{Notify, mpsc};
 
 use crate::services::tmux;
 use crate::state::AppState;
@@ -37,12 +40,19 @@ pub fn active_group_names() -> HashSet<String> {
 
 fn clean_env_iter() -> impl Iterator<Item = (String, String)> {
     const KEYS: &[&str] = &[
-        "HOME", "SHELL", "USER", "LOGNAME", "PATH", "TERM",
-        "LANG", "LC_ALL", "TMPDIR", "XDG_RUNTIME_DIR",
+        "HOME",
+        "SHELL",
+        "USER",
+        "LOGNAME",
+        "PATH",
+        "TERM",
+        "LANG",
+        "LC_ALL",
+        "TMPDIR",
+        "XDG_RUNTIME_DIR",
     ];
-    KEYS.iter().filter_map(|k| {
-        std::env::var(k).ok().map(|v| (k.to_string(), v))
-    })
+    KEYS.iter()
+        .filter_map(|k| std::env::var(k).ok().map(|v| (k.to_string(), v)))
 }
 
 // ── Wire protocol types ──
@@ -56,6 +66,7 @@ struct ControlFrame {
     window: Option<u32>,
     cols: Option<u16>,
     rows: Option<u16>,
+    lines: Option<i32>,
 }
 
 /// Internal events flowing from background tasks back to the main loop.
@@ -138,6 +149,21 @@ async fn handle_mux_socket(socket: WebSocket, state: AppState) {
         }
     });
 
+    // Send an initial sessions/windows snapshot to this client immediately.
+    // broadcast::Receiver does not replay the last message, so without this
+    // a freshly reloaded page can wait until the next poll tick/change event.
+    if let Ok(sessions) = tmux::list_sessions() {
+        let windows = tmux::list_all_windows().unwrap_or_default();
+        let msg = serde_json::json!({
+            "type": "sessions_update",
+            "data": {
+                "sessions": sessions,
+                "windows": windows,
+            }
+        });
+        let _ = out_tx.send(Message::Text(msg.to_string().into()));
+    }
+
     // ── Main event loop ──
     loop {
         tokio::select! {
@@ -160,9 +186,22 @@ async fn handle_mux_socket(socket: WebSocket, state: AppState) {
                         }
                     }
                     MuxEvent::ChannelReady(ch, channel) => {
+                        let group_session = channel.group_session.clone();
                         channels.insert(ch, channel);
                         let msg = serde_json::json!({"type":"opened","ch":ch});
                         let _ = out_tx.send(Message::Text(msg.to_string().into()));
+                        let out_tx = out_tx.clone();
+                        tokio::task::spawn_blocking(move || {
+                            if let Ok((history, position)) = read_group_scroll_state(&group_session) {
+                                let msg = serde_json::json!({
+                                    "type": "scroll_state",
+                                    "ch": ch,
+                                    "history": history,
+                                    "position": position,
+                                });
+                                let _ = out_tx.send(Message::Text(msg.to_string().into()));
+                            }
+                        });
                     }
                     MuxEvent::ChannelError(ch, message) => {
                         let msg = serde_json::json!({"type":"error","ch":ch,"message":message});
@@ -276,16 +315,44 @@ async fn handle_text_frame(
             }
         }
 
+        "scroll" => {
+            if let (Some(ch), Some(lines)) = (frame.ch, frame.lines) {
+                if lines != 0 {
+                    if let Some(channel) = channels.get(&ch) {
+                        let group_session = channel.group_session.clone();
+                        let out_tx = out_tx.clone();
+                        tokio::task::spawn_blocking(move || {
+                            if let Err(error) = scroll_group_history(&group_session, lines) {
+                                tracing::debug!(
+                                    "Failed to scroll tmux history for group '{}': {}",
+                                    group_session,
+                                    error
+                                );
+                                return;
+                            }
+                            if let Ok((history, position)) = read_group_scroll_state(&group_session)
+                            {
+                                let msg = serde_json::json!({
+                                    "type": "scroll_state",
+                                    "ch": ch,
+                                    "history": history,
+                                    "position": position,
+                                });
+                                let _ = out_tx.send(Message::Text(msg.to_string().into()));
+                            }
+                        });
+                    }
+                }
+            }
+        }
+
         _ => {}
     }
 }
 
 // ── Binary frame handling (PTY input) ──
 
-fn handle_binary_frame(
-    data: &[u8],
-    channels: &HashMap<u16, PtyChannel>,
-) {
+fn handle_binary_frame(data: &[u8], channels: &HashMap<u16, PtyChannel>) {
     if data.len() < 2 {
         return;
     }
@@ -311,11 +378,10 @@ async fn open_channel(
     event_tx: mpsc::UnboundedSender<MuxEvent>,
 ) -> Result<(), String> {
     // Run all blocking PTY setup in a single spawn_blocking
-    let parts = tokio::task::spawn_blocking(move || {
-        setup_pty_blocking(&session_name, window, cols, rows)
-    })
-    .await
-    .map_err(|e| format!("PTY setup task panicked: {e}"))??;
+    let parts =
+        tokio::task::spawn_blocking(move || setup_pty_blocking(&session_name, window, cols, rows))
+            .await
+            .map_err(|e| format!("PTY setup task panicked: {e}"))??;
 
     // Create input channel for PTY writer
     let (input_tx, input_rx) = mpsc::unbounded_channel::<Vec<u8>>();
@@ -372,8 +438,7 @@ fn setup_pty_blocking(
     } else {
         session_name.to_string()
     };
-    tmux::ensure_pane_alive(&alive_target)
-        .map_err(|e| format!("Cannot revive pane: {e:?}"))?;
+    tmux::ensure_pane_alive(&alive_target).map_err(|e| format!("Cannot revive pane: {e:?}"))?;
 
     // 2. Open a PTY pair
     let pty_system = native_pty_system();
@@ -418,6 +483,39 @@ fn setup_pty_blocking(
         .env_clear()
         .envs(clean_env_iter())
         .args(["set-option", "-t", &group_session, "status", "off"])
+        .status();
+
+    // Ensure wheel events can drive tmux history inside attached clients.
+    let _ = std::process::Command::new("tmux")
+        .env_clear()
+        .envs(clean_env_iter())
+        .args(["set-option", "-t", &group_session, "mouse", "on"])
+        .status();
+
+    let _ = std::process::Command::new("tmux")
+        .env_clear()
+        .envs(clean_env_iter())
+        .args([
+            "set-option",
+            "-t",
+            &group_session,
+            "history-limit",
+            "200000",
+        ])
+        .status();
+
+    // Web UI sends tmux commands through the default prefix key sequence.
+    // Pin grouped sessions to C-b so scroll/copy commands work regardless of user dotfiles.
+    let _ = std::process::Command::new("tmux")
+        .env_clear()
+        .envs(clean_env_iter())
+        .args(["set-option", "-t", &group_session, "prefix", "C-b"])
+        .status();
+
+    let _ = std::process::Command::new("tmux")
+        .env_clear()
+        .envs(clean_env_iter())
+        .args(["set-option", "-t", &group_session, "prefix2", "None"])
         .status();
 
     // 4. Select the target window inside the grouped session
@@ -549,6 +647,104 @@ fn spawn_resize_handler(
     });
 }
 
+fn scroll_group_history(group_session: &str, lines: i32) -> Result<(), String> {
+    let amount = lines.unsigned_abs().min(200_000);
+    if amount == 0 {
+        return Ok(());
+    }
+    let amount_str = amount.to_string();
+
+    if lines < 0 {
+        let _ = std::process::Command::new("tmux")
+            .env_clear()
+            .envs(clean_env_iter())
+            .args(["copy-mode", "-e", "-t", group_session])
+            .status();
+
+        let status = std::process::Command::new("tmux")
+            .env_clear()
+            .envs(clean_env_iter())
+            .args([
+                "send-keys",
+                "-t",
+                group_session,
+                "-X",
+                "-N",
+                &amount_str,
+                "scroll-up",
+            ])
+            .status()
+            .map_err(|e| format!("tmux send-keys scroll-up failed: {e}"))?;
+
+        if !status.success() {
+            return Err(format!("tmux send-keys scroll-up exited with {status}"));
+        }
+    } else {
+        let status = std::process::Command::new("tmux")
+            .env_clear()
+            .envs(clean_env_iter())
+            .args([
+                "send-keys",
+                "-t",
+                group_session,
+                "-X",
+                "-N",
+                &amount_str,
+                "scroll-down",
+            ])
+            .status()
+            .map_err(|e| format!("tmux send-keys scroll-down failed: {e}"))?;
+
+        if !status.success() {
+            return Err(format!("tmux send-keys scroll-down exited with {status}"));
+        }
+    }
+
+    Ok(())
+}
+
+fn read_group_scroll_state(group_session: &str) -> Result<(u32, u32), String> {
+    let output = std::process::Command::new("tmux")
+        .env_clear()
+        .envs(clean_env_iter())
+        .args([
+            "display-message",
+            "-t",
+            group_session,
+            "-p",
+            "#{history_size}|#{scroll_position}",
+        ])
+        .output()
+        .map_err(|e| format!("tmux display-message scroll state failed: {e}"))?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "tmux display-message scroll state exited with {}",
+            output.status
+        ));
+    }
+
+    let raw = String::from_utf8_lossy(&output.stdout);
+    let mut parts = raw.trim().split('|');
+    let history = parts
+        .next()
+        .and_then(|v| v.parse::<u32>().ok())
+        .unwrap_or(0);
+    let position = parts
+        .next()
+        .map(str::trim)
+        .and_then(|v| {
+            if v.is_empty() {
+                Some(0)
+            } else {
+                v.parse::<u32>().ok()
+            }
+        })
+        .unwrap_or(0);
+
+    Ok((history, position.min(history)))
+}
+
 /// Clean up a single channel: kill child, kill grouped tmux session, deregister.
 fn cleanup_channel(channel: &mut PtyChannel) {
     // Dropping input_tx and resize_tx will cause the writer/resize threads to exit
@@ -563,8 +759,5 @@ fn cleanup_channel(channel: &mut PtyChannel) {
         .args(["kill-session", "-t", &channel.group_session])
         .status();
 
-    tracing::debug!(
-        "Cleaned up mux channel (group {})",
-        channel.group_session
-    );
+    tracing::debug!("Cleaned up mux channel (group {})", channel.group_session);
 }

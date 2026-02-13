@@ -111,6 +111,108 @@ export interface ConfigResponse {
   local_ips: string[]
 }
 
+export interface AiProviderStatus {
+  installed: boolean
+  command: string
+  path: string | null
+}
+
+export interface AiProvidersStatus {
+  claude: AiProviderStatus
+  codex: AiProviderStatus
+}
+
+export interface AiStatusResponse {
+  providers: AiProvidersStatus
+  show_plugin_button: boolean
+}
+
+export interface ProviderSyncState {
+  exists: boolean
+  in_sync: boolean
+}
+
+export interface SkillCatalogItem {
+  id: string
+  name: string
+  source: string
+  claude: ProviderSyncState
+  codex: ProviderSyncState
+}
+
+export interface McpCatalogItem {
+  id: string
+  name: string
+  command: string
+  args: string[]
+  source: string
+  claude: ProviderSyncState
+  codex: ProviderSyncState
+}
+
+export interface AiCatalogResponse {
+  skills: SkillCatalogItem[]
+  mcp: McpCatalogItem[]
+}
+
+export type AiSyncType = 'skills' | 'mcp'
+export type AiProvider = 'claude' | 'codex'
+
+export interface AiSyncRequest {
+  providers?: AiProvider[]
+  types?: AiSyncType[]
+  ids?: string[]
+  dry_run?: boolean
+}
+
+export interface SyncAction {
+  kind: string
+  id: string
+  name: string
+  provider: string
+  status: string
+  source: string | null
+  target: string | null
+  message: string | null
+}
+
+export interface SyncSummary {
+  total: number
+  updated: number
+  planned: number
+  up_to_date: number
+  skipped: number
+  failed: number
+}
+
+export interface AiSyncResponse {
+  dry_run: boolean
+  actions: SyncAction[]
+  summary: SyncSummary
+}
+
+export interface AiUninstallRequest {
+  providers?: AiProvider[]
+  types?: AiSyncType[]
+  ids?: string[]
+  remove_source?: boolean
+}
+
+export interface UninstallSummary {
+  total: number
+  removed: number
+  skipped: number
+  failed: number
+  not_found: number
+}
+
+export interface AiUninstallResponse {
+  actions: SyncAction[]
+  summary: UninstallSummary
+}
+
+export type AiProviderView = 'global' | AiProvider
+
 export type ConnectionStatus = 'connected' | 'connecting' | 'disconnected'
 
 // ── Spec 2: Tmux Session UI ──

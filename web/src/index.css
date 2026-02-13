@@ -47,6 +47,10 @@
   --font-scale:   1;
 }
 
+html, body, #root {
+  height: 100%;
+}
+
 body {
   font-family: var(--font-body);
   font-size: calc(1rem * var(--font-scale));
@@ -54,6 +58,7 @@ body {
   color: var(--color-fg);
   margin: 0;
   min-height: 100vh;
+  overflow: hidden;
   -webkit-font-smoothing: antialiased;
   transition: background 0.2s, color 0.2s;
   /* Mobile: prevent pull-to-refresh and overscroll bounce */
@@ -134,11 +139,13 @@ input[type="range"].brutalist-slider:hover::-moz-range-thumb {
   height: 100% !important;
 }
 .xterm .xterm-viewport {
-  overflow-y: hidden !important;
+  overflow-y: scroll !important;
   overflow-x: hidden !important;
-  /* Scrollback is handled by tmux; local scrollbar is disabled via scrollback:0 */
   scrollbar-width: none; /* Firefox */
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
 }
 .xterm .xterm-viewport::-webkit-scrollbar {
-  display: none; /* Chrome, Safari, Edge */
+  display: none;
 }

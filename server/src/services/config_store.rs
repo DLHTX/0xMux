@@ -23,9 +23,8 @@ pub struct PersistentConfig {
 
 impl PersistentConfig {
     pub fn config_path() -> io::Result<PathBuf> {
-        let home = dirs::home_dir().ok_or_else(|| {
-            io::Error::new(io::ErrorKind::NotFound, "无法获取用户主目录")
-        })?;
+        let home = dirs::home_dir()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "无法获取用户主目录"))?;
         let config_dir = home.join(".config").join("0xmux");
         fs::create_dir_all(&config_dir)?;
         Ok(config_dir.join("config.toml"))
@@ -39,7 +38,10 @@ impl PersistentConfig {
 
         let content = fs::read_to_string(&path)?;
         toml::from_str(&content).map_err(|e| {
-            io::Error::new(io::ErrorKind::InvalidData, format!("配置文件解析失败: {}", e))
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("配置文件解析失败: {}", e),
+            )
         })
     }
 

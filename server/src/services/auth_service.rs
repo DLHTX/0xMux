@@ -1,7 +1,7 @@
-use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use argon2::password_hash::SaltString;
-use rand::rngs::OsRng;
+use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use hmac::{Hmac, Mac};
+use rand::rngs::OsRng;
 use sha2::Sha256;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -100,8 +100,8 @@ impl AuthService {
 
         let payload = format!("{}.{}", token, timestamp);
 
-        let mut mac = HmacSha256::new_from_slice(key)
-            .map_err(|e| format!("HMAC初始化失败: {}", e))?;
+        let mut mac =
+            HmacSha256::new_from_slice(key).map_err(|e| format!("HMAC初始化失败: {}", e))?;
         mac.update(payload.as_bytes());
         let signature = hex::encode(mac.finalize().into_bytes());
 
@@ -117,7 +117,10 @@ impl AuthService {
                 return false;
             }
             // 验证通过，加入缓存
-            self.valid_tokens.write().await.insert(signed_token.to_string());
+            self.valid_tokens
+                .write()
+                .await
+                .insert(signed_token.to_string());
         }
         true
     }

@@ -278,14 +278,20 @@ export function useSplitLayout() {
 
   /** Close a pane (removes from layout and paneWindowMap) */
   const closePane = useCallback((nodeId: string) => {
-    setLayout((prev) => {
-      const result = closeNode(prev, nodeId)
-      return result ?? createLeaf()
-    })
+    const nextLayout = closeNode(layoutRef.current, nodeId) ?? createLeaf()
+    const nextLeafIds = getAllLeafIds(nextLayout)
+
+    setLayout(nextLayout)
     setPaneWindowMap((prev) => {
       const next = { ...prev }
       delete next[nodeId]
       return next
+    })
+    setActivePaneId((prevActive) => {
+      if (prevActive && nextLeafIds.includes(prevActive)) {
+        return prevActive
+      }
+      return nextLeafIds[0] ?? null
     })
     scheduleSync()
   }, [scheduleSync])

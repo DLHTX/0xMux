@@ -1,15 +1,15 @@
 use axum::{
+    Json,
     body::Body,
     extract::{Request, State},
-    http::{header, StatusCode},
+    http::{StatusCode, header},
     middleware::Next,
     response::{IntoResponse, Response},
-    Json,
 };
 use serde::Serialize;
 
-use crate::state::AppState;
 use crate::services::config_store::PersistentConfig;
+use crate::state::AppState;
 
 #[derive(Serialize)]
 struct ErrorResponse {

@@ -1,4 +1,4 @@
-use axum::{Json, response::IntoResponse, http::StatusCode};
+use axum::{Json, http::StatusCode, response::IntoResponse};
 
 use crate::services::config_store;
 
@@ -7,12 +7,7 @@ pub async fn get_layouts() -> impl IntoResponse {
     match config_store::load_layouts() {
         Ok(json) => {
             // Return the raw JSON string with correct content-type
-            (
-                StatusCode::OK,
-                [("content-type", "application/json")],
-                json,
-            )
-                .into_response()
+            (StatusCode::OK, [("content-type", "application/json")], json).into_response()
         }
         Err(e) => {
             tracing::warn!("Failed to load layouts: {e}");

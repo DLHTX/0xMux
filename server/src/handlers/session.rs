@@ -7,7 +7,10 @@ use axum::{
 use serde::Deserialize;
 
 use crate::error::AppError;
-use crate::models::session::{CreateSessionRequest, CwdResponse, DirEntry, ListDirsResponse, NextNameResponse, RenameSessionRequest};
+use crate::models::session::{
+    CreateSessionRequest, CwdResponse, DirEntry, ListDirsResponse, NextNameResponse,
+    RenameSessionRequest,
+};
 use crate::services::tmux;
 
 pub async fn list_sessions_handler() -> Result<impl IntoResponse, AppError> {
@@ -83,7 +86,9 @@ pub async fn list_dirs_handler(
             if p.starts_with('~') {
                 let home = dirs::home_dir()
                     .ok_or_else(|| AppError::Internal("Cannot determine home directory".into()))?;
-                let rest = p.strip_prefix("~/").unwrap_or(p.strip_prefix('~').unwrap_or(""));
+                let rest = p
+                    .strip_prefix("~/")
+                    .unwrap_or(p.strip_prefix('~').unwrap_or(""));
                 if rest.is_empty() {
                     home
                 } else {
@@ -97,9 +102,9 @@ pub async fn list_dirs_handler(
             .ok_or_else(|| AppError::Internal("Cannot determine home directory".into()))?,
     };
 
-    let canonical = base.canonicalize().map_err(|e| {
-        AppError::BadRequest(format!("Invalid path '{}': {e}", base.display()))
-    })?;
+    let canonical = base
+        .canonicalize()
+        .map_err(|e| AppError::BadRequest(format!("Invalid path '{}': {e}", base.display())))?;
 
     if !canonical.is_dir() {
         return Err(AppError::BadRequest(format!(
@@ -111,9 +116,8 @@ pub async fn list_dirs_handler(
     let parent = canonical.parent().map(|p| p.to_string_lossy().to_string());
 
     let mut dirs = Vec::new();
-    let entries = std::fs::read_dir(&canonical).map_err(|e| {
-        AppError::Internal(format!("Failed to read directory: {e}"))
-    })?;
+    let entries = std::fs::read_dir(&canonical)
+        .map_err(|e| AppError::Internal(format!("Failed to read directory: {e}")))?;
 
     for entry in entries.flatten() {
         let ft = match entry.file_type() {

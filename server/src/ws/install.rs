@@ -24,10 +24,7 @@ pub async fn ws_install_handler(
     Ok(ws.on_upgrade(move |socket| handle_install_socket(socket, rx)))
 }
 
-async fn handle_install_socket(
-    mut socket: WebSocket,
-    mut rx: broadcast::Receiver<String>,
-) {
+async fn handle_install_socket(mut socket: WebSocket, mut rx: broadcast::Receiver<String>) {
     while let Ok(msg) = rx.recv().await {
         if socket.send(Message::Text(msg.into())).await.is_err() {
             break;

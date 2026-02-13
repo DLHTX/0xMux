@@ -22,7 +22,18 @@ fn tmux_cmd() -> Command {
     let mut cmd = Command::new("tmux");
     cmd.env_clear();
     // Only pass through the essentials
-    for key in &["HOME", "SHELL", "USER", "LOGNAME", "PATH", "TERM", "LANG", "LC_ALL", "TMPDIR", "XDG_RUNTIME_DIR"] {
+    for key in &[
+        "HOME",
+        "SHELL",
+        "USER",
+        "LOGNAME",
+        "PATH",
+        "TERM",
+        "LANG",
+        "LC_ALL",
+        "TMPDIR",
+        "XDG_RUNTIME_DIR",
+    ] {
         if let Ok(val) = std::env::var(key) {
             cmd.env(key, val);
         }
@@ -60,9 +71,7 @@ pub fn cleanup_orphaned_groups() {
             let stdout = String::from_utf8_lossy(&out.stdout);
             for name in stdout.lines() {
                 if name.starts_with("_0xmux_") {
-                    let _ = tmux_cmd()
-                        .args(["kill-session", "-t", name])
-                        .status();
+                    let _ = tmux_cmd().args(["kill-session", "-t", name]).status();
                     tracing::info!("Cleaned up orphaned grouped session: {name}");
                 }
             }
@@ -82,9 +91,7 @@ pub fn gc_orphaned_groups(active: &HashSet<String>) {
             let stdout = String::from_utf8_lossy(&out.stdout);
             for name in stdout.lines() {
                 if name.starts_with("_0xmux_") && !active.contains(name) {
-                    let _ = tmux_cmd()
-                        .args(["kill-session", "-t", name])
-                        .status();
+                    let _ = tmux_cmd().args(["kill-session", "-t", name]).status();
                     tracing::info!("GC: reaped orphaned grouped session: {name}");
                 }
             }
@@ -194,7 +201,9 @@ pub fn next_session_name(dir: &str) -> Result<String, AppError> {
     let max_num = existing
         .iter()
         .filter_map(|s| {
-            s.name.strip_prefix(&prefix).and_then(|suffix| suffix.parse::<u32>().ok())
+            s.name
+                .strip_prefix(&prefix)
+                .and_then(|suffix| suffix.parse::<u32>().ok())
         })
         .max()
         .unwrap_or(0);
@@ -205,9 +214,7 @@ pub fn next_session_name(dir: &str) -> Result<String, AppError> {
 pub fn kill_session(name: &str) -> Result<(), AppError> {
     let existing = list_sessions()?;
     if !existing.iter().any(|s| s.name == name) {
-        return Err(AppError::NotFound(format!(
-            "Session '{name}' not found"
-        )));
+        return Err(AppError::NotFound(format!("Session '{name}' not found")));
     }
 
     let status = tmux_cmd()
@@ -229,9 +236,7 @@ pub fn rename_session(old: &str, new_name: &str) -> Result<TmuxSession, AppError
 
     let existing = list_sessions()?;
     if !existing.iter().any(|s| s.name == old) {
-        return Err(AppError::NotFound(format!(
-            "Session '{old}' not found"
-        )));
+        return Err(AppError::NotFound(format!("Session '{old}' not found")));
     }
     if existing.iter().any(|s| s.name == new_name) {
         return Err(AppError::Conflict(format!(
@@ -261,9 +266,7 @@ pub fn list_windows(session: &str) -> Result<Vec<TmuxWindow>, AppError> {
     // Check that session exists first
     let sessions = list_sessions()?;
     if !sessions.iter().any(|s| s.name == session) {
-        return Err(AppError::NotFound(format!(
-            "Session '{session}' not found"
-        )));
+        return Err(AppError::NotFound(format!("Session '{session}' not found")));
     }
 
     let output = tmux_cmd()
@@ -342,46 +345,80 @@ pub fn list_all_windows() -> Result<HashMap<String, Vec<TmuxWindow>>, AppError> 
     Ok(result)
 }
 
+fn get_session_current_path(session: &str) -> Option<String> {
+    let output = tmux_cmd()
+        .args([
+            "display-message",
+            "-p",
+            "-t",
+            session,
+            "#{pane_current_path}",
+        ])
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if path.is_empty() { None } else { Some(path) }
+}
+
 pub fn new_window(session: &str, name: Option<&str>) -> Result<TmuxWindow, AppError> {
     // Check that session exists first
     let sessions = list_sessions()?;
     if !sessions.iter().any(|s| s.name == session) {
-        return Err(AppError::NotFound(format!(
-            "Session '{session}' not found"
-        )));
+        return Err(AppError::NotFound(format!("Session '{session}' not found")));
     }
 
-    let mut args = vec!["new-window", "-t", session];
+    // Create in detached mode so existing attached clients don't get force-switched.
+    // Print the created index directly to avoid relying on "active window" heuristics.
+    let mut args = vec![
+        "new-window".to_string(),
+        "-d".to_string(),
+        "-P".to_string(),
+        "-F".to_string(),
+        "#{window_index}".to_string(),
+        "-t".to_string(),
+        session.to_string(),
+    ];
+
+    // Keep new windows in the same working directory as the session's current pane.
+    if let Some(path) = get_session_current_path(session) {
+        args.push("-c".to_string());
+        args.push(path);
+    }
+
     // If name is provided, validate and add -n flag
     if let Some(n) = name {
         validate_name(n)?;
-        args.push("-n");
-        args.push(n);
+        args.push("-n".to_string());
+        args.push(n.to_string());
     }
 
-    let status = tmux_cmd()
-        .args(&args)
-        .status()
+    let output = tmux_cmd()
+        .args(args.iter().map(String::as_str))
+        .output()
         .map_err(|e| AppError::Internal(format!("Failed to create window: {e}")))?;
 
-    if !status.success() {
+    if !output.status.success() {
         return Err(AppError::Internal(format!(
             "tmux new-window failed for session '{session}'"
         )));
     }
 
-    // The newly created window becomes the active window
+    let index_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let created_index = index_str.parse::<u32>().map_err(|_| {
+        AppError::Internal(format!(
+            "tmux new-window returned invalid window index: '{index_str}'"
+        ))
+    })?;
+
     let windows = list_windows(session)?;
     windows
         .into_iter()
-        .rev()
-        .find(|w| {
-            if let Some(n) = name {
-                w.name == n
-            } else {
-                w.active
-            }
-        })
+        .find(|w| w.index == created_index)
         .ok_or_else(|| AppError::Internal("Window created but not found in list".to_string()))
 }
 
@@ -429,13 +466,7 @@ pub fn select_window(session: &str, index: u32) -> Result<(), AppError> {
 /// `target` can be "session", "session:window", or "session:window.pane".
 fn is_pane_dead(target: &str) -> Result<bool, AppError> {
     let output = tmux_cmd()
-        .args([
-            "display-message",
-            "-t",
-            target,
-            "-p",
-            "#{pane_dead}",
-        ])
+        .args(["display-message", "-t", target, "-p", "#{pane_dead}"])
         .output()
         .map_err(|e| AppError::Internal(format!("Failed to query pane state: {e}")))?;
 

@@ -53,26 +53,19 @@ fn check_dependency(name: &str) -> DependencyInfo {
 }
 
 fn get_version(cmd: &str, args: &[&str]) -> Option<String> {
-    Command::new(cmd)
-        .args(args)
-        .output()
-        .ok()
-        .and_then(|out| {
-            let text = String::from_utf8_lossy(&out.stdout).to_string();
-            text.split_whitespace()
-                .find(|w| w.chars().next().is_some_and(|c| c.is_ascii_digit()))
-                .map(|v| v.to_string())
-        })
+    Command::new(cmd).args(args).output().ok().and_then(|out| {
+        let text = String::from_utf8_lossy(&out.stdout).to_string();
+        text.split_whitespace()
+            .find(|w| w.chars().next().is_some_and(|c| c.is_ascii_digit()))
+            .map(|v| v.to_string())
+    })
 }
 
 pub fn check_all_deps() -> SystemDepsResponse {
     let (os, arch) = detect_os();
     let package_manager = detect_package_manager();
 
-    let dependencies = vec![
-        check_dependency("tmux"),
-        check_dependency("claude-code"),
-    ];
+    let dependencies = vec![check_dependency("tmux"), check_dependency("claude-code")];
 
     SystemDepsResponse {
         os,

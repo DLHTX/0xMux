@@ -11,6 +11,8 @@ export interface MuxChannelHandle {
   send(data: string): void
   /** Resize the PTY */
   resize(cols: number, rows: number): void
+  /** Scroll tmux history for this channel (negative = up, positive = down) */
+  scroll(lines: number): void
   /** Close the channel (kills grouped tmux session on server) */
   close(): void
 }
@@ -24,6 +26,7 @@ export interface OpenChannelOptions {
   onOpen?: () => void
   onClose?: (code: number) => void
   onError?: (message: string) => void
+  onScrollState?: (state: { history: number; position: number }) => void
 }
 
 export interface UseMuxSocketReturn {
@@ -49,6 +52,7 @@ interface ChannelEntry {
   onOpen?: () => void
   onClose?: (code: number) => void
   onError?: (message: string) => void
+  onScrollState?: (state: { history: number; position: number }) => void
   /** Whether the server has confirmed this channel is open */
   opened: boolean
 }
@@ -61,11 +65,13 @@ export function useMuxSocket(): UseMuxSocketReturn {
   const nextChRef = useRef(1)
   const sessionListenersRef = useRef(new Set<(sessions: TmuxSession[]) => void>())
   const windowListenersRef = useRef(new Set<(windows: Record<string, TmuxWindow[]>) => void>())
+  const latestSessionsRef = useRef<TmuxSession[] | null>(null)
+  const latestWindowsRef = useRef<Record<string, TmuxWindow[]> | null>(null)
 
   const [status, setStatus] = useState<ConnectionStatus>('disconnected')
 
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout>>()
-  const heartbeatTimerRef = useRef<ReturnType<typeof setInterval>>()
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const retryCountRef = useRef(0)
   const mountedRef = useRef(true)
 
@@ -106,11 +112,11 @@ export function useMuxSocket(): UseMuxSocketReturn {
   const cleanup = useCallback(() => {
     if (heartbeatTimerRef.current) {
       clearInterval(heartbeatTimerRef.current)
-      heartbeatTimerRef.current = undefined
+      heartbeatTimerRef.current = null
     }
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current)
-      reconnectTimerRef.current = undefined
+      reconnectTimerRef.current = null
     }
   }, [])
 
@@ -202,7 +208,15 @@ export function useMuxSocket(): UseMuxSocketReturn {
   // ── Control message dispatch ──
 
   const handleControlMessage = useCallback(
-    (msg: { type: string; ch?: number; code?: number; message?: string; data?: unknown }) => {
+    (msg: {
+      type: string
+      ch?: number
+      code?: number
+      message?: string
+      data?: unknown
+      history?: number
+      position?: number
+    }) => {
       switch (msg.type) {
         case 'opened': {
           if (msg.ch == null) return
@@ -237,11 +251,13 @@ export function useMuxSocket(): UseMuxSocketReturn {
             windows?: Record<string, TmuxWindow[]>
           } | undefined
           if (data?.sessions) {
+            latestSessionsRef.current = data.sessions
             for (const cb of sessionListenersRef.current) {
               cb(data.sessions)
             }
           }
           if (data?.windows) {
+            latestWindowsRef.current = data.windows
             for (const cb of windowListenersRef.current) {
               cb(data.windows)
             }
@@ -250,6 +266,15 @@ export function useMuxSocket(): UseMuxSocketReturn {
         }
         case 'pong':
           break // heartbeat reply, nothing to do
+        case 'scroll_state': {
+          if (msg.ch == null) return
+          const entry = channelsRef.current.get(msg.ch)
+          if (!entry) return
+          const history = Number.isFinite(msg.history) ? Math.max(0, Math.trunc(msg.history as number)) : 0
+          const position = Number.isFinite(msg.position) ? Math.max(0, Math.trunc(msg.position as number)) : 0
+          entry.onScrollState?.({ history, position: Math.min(position, history) })
+          break
+        }
         default:
           break
       }
@@ -285,6 +310,7 @@ export function useMuxSocket(): UseMuxSocketReturn {
         onOpen: opts.onOpen,
         onClose: opts.onClose,
         onError: opts.onError,
+        onScrollState: opts.onScrollState,
         opened: false,
       }
       channelsRef.current.set(ch, entry)
@@ -311,6 +337,10 @@ export function useMuxSocket(): UseMuxSocketReturn {
           }
           sendJson({ type: 'resize', ch, cols, rows })
         },
+        scroll: (lines: number) => {
+          if (!Number.isFinite(lines) || lines === 0) return
+          sendJson({ type: 'scroll', ch, lines: Math.trunc(lines) })
+        },
         close: () => {
           channelsRef.current.delete(ch)
           sendJson({ type: 'close', ch })
@@ -325,6 +355,9 @@ export function useMuxSocket(): UseMuxSocketReturn {
   const onSessionsUpdate = useCallback(
     (cb: (sessions: TmuxSession[]) => void): (() => void) => {
       sessionListenersRef.current.add(cb)
+      if (latestSessionsRef.current) {
+        cb(latestSessionsRef.current)
+      }
       return () => {
         sessionListenersRef.current.delete(cb)
       }
@@ -335,6 +368,9 @@ export function useMuxSocket(): UseMuxSocketReturn {
   const onWindowsUpdate = useCallback(
     (cb: (windows: Record<string, TmuxWindow[]>) => void): (() => void) => {
       windowListenersRef.current.add(cb)
+      if (latestWindowsRef.current) {
+        cb(latestWindowsRef.current)
+      }
       return () => {
         windowListenersRef.current.delete(cb)
       }

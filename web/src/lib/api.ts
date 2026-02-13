@@ -18,6 +18,12 @@ import type {
   LoginRequest,
   AuthTokenResponse,
   ChangePasswordRequest,
+  AiStatusResponse,
+  AiCatalogResponse,
+  AiSyncRequest,
+  AiSyncResponse,
+  AiUninstallRequest,
+  AiUninstallResponse,
 } from './types'
 
 const API_BASE = '/api'
@@ -111,6 +117,28 @@ export async function installPackage(data: InstallRequest): Promise<InstallTaskR
 
 export async function restartServer(): Promise<void> {
   return request<void>('/system/restart', { method: 'POST' })
+}
+
+export async function getAiStatus(): Promise<AiStatusResponse> {
+  return request<AiStatusResponse>('/ai/status')
+}
+
+export async function getAiCatalog(): Promise<AiCatalogResponse> {
+  return request<AiCatalogResponse>('/ai/catalog')
+}
+
+export async function syncAi(data: AiSyncRequest): Promise<AiSyncResponse> {
+  return request<AiSyncResponse>('/ai/sync', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function uninstallAi(data: AiUninstallRequest): Promise<AiUninstallResponse> {
+  return request<AiUninstallResponse>('/ai/uninstall', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
 }
 
 export async function getHealth(): Promise<HealthResponse> {

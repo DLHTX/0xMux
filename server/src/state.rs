@@ -1,7 +1,7 @@
 use crate::config::ServerConfig;
 use crate::models::pty::PtySession;
-use crate::services::install::InstallManager;
 use crate::services::auth_service::AuthService;
+use crate::services::install::InstallManager;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{RwLock, broadcast};

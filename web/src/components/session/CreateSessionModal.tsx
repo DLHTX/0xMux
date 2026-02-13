@@ -7,7 +7,7 @@ import {
   IconClock,
   IconChevronRight,
   IconCheck,
-  IconCornerRightDown,
+  IconSearch,
   IconTerminal,
 } from '../../lib/icons'
 import { useI18n } from '../../hooks/useI18n'
@@ -88,6 +88,7 @@ export function CreateSessionModal({
   const [dirsLoading, setDirsLoading] = useState(false)
   const [history] = useState<string[]>(() => loadHistory())
   const [initCommand, setInitCommand] = useState('')
+  const [dirSearch, setDirSearch] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
   // Load dirs for a path
@@ -120,15 +121,6 @@ export function CreateSessionModal({
     [loadDirs]
   )
 
-  // Select a directory as the working dir
-  const selectDir = useCallback(
-    (path: string) => {
-      setSelectedDir(path)
-      deriveNameFromDir(path)
-    },
-    [deriveNameFromDir]
-  )
-
   // Navigate + select (for history shortcuts and home)
   const goToAndSelect = useCallback(
     (path: string) => {
@@ -147,6 +139,7 @@ export function CreateSessionModal({
       setName('')
       // Restore last-used init command
       setInitCommand(localStorage.getItem(LAST_INIT_CMD_KEY) || '')
+      setDirSearch('')
       loadDirs()
       setTimeout(() => inputRef.current?.focus(), 100)
     }
@@ -192,7 +185,9 @@ export function CreateSessionModal({
   if (!open) return null
 
   const breadcrumbs = toBreadcrumbs(browsePath)
-  const isCurrentDirSelected = selectedDir === browsePath
+  const filteredDirs = dirs.filter((d) =>
+    d.name.toLowerCase().includes(dirSearch.trim().toLowerCase())
+  )
 
   return (
     <div
@@ -211,7 +206,7 @@ export function CreateSessionModal({
         {/* ── Directory Picker ── */}
         <div className="mb-3">
           {/* Section label */}
-          <div className="text-[10px] text-[var(--color-fg-faint)] uppercase tracking-wider mb-2 font-bold">
+          <div className="text-[10px] text-[var(--color-success)] uppercase tracking-wider mb-2 font-bold border-l-2 border-[var(--color-success)] pl-2">
             {t('create.workdir')}
           </div>
 
@@ -271,24 +266,35 @@ export function CreateSessionModal({
           </div>
 
           {/* Directory list */}
+          <div className="flex items-center gap-1.5 mb-1.5 px-2 py-1 rounded-[var(--radius)] border border-[var(--color-border-light)]">
+            <Icon icon={IconSearch} width={12} className="text-[var(--color-fg-faint)] shrink-0" />
+            <input
+              value={dirSearch}
+              onChange={(e) => setDirSearch(e.target.value)}
+              placeholder="搜索文件夹..."
+              className="flex-1 bg-transparent outline-none text-[10px] placeholder:text-[var(--color-fg-faint)]"
+            />
+          </div>
+
+          {/* Directory list */}
           <div className="border border-[var(--color-border-light)] rounded-[var(--radius)] max-h-[200px] overflow-y-auto">
             {dirsLoading ? (
               <div className="p-3 text-center text-[10px] text-[var(--color-fg-faint)] animate-pulse">
                 Loading...
               </div>
-            ) : dirs.length === 0 ? (
+            ) : filteredDirs.length === 0 ? (
               <div className="p-3 text-center text-[10px] text-[var(--color-fg-faint)]">
                 {t('create.emptyDir')}
               </div>
             ) : (
-              dirs.map((d) => (
+              filteredDirs.map((d) => (
                 <div
                   key={d.path}
                   className="flex items-center w-full group"
                 >
-                  {/* Main click area: navigate into this directory */}
+                  {/* Single click: navigate + choose this directory */}
                   <button
-                    onClick={() => navigateTo(d.path)}
+                    onClick={() => goToAndSelect(d.path)}
                     className={`flex-1 flex items-center gap-2 px-2.5 py-1.5 text-xs text-left transition-colors cursor-pointer min-w-0
                       ${selectedDir === d.path
                         ? 'bg-[var(--color-primary)]/10 text-[var(--color-primary)]'
@@ -303,44 +309,15 @@ export function CreateSessionModal({
                     <span className="truncate flex-1">{d.name}</span>
                     <Icon icon={IconChevronRight} width={10} className="shrink-0 text-[var(--color-fg-faint)]" />
                   </button>
-                  {/* Select button: choose this directory as workdir */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      selectDir(d.path)
-                    }}
-                    className={`px-2 py-1.5 transition-colors cursor-pointer shrink-0 border-l border-[var(--color-border-light)]
-                      ${selectedDir === d.path
-                        ? 'text-[var(--color-primary)] bg-[var(--color-primary)]/10'
-                        : 'text-[var(--color-fg-faint)] opacity-0 group-hover:opacity-100 hover:text-[var(--color-primary)] hover:bg-[var(--color-primary)]/5'
-                      }`}
-                    title={t('create.selectThisDir')}
-                  >
-                    <Icon icon={IconCornerRightDown} width={10} />
-                  </button>
                 </div>
               ))
             )}
           </div>
-
-          {/* Select current directory button */}
-          <button
-            onClick={() => selectDir(browsePath)}
-            className={`mt-1.5 w-full flex items-center justify-center gap-1.5 text-[10px] py-1.5 rounded-[var(--radius)] border transition-colors cursor-pointer
-              ${isCurrentDirSelected
-                ? 'border-[var(--color-primary)] text-[var(--color-primary)] bg-[var(--color-primary)]/10'
-                : 'border-[var(--color-border-light)] text-[var(--color-fg-muted)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]'
-              }`}
-          >
-            <Icon icon={IconCheck} width={10} />
-            <span>{t('create.selectThisDir')}</span>
-            <span className="font-bold">{basename(browsePath)}/</span>
-          </button>
         </div>
 
         {/* ── Session Name Input ── */}
         <div className="mb-3">
-          <div className="text-[10px] text-[var(--color-fg-faint)] uppercase tracking-wider mb-1.5 font-bold">
+          <div className="text-[10px] text-[var(--color-success)] uppercase tracking-wider mb-1.5 font-bold border-l-2 border-[var(--color-success)] pl-2">
             SESSION NAME
           </div>
           <div className="flex items-center gap-2">
@@ -366,8 +343,8 @@ export function CreateSessionModal({
 
         {/* ── Init Command ── */}
         <div className="mb-3">
-          <div className="text-[10px] text-[var(--color-fg-faint)] uppercase tracking-wider mb-1.5 font-bold">
-            INIT COMMAND <span className="normal-case font-normal">(runs on every new window)</span>
+          <div className="text-[10px] text-[var(--color-success)] uppercase tracking-wider mb-1.5 font-bold border-l-2 border-[var(--color-success)] pl-2">
+            INIT COMMAND
           </div>
           <div className="flex items-center gap-2">
             <Icon icon={IconTerminal} width={14} className="text-[var(--color-fg-muted)] shrink-0" />

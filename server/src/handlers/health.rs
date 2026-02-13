@@ -1,8 +1,4 @@
-use axum::{
-    Json,
-    extract::State,
-    response::IntoResponse,
-};
+use axum::{Json, extract::State, response::IntoResponse};
 
 use crate::state::AppState;
 

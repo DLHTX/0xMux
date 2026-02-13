@@ -109,3 +109,6 @@ export {
 export {
   default as IconRefreshCw,
 } from '@iconify-icons/lucide/refresh-cw'
+export {
+  default as IconPuzzle,
+} from '@iconify-icons/lucide/puzzle'

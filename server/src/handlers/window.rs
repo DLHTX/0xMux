@@ -1,17 +1,10 @@
-use axum::{
-    Json,
-    extract::Path,
-    http::StatusCode,
-    response::IntoResponse,
-};
+use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
 
 use crate::error::AppError;
 use crate::models::window::CreateWindowRequest;
 use crate::services::tmux;
 
-pub async fn list_windows_handler(
-    Path(name): Path<String>,
-) -> Result<impl IntoResponse, AppError> {
+pub async fn list_windows_handler(Path(name): Path<String>) -> Result<impl IntoResponse, AppError> {
     let windows = tmux::list_windows(&name)?;
     Ok(Json(windows))
 }

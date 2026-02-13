@@ -8,8 +8,10 @@ export interface UseTerminalOptions {
   fontSize?: number
   fontFamily?: string
   theme?: Record<string, string>
+  scrollback?: number
   onData?: (data: string) => void
   onResize?: (cols: number, rows: number) => void
+  onScrollRequest?: (lines: number) => void
 }
 
 export function useTerminal(options: UseTerminalOptions = {}) {
@@ -17,6 +19,7 @@ export function useTerminal(options: UseTerminalOptions = {}) {
   const terminalRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
+  const detachScrollBridgeRef = useRef<(() => void) | null>(null)
 
   const initTerminal = useCallback(() => {
     if (!containerRef.current || terminalRef.current) return
@@ -33,10 +36,8 @@ export function useTerminal(options: UseTerminalOptions = {}) {
         ...options.theme,
       },
       allowProposedApi: true,
-      // Scrollback is handled by tmux on the server side, so we don't need
-      // a local buffer. Setting this to 0 also tells FitAddon to skip the
-      // 14px scrollbar-width reservation, letting the canvas fill 100% width.
-      scrollback: 0,
+      // Keep local scrollback enabled so wheel/touch can scroll terminal history.
+      scrollback: options.scrollback ?? 5000,
     })
 
     const fitAddon = new FitAddon()
@@ -55,6 +56,146 @@ export function useTerminal(options: UseTerminalOptions = {}) {
       })
 
     terminal.open(containerRef.current)
+
+    const fallbackCopyText = (text: string) => {
+      const textarea = document.createElement('textarea')
+      textarea.value = text
+      textarea.setAttribute('readonly', 'true')
+      textarea.style.position = 'fixed'
+      textarea.style.opacity = '0'
+      textarea.style.pointerEvents = 'none'
+      document.body.appendChild(textarea)
+      textarea.select()
+      try {
+        document.execCommand('copy')
+      } catch {
+        // ignore
+      } finally {
+        textarea.remove()
+      }
+    }
+
+    const copySelection = () => {
+      const selected = terminal.getSelection()
+      if (!selected) return false
+
+      if (navigator.clipboard?.writeText) {
+        void navigator.clipboard.writeText(selected).catch(() => fallbackCopyText(selected))
+      } else {
+        fallbackCopyText(selected)
+      }
+
+      terminal.clearSelection()
+      return true
+    }
+
+    terminal.attachCustomKeyEventHandler((event) => {
+      if (event.type !== 'keydown') return true
+      if (!terminal.hasSelection()) return true
+
+      const key = event.key.toLowerCase()
+      const isCopyChord = (event.metaKey || event.ctrlKey) && key === 'c'
+      const isCtrlInsert = event.key === 'Insert' && event.ctrlKey && !event.metaKey
+      if (!(isCopyChord || isCtrlInsert)) return true
+
+      if (copySelection()) {
+        event.preventDefault()
+        return false
+      }
+      return true
+    })
+
+    // Force local history scrolling (wheel + touch) when buffer is in normal mode.
+    // Attach on the terminal container (capture phase) so xterm internals can't swallow gestures.
+    const interactionTarget = containerRef.current
+    if (interactionTarget) {
+      let touchY: number | null = null
+      let touchLineRemainder = 0
+      let lastWheelRemoteAt = 0
+
+      const canUseLocalHistory = () => terminal.buffer.active === terminal.buffer.normal
+
+      const scrollByDelta = (deltaLines: number) => {
+        if (!canUseLocalHistory() || deltaLines === 0) return false
+        const buffer = terminal.buffer.active
+        if (buffer.baseY <= 0) return false
+        const nextViewportY = Math.max(0, Math.min(buffer.baseY, buffer.viewportY + deltaLines))
+        const consumed = nextViewportY - buffer.viewportY
+        if (consumed === 0) return false
+        terminal.scrollLines(consumed)
+        return true
+      }
+
+      const requestRemoteScroll = (deltaLines: number, source: 'wheel' | 'touch') => {
+        if (!options.onScrollRequest || deltaLines === 0) return false
+
+        const absLines = Math.abs(Math.trunc(deltaLines))
+        if (absLines <= 0) return false
+
+        if (source === 'wheel') {
+          const now = Date.now()
+          if (now - lastWheelRemoteAt < 70) return true
+          lastWheelRemoteAt = now
+        }
+
+        const maxStep = source === 'wheel' ? 3 : 6
+        const step = Math.max(1, Math.min(maxStep, absLines))
+        options.onScrollRequest((deltaLines < 0 ? -1 : 1) * step)
+        return true
+      }
+
+      const onWheel = (event: WheelEvent) => {
+        const rawLines = event.deltaMode === 1 ? event.deltaY : event.deltaY / 36
+        if (Math.abs(rawLines) < 0.2) return
+        const lines = (rawLines < 0 ? -1 : 1) * Math.max(1, Math.min(4, Math.round(Math.abs(rawLines))))
+        if (scrollByDelta(lines) || requestRemoteScroll(lines, 'wheel')) {
+          event.preventDefault()
+        }
+      }
+
+      const onTouchStart = (event: TouchEvent) => {
+        if (event.touches.length !== 1) return
+        touchY = event.touches[0].clientY
+        touchLineRemainder = 0
+      }
+
+      const onTouchMove = (event: TouchEvent) => {
+        if (touchY === null || event.touches.length !== 1) return
+        const nextY = event.touches[0].clientY
+        const deltaPx = touchY - nextY
+        touchY = nextY
+
+        // Keep swipe sensitivity balanced: direct enough without jumping too far.
+        touchLineRemainder += deltaPx / 14
+        const lines =
+          touchLineRemainder > 0 ? Math.floor(touchLineRemainder) : Math.ceil(touchLineRemainder)
+        if (lines === 0) return
+        const localConsumed = scrollByDelta(lines)
+        const remoteConsumed = !localConsumed && requestRemoteScroll(lines, 'touch')
+        if (!(localConsumed || remoteConsumed)) return
+        touchLineRemainder -= lines
+        event.preventDefault()
+      }
+
+      const onTouchEnd = () => {
+        touchY = null
+        touchLineRemainder = 0
+      }
+
+      interactionTarget.addEventListener('wheel', onWheel, { passive: false, capture: true })
+      interactionTarget.addEventListener('touchstart', onTouchStart, { passive: true, capture: true })
+      interactionTarget.addEventListener('touchmove', onTouchMove, { passive: false, capture: true })
+      interactionTarget.addEventListener('touchend', onTouchEnd, true)
+      interactionTarget.addEventListener('touchcancel', onTouchEnd, true)
+
+      detachScrollBridgeRef.current = () => {
+        interactionTarget.removeEventListener('wheel', onWheel, true)
+        interactionTarget.removeEventListener('touchstart', onTouchStart, true)
+        interactionTarget.removeEventListener('touchmove', onTouchMove, true)
+        interactionTarget.removeEventListener('touchend', onTouchEnd, true)
+        interactionTarget.removeEventListener('touchcancel', onTouchEnd, true)
+      }
+    }
 
     // Delay fit until container has settled its layout dimensions.
     // A single rAF is sometimes too early on mobile (flex hasn't resolved yet),
@@ -91,6 +232,8 @@ export function useTerminal(options: UseTerminalOptions = {}) {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const dispose = useCallback(() => {
+    detachScrollBridgeRef.current?.()
+    detachScrollBridgeRef.current = null
     resizeObserverRef.current?.disconnect()
     resizeObserverRef.current = null
     terminalRef.current?.dispose()

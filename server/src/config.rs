@@ -1,7 +1,11 @@
 use clap::Parser;
 
 #[derive(Parser, Debug, Clone)]
-#[command(name = "0xmux", version, about = "Hacker-grade tmux session manager with web UI")]
+#[command(
+    name = "0xmux",
+    version,
+    about = "Hacker-grade tmux session manager with web UI"
+)]
 pub struct ServerConfig {
     #[arg(short, long, default_value = "1234", env = "PORT")]
     pub port: u16,
