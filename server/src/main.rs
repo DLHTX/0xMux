@@ -40,6 +40,12 @@ async fn main() {
     let banner_host = config.host.clone();
     let banner_port = config.port;
 
+    // Initialize tmux socket isolation (must be before any tmux calls)
+    services::tmux::init_tmux_socket(config.tmux_socket.clone());
+    if let Some(ref socket) = config.tmux_socket {
+        tracing::info!("Using tmux socket: {socket}");
+    }
+
     let (session_tx, _) = broadcast::channel::<String>(64);
     spawn_session_watcher(session_tx.clone());
     spawn_group_gc();
@@ -100,6 +106,9 @@ async fn main() {
     };
     banner::print_banner(&banner_host, banner_port);
     tracing::info!("0xMux server listening on {addr}");
+
+    // Auto-updater (release builds only)
+    services::updater::spawn_update_checker();
 
     if let Err(err) = axum::serve(
         listener,

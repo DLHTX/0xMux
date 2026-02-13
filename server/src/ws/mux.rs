@@ -10,6 +10,7 @@ use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
 use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 use std::io::Read;
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 use tokio::sync::{Notify, Semaphore, mpsc};
 
@@ -38,25 +39,6 @@ fn deregister_group(name: &str) {
 /// Return a snapshot of all currently-active group session names.
 pub fn active_group_names() -> HashSet<String> {
     ACTIVE_GROUPS.lock().unwrap().clone()
-}
-
-// ── Minimal env vars for tmux sub-commands ──
-
-fn clean_env_iter() -> impl Iterator<Item = (String, String)> {
-    const KEYS: &[&str] = &[
-        "HOME",
-        "SHELL",
-        "USER",
-        "LOGNAME",
-        "PATH",
-        "TERM",
-        "LANG",
-        "LC_ALL",
-        "TMPDIR",
-        "XDG_RUNTIME_DIR",
-    ];
-    KEYS.iter()
-        .filter_map(|k| std::env::var(k).ok().map(|v| (k.to_string(), v)))
 }
 
 // ── Wire protocol types ──
@@ -99,6 +81,10 @@ struct PtyChannel {
     resize_tx: mpsc::UnboundedSender<(u16, u16)>,
     /// The tmux-attach child process
     child: Box<dyn portable_pty::Child + Send>,
+    /// Accumulated scroll delta (coalesced across rapid requests)
+    scroll_pending: Arc<AtomicI32>,
+    /// Whether a scroll task is currently running for this channel
+    scroll_running: Arc<AtomicBool>,
 }
 
 /// The parts produced by blocking PTY setup, sent across the async boundary.
@@ -325,52 +311,69 @@ async fn handle_text_frame(
         }
 
         "close" => {
-            if let Some(ch) = frame.ch {
-                if let Some(mut channel) = channels.remove(&ch) {
-                    cleanup_channel(&mut channel);
-                    let msg = serde_json::json!({"type":"closed","ch":ch,"code":0});
-                    let _ = out_tx.send(Message::Text(msg.to_string().into()));
-                }
+            if let Some(ch) = frame.ch
+                && let Some(mut channel) = channels.remove(&ch)
+            {
+                cleanup_channel(&mut channel);
+                let msg = serde_json::json!({"type":"closed","ch":ch,"code":0});
+                let _ = out_tx.send(Message::Text(msg.to_string().into()));
             }
         }
 
         "resize" => {
-            if let Some(ch) = frame.ch {
-                if let Some(channel) = channels.get(&ch) {
-                    let cols = frame.cols.unwrap_or(80);
-                    let rows = frame.rows.unwrap_or(24);
-                    let _ = channel.resize_tx.send((cols, rows));
-                }
+            if let Some(ch) = frame.ch
+                && let Some(channel) = channels.get(&ch)
+            {
+                let cols = frame.cols.unwrap_or(80);
+                let rows = frame.rows.unwrap_or(24);
+                let _ = channel.resize_tx.send((cols, rows));
             }
         }
 
         "scroll" => {
-            if let (Some(ch), Some(lines)) = (frame.ch, frame.lines) {
-                if lines != 0 {
-                    if let Some(channel) = channels.get(&ch) {
-                        let group_session = channel.group_session.clone();
-                        let out_tx = out_tx.clone();
-                        tokio::task::spawn_blocking(move || {
-                            if let Err(error) = scroll_group_history(&group_session, lines) {
+            if let (Some(ch), Some(lines)) = (frame.ch, frame.lines)
+                && lines != 0
+                && let Some(channel) = channels.get(&ch)
+            {
+                // Coalesce rapid scroll requests: accumulate delta, run at
+                // most one tmux scroll task at a time per channel.
+                channel.scroll_pending.fetch_add(lines, Ordering::Relaxed);
+
+                if !channel.scroll_running.swap(true, Ordering::AcqRel) {
+                    let group_session = channel.group_session.clone();
+                    let out_tx = out_tx.clone();
+                    let pending = Arc::clone(&channel.scroll_pending);
+                    let running = Arc::clone(&channel.scroll_running);
+
+                    tokio::task::spawn_blocking(move || {
+                        loop {
+                            let delta = pending.swap(0, Ordering::AcqRel);
+                            if delta == 0 {
+                                break;
+                            }
+                            if let Err(error) = scroll_group_history(&group_session, delta) {
                                 tracing::debug!(
                                     "Failed to scroll tmux history for group '{}': {}",
                                     group_session,
                                     error
                                 );
-                                return;
+                                break;
                             }
-                            if let Ok((history, position)) = read_group_scroll_state(&group_session)
-                            {
-                                let msg = serde_json::json!({
-                                    "type": "scroll_state",
-                                    "ch": ch,
-                                    "history": history,
-                                    "position": position,
-                                });
-                                let _ = out_tx.send(Message::Text(msg.to_string().into()));
-                            }
-                        });
-                    }
+                        }
+                        // Send final state once after all coalesced scrolling
+                        if let Ok((history, position)) =
+                            read_group_scroll_state(&group_session)
+                        {
+                            let msg = serde_json::json!({
+                                "type": "scroll_state",
+                                "ch": ch,
+                                "history": history,
+                                "position": position,
+                            });
+                            let _ = out_tx.send(Message::Text(msg.to_string().into()));
+                        }
+                        running.store(false, Ordering::Release);
+                    });
                 }
             }
         }
@@ -445,6 +448,8 @@ async fn open_channel(
         input_tx,
         resize_tx,
         child: parts.child,
+        scroll_pending: Arc::new(AtomicI32::new(0)),
+        scroll_running: Arc::new(AtomicBool::new(false)),
     };
 
     match event_tx.send(MuxEvent::ChannelReady(ch_id, channel)) {
@@ -502,9 +507,7 @@ fn setup_pty_blocking(
         if attempt > 0 {
             std::thread::sleep(std::time::Duration::from_millis(200 * attempt as u64));
         }
-        let status = std::process::Command::new("tmux")
-            .env_clear()
-            .envs(clean_env_iter())
+        let status = tmux::tmux_cmd()
             .args([
                 "new-session",
                 "-d",
@@ -533,24 +536,18 @@ fn setup_pty_blocking(
     register_group(&group_session);
 
     // 3b. Hide tmux status bar — the web UI renders its own chrome
-    let _ = std::process::Command::new("tmux")
-        .env_clear()
-        .envs(clean_env_iter())
+    let _ = tmux::tmux_cmd()
         .args(["set-option", "-t", &group_session, "status", "off"])
         .status();
 
     // Disable tmux mouse mode so xterm.js handles mouse events locally.
     // This allows text selection & copy in the web UI.  Scrolling is
     // handled independently via the WebSocket scroll bridge.
-    let _ = std::process::Command::new("tmux")
-        .env_clear()
-        .envs(clean_env_iter())
+    let _ = tmux::tmux_cmd()
         .args(["set-option", "-t", &group_session, "mouse", "off"])
         .status();
 
-    let _ = std::process::Command::new("tmux")
-        .env_clear()
-        .envs(clean_env_iter())
+    let _ = tmux::tmux_cmd()
         .args([
             "set-option",
             "-t",
@@ -562,30 +559,29 @@ fn setup_pty_blocking(
 
     // Web UI sends tmux commands through the default prefix key sequence.
     // Pin grouped sessions to C-b so scroll/copy commands work regardless of user dotfiles.
-    let _ = std::process::Command::new("tmux")
-        .env_clear()
-        .envs(clean_env_iter())
+    let _ = tmux::tmux_cmd()
         .args(["set-option", "-t", &group_session, "prefix", "C-b"])
         .status();
 
-    let _ = std::process::Command::new("tmux")
-        .env_clear()
-        .envs(clean_env_iter())
+    let _ = tmux::tmux_cmd()
         .args(["set-option", "-t", &group_session, "prefix2", "None"])
         .status();
 
     // 4. Select the target window inside the grouped session
     if let Some(window_index) = window {
         let select_target = format!("{}:{}", group_session, window_index);
-        let _ = std::process::Command::new("tmux")
-            .env_clear()
-            .envs(clean_env_iter())
+        let _ = tmux::tmux_cmd()
             .args(["select-window", "-t", &select_target])
             .status();
     }
 
     // 5. Spawn tmux attach-session inside the PTY
     let mut cmd = CommandBuilder::new("tmux");
+    // Use isolated socket when configured (matches tmux_cmd())
+    if let Some(socket) = tmux::get_tmux_socket() {
+        cmd.arg("-L");
+        cmd.arg(socket);
+    }
     cmd.arg("attach-session");
     cmd.arg("-t");
     cmd.arg(&group_session);
@@ -613,7 +609,7 @@ fn setup_pty_blocking(
     let child = pair.slave.spawn_command(cmd).map_err(|e| {
         // Clean up grouped session on failure
         deregister_group(&group_session);
-        let _ = std::process::Command::new("tmux")
+        let _ = tmux::tmux_cmd()
             .args(["kill-session", "-t", &group_session])
             .status();
         format!("Failed to spawn tmux attach: {e}")
@@ -711,15 +707,11 @@ fn scroll_group_history(group_session: &str, lines: i32) -> Result<(), String> {
     let amount_str = amount.to_string();
 
     if lines < 0 {
-        let _ = std::process::Command::new("tmux")
-            .env_clear()
-            .envs(clean_env_iter())
+        let _ = tmux::tmux_cmd()
             .args(["copy-mode", "-e", "-t", group_session])
             .status();
 
-        let status = std::process::Command::new("tmux")
-            .env_clear()
-            .envs(clean_env_iter())
+        let status = tmux::tmux_cmd()
             .args([
                 "send-keys",
                 "-t",
@@ -736,9 +728,7 @@ fn scroll_group_history(group_session: &str, lines: i32) -> Result<(), String> {
             return Err(format!("tmux send-keys scroll-up exited with {status}"));
         }
     } else {
-        let status = std::process::Command::new("tmux")
-            .env_clear()
-            .envs(clean_env_iter())
+        let status = tmux::tmux_cmd()
             .args([
                 "send-keys",
                 "-t",
@@ -760,9 +750,7 @@ fn scroll_group_history(group_session: &str, lines: i32) -> Result<(), String> {
 }
 
 fn read_group_scroll_state(group_session: &str) -> Result<(u32, u32), String> {
-    let output = std::process::Command::new("tmux")
-        .env_clear()
-        .envs(clean_env_iter())
+    let output = tmux::tmux_cmd()
         .args([
             "display-message",
             "-t",
@@ -817,7 +805,7 @@ fn cleanup_channel(channel: &mut PtyChannel) {
 
     // Kill the grouped tmux session synchronously — fast (~5ms) and MUST
     // complete before return to avoid racing with a reconnecting client.
-    let _ = std::process::Command::new("tmux")
+    let _ = tmux::tmux_cmd()
         .args(["kill-session", "-t", &channel.group_session])
         .status();
 

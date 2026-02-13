@@ -4,3 +4,4 @@ pub mod config_store;
 pub mod install;
 pub mod system;
 pub mod tmux;
+pub mod updater;

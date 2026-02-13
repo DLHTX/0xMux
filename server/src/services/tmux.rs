@@ -4,10 +4,23 @@ use crate::models::window::TmuxWindow;
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
 use std::process::Command;
-use std::sync::LazyLock;
+use std::sync::{LazyLock, OnceLock};
 
 static SESSION_NAME_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^[a-zA-Z0-9_.-]+$").unwrap());
+
+/// Global tmux socket name. Set once at startup via `init_tmux_socket`.
+static TMUX_SOCKET: OnceLock<Option<String>> = OnceLock::new();
+
+/// Initialize the global tmux socket name. Call once at startup.
+pub fn init_tmux_socket(socket: Option<String>) {
+    TMUX_SOCKET.set(socket).ok();
+}
+
+/// Get the configured tmux socket name (if any).
+pub fn get_tmux_socket() -> Option<&'static str> {
+    TMUX_SOCKET.get().and_then(|s| s.as_deref())
+}
 
 /// Build a `Command` for tmux with a clean environment.
 ///
@@ -18,7 +31,8 @@ static SESSION_NAME_RE: LazyLock<Regex> =
 /// exits — which destroys the session and potentially the whole tmux server.
 ///
 /// We solve this by giving tmux a minimal, known-good environment.
-fn tmux_cmd() -> Command {
+/// If `--tmux-socket` was set, adds `-L <name>` to use an isolated tmux server.
+pub fn tmux_cmd() -> Command {
     let mut cmd = Command::new("tmux");
     cmd.env_clear();
     // Only pass through the essentials
@@ -41,6 +55,10 @@ fn tmux_cmd() -> Command {
     // Ensure TERM is set (tmux needs it)
     if std::env::var("TERM").is_err() {
         cmd.env("TERM", "xterm-256color");
+    }
+    // Use named socket for isolation if configured
+    if let Some(socket) = get_tmux_socket() {
+        cmd.args(["-L", socket]);
     }
     cmd
 }
@@ -66,14 +84,14 @@ pub fn cleanup_orphaned_groups() {
         .args(["list-sessions", "-F", "#{session_name}"])
         .output();
 
-    if let Ok(out) = output {
-        if out.status.success() {
-            let stdout = String::from_utf8_lossy(&out.stdout);
-            for name in stdout.lines() {
-                if name.starts_with("_0xmux_") {
-                    let _ = tmux_cmd().args(["kill-session", "-t", name]).status();
-                    tracing::info!("Cleaned up orphaned grouped session: {name}");
-                }
+    if let Ok(out) = output
+        && out.status.success()
+    {
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        for name in stdout.lines() {
+            if name.starts_with("_0xmux_") {
+                let _ = tmux_cmd().args(["kill-session", "-t", name]).status();
+                tracing::info!("Cleaned up orphaned grouped session: {name}");
             }
         }
     }
@@ -86,14 +104,14 @@ pub fn gc_orphaned_groups(active: &HashSet<String>) {
         .args(["list-sessions", "-F", "#{session_name}"])
         .output();
 
-    if let Ok(out) = output {
-        if out.status.success() {
-            let stdout = String::from_utf8_lossy(&out.stdout);
-            for name in stdout.lines() {
-                if name.starts_with("_0xmux_") && !active.contains(name) {
-                    let _ = tmux_cmd().args(["kill-session", "-t", name]).status();
-                    tracing::info!("GC: reaped orphaned grouped session: {name}");
-                }
+    if let Ok(out) = output
+        && out.status.success()
+    {
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        for name in stdout.lines() {
+            if name.starts_with("_0xmux_") && !active.contains(name) {
+                let _ = tmux_cmd().args(["kill-session", "-t", name]).status();
+                tracing::info!("GC: reaped orphaned grouped session: {name}");
             }
         }
     }

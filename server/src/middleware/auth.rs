@@ -30,10 +30,10 @@ pub async fn auth_middleware(
     }
 
     // 如果跳过了密码设置，允许所有请求（无需token）
-    if let Ok(config) = PersistentConfig::load() {
-        if config.password_skipped {
-            return Ok(next.run(request).await);
-        }
+    if let Ok(config) = PersistentConfig::load()
+        && config.password_skipped
+    {
+        return Ok(next.run(request).await);
     }
 
     // 提取token（按优先级）

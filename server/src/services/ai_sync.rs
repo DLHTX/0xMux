@@ -1092,9 +1092,9 @@ fn discover_claude_seed_skills(claude_home: &Path) -> Result<Vec<SkillSource>, A
 
         let id = if relative.ends_with("/SKILL.md") {
             relative.trim_end_matches("/SKILL.md").to_string()
-        } else if relative.starts_with("commands/") && relative.ends_with(".md") {
-            relative.trim_end_matches(".md").to_string()
-        } else if relative.starts_with("agents/") && relative.ends_with(".md") {
+        } else if (relative.starts_with("commands/") || relative.starts_with("agents/"))
+            && relative.ends_with(".md")
+        {
             relative.trim_end_matches(".md").to_string()
         } else {
             continue;
@@ -1893,7 +1893,7 @@ fn codex_home() -> PathBuf {
 }
 
 fn codex_skill_target(codex_home: &Path, skill_id: &str) -> PathBuf {
-    let safe_id = skill_id.replace('/', "__").replace('\\', "__");
+    let safe_id = skill_id.replace(['/', '\\'], "__");
     codex_home.join("skills").join(safe_id).join("SKILL.md")
 }
 

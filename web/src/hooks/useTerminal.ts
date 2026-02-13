@@ -111,7 +111,7 @@ export function useTerminal(options: UseTerminalOptions = {}) {
     if (interactionTarget) {
       let touchY: number | null = null
       let touchLineRemainder = 0
-      let lastWheelRemoteAt = 0
+      let lastRemoteScrollAt = 0
 
       const canUseLocalHistory = () => terminal.buffer.active === terminal.buffer.normal
 
@@ -132,11 +132,11 @@ export function useTerminal(options: UseTerminalOptions = {}) {
         const absLines = Math.abs(Math.trunc(deltaLines))
         if (absLines <= 0) return false
 
-        if (source === 'wheel') {
-          const now = Date.now()
-          if (now - lastWheelRemoteAt < 16) return true
-          lastWheelRemoteAt = now
-        }
+        // Throttle both wheel and touch: at most one remote scroll every 32ms.
+        // Prevents flooding the server with tmux scroll commands on mobile.
+        const now = Date.now()
+        if (now - lastRemoteScrollAt < 32) return true
+        lastRemoteScrollAt = now
 
         const maxStep = source === 'wheel' ? 15 : 12
         const step = Math.max(1, Math.min(maxStep, absLines))

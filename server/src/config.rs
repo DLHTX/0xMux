@@ -12,6 +12,11 @@ pub struct ServerConfig {
 
     #[arg(long, default_value = "0.0.0.0", env = "HOST")]
     pub host: String,
+
+    /// Use a named tmux socket (-L). Allows multiple 0xMux instances with
+    /// completely isolated tmux sessions (e.g. `--tmux-socket 0xmux-dev`).
+    #[arg(long, env = "TMUX_SOCKET")]
+    pub tmux_socket: Option<String>,
 }
 
 impl ServerConfig {

@@ -50,10 +50,13 @@ fn get_local_ips() -> Vec<String> {
 pub async fn config_handler(State(state): State<AppState>) -> impl IntoResponse {
     let local_ips = get_local_ips();
 
+    let latest_version = crate::services::updater::latest_version();
+
     Json(serde_json::json!({
         "port": state.config.port,
         "host": state.config.host,
         "version": env!("CARGO_PKG_VERSION"),
+        "latest_version": latest_version,
         "local_ips": local_ips,
     }))
 }

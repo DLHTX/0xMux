@@ -11,6 +11,7 @@ pub struct AppState {
     pub session_tx: broadcast::Sender<String>,
     pub config: Arc<ServerConfig>,
     pub install_manager: Arc<InstallManager>,
+    #[allow(dead_code)]
     pub pty_sessions: Arc<RwLock<HashMap<String, PtySession>>>,
     pub auth_service: Arc<AuthService>,
 }
