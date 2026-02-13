@@ -14,6 +14,7 @@ env:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - target: aarch64-apple-darwin
@@ -116,7 +117,7 @@ jobs:
       - name: Update main package version
         run: |
           cd npm/0xmux
-          npm version ${{ steps.version.outputs.version }} --no-git-tag-version
+          npm version ${{ steps.version.outputs.version }} --no-git-tag-version --allow-same-version
           # Update optional deps versions
           node -e "
             const pkg = require('./package.json');
