@@ -57,6 +57,16 @@ const en = {
   'dep.installFail': '[x] Installation failed',
   'dep.tryManually': 'Try manually:',
 
+  // Terminal errors
+  'terminal.ptyExhausted': 'PTY Exhausted',
+  'terminal.ptyExhaustedHint': 'System pseudo-terminals (PTY) exhausted. Zombie processes may be occupying resources. Please clean up and retry.',
+  'terminal.channelError': 'Channel Error',
+  'terminal.reconnect': 'Reconnect',
+  'terminal.retry': 'Retry',
+  'terminal.connecting': 'Connecting...',
+  'terminal.reconnecting': 'Reconnecting...',
+  'terminal.exitCode': 'Process exited with code {code}',
+
   // App
   'app.initializing': 'initializing...',
 
@@ -123,6 +133,15 @@ const zh: typeof en = {
   'dep.installOk': '[ok] 安装完成',
   'dep.installFail': '[x] 安装失败',
   'dep.tryManually': '手动尝试：',
+
+  'terminal.ptyExhausted': 'PTY 耗尽',
+  'terminal.ptyExhaustedHint': '系统伪终端(PTY)已用完，可能有僵尸进程占用资源。请清理后重试。',
+  'terminal.channelError': '通道错误',
+  'terminal.reconnect': '重新连接',
+  'terminal.retry': '重试',
+  'terminal.connecting': '连接中...',
+  'terminal.reconnecting': '重连中...',
+  'terminal.exitCode': '进程退出，代码 {code}',
 
   'app.initializing': '初始化中...',
 

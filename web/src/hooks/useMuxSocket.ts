@@ -287,9 +287,19 @@ export function useMuxSocket(): UseMuxSocketReturn {
   useEffect(() => {
     mountedRef.current = true
     connect()
+
+    // Ensure WS is closed immediately on page refresh / navigation so the
+    // server can start cleaning up PTYs before the new page reconnects.
+    const handleBeforeUnload = () => {
+      wsRef.current?.close()
+      wsRef.current = null
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+
     return () => {
       mountedRef.current = false
       cleanup()
+      window.removeEventListener('beforeunload', handleBeforeUnload)
       wsRef.current?.close()
       wsRef.current = null
     }

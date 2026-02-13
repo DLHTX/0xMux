@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Icon } from '@iconify/react'
 import { IconPuzzle, IconSettings } from '../../lib/icons'
 import type { ConnectionStatus } from '../../lib/types'
 import { ThemeConfigurator } from '../settings/ThemeConfigurator'
 import { Logo } from './Logo'
+import { getHealth } from '../../lib/api'
 
 interface HeaderProps {
   connectionStatus: ConnectionStatus
@@ -21,6 +22,19 @@ export function Header({
   onLogoClick,
 }: HeaderProps) {
   const [showConfig, setShowConfig] = useState(false)
+  const [ptyCount, setPtyCount] = useState<number | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    const poll = () => {
+      getHealth()
+        .then((r) => { if (!cancelled) setPtyCount(r.pty_count ?? 0) })
+        .catch(() => {})
+    }
+    poll()
+    const id = setInterval(poll, 5_000)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [])
 
   const statusConfig: Record<ConnectionStatus, { dotClass: string; label: string }> = {
     connected: { dotClass: 'bg-[var(--color-success)]', label: 'Connected' },
@@ -43,8 +57,18 @@ export function Header({
       <header
         className="flex items-center justify-between px-3 md:px-4 border-b-[length:var(--border-w)] border-[var(--color-border)] bg-[var(--color-bg)] shrink-0 h-10 md:h-12"
       >
-        {/* Left: Logo */}
-        <Logo onClick={onLogoClick} />
+        {/* Left: Logo + PTY count */}
+        <div className="flex items-center gap-2">
+          <Logo onClick={onLogoClick} />
+          {ptyCount != null && (
+            <span
+              className="text-[10px] font-bold px-1.5 py-0.5 rounded-[var(--radius)] border-[length:var(--border-w)] border-[var(--color-border)] text-[var(--color-fg-muted)]"
+              title="Active PTY sessions"
+            >
+              PTY {ptyCount}
+            </span>
+          )}
+        </div>
 
         {/* Right: status + settings */}
         <div className="flex items-center gap-3">

@@ -102,6 +102,7 @@ export interface InstallRequest {
 export interface HealthResponse {
   status: string
   version: string
+  pty_count?: number
 }
 
 export interface ConfigResponse {

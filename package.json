@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "bash ./scripts/dev.sh",
     "dev:web": "cd web && bunx vite build --watch",
-    "dev:api": "cd server && cargo watch -q -c -w src -x run",
+    "dev:api": "cd server && cargo watch -q -c -w src -x 'run -- --port 1235'",
     "build": "bun run build:web && bun run build:server",
     "build:web": "cd web && bun run build",
     "build:server": "cd server && cargo build --release --features embed-frontend",

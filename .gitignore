@@ -21,8 +21,8 @@ Thumbs.db
 
 node_modules/
 
-# npm distribution build artifacts
-npm/
+# npm distribution build artifacts (keep npm/ tracked for CI templates)
+npm/@0xmux/
 *.tgz
 .claude/
 .playwright-mcp

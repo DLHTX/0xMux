@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTerminal } from '../../hooks/useTerminal'
 import { useMux } from '../../contexts/MuxContext'
 import { useMobile } from '../../hooks/useMobile'
+import { useI18n } from '../../hooks/useI18n'
 import { consumePendingInit } from '../../lib/init-commands'
 import type { MuxChannelHandle } from '../../hooks/useMuxSocket'
 
@@ -26,10 +27,12 @@ export function TerminalPane({
   mobileBottomOffset = 0,
 }: TerminalPaneProps) {
   const mux = useMux()
+  const { t } = useI18n()
   const chRef = useRef<MuxChannelHandle | null>(null)
 
   const [channelOpen, setChannelOpen] = useState(false)
   const [exitCode, setExitCode] = useState<number | null>(null)
+  const [channelError, setChannelError] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
   const [scrollIndicator, setScrollIndicator] = useState<{ visible: boolean; top: number; height: number }>({
     visible: false,
@@ -101,6 +104,7 @@ export function TerminalPane({
       onOutput: (data: Uint8Array) => write(data),
       onOpen: () => {
         setChannelOpen(true)
+        setChannelError(null)
         setTmuxScrollState(null)
         setTmuxScrollProgress(1)
         // If this window was freshly created with an init command, send it
@@ -111,7 +115,7 @@ export function TerminalPane({
         }
       },
       onClose: (code: number) => setExitCode(code),
-      onError: () => {},
+      onError: (message: string) => setChannelError(message),
       onScrollState: ({ history, position }) => {
         const clampedHistory = Math.max(0, history)
         const clampedPosition = Math.max(0, Math.min(clampedHistory, position))
@@ -126,6 +130,7 @@ export function TerminalPane({
     chRef.current = handle
     setChannelOpen(false)
     setExitCode(null)
+    setChannelError(null)
 
     return () => {
       // Close the channel when this TerminalPane unmounts
@@ -368,8 +373,9 @@ export function TerminalPane({
   })()
 
   // Derive connection status from mux status + channel state
-  const isConnecting = mux.status === 'connecting' || (mux.status === 'connected' && !channelOpen && exitCode === null)
-  const isDisconnected = mux.status === 'disconnected' && exitCode === null
+  const isPtyExhausted = channelError?.includes('PTY_EXHAUSTED') ?? false
+  const isConnecting = !isPtyExhausted && (mux.status === 'connecting' || (mux.status === 'connected' && !channelOpen && exitCode === null && !channelError))
+  const isDisconnected = mux.status === 'disconnected' && exitCode === null && !channelError
 
   return (
     <div
@@ -378,7 +384,10 @@ export function TerminalPane({
       style={{ height: '100%', background: '#0a0a0a' }}
       onClick={() => {
         onFocus?.()
-        focus()
+        // Don't re-focus when user just finished a text selection (would clear it)
+        if (!terminal.current?.hasSelection()) {
+          focus()
+        }
         if (isMobile) {
           requestAnimationFrame(() => syncBottomForMobileInput())
         }
@@ -412,8 +421,52 @@ export function TerminalPane({
       {isConnecting && (
         <div className="absolute inset-0 flex items-center justify-center bg-[#0a0a0a]/80 z-10">
           <span className="text-xs text-[#00ff41] animate-pulse font-mono">
-            Connecting...
+            {t('terminal.connecting')}
           </span>
+        </div>
+      )}
+
+      {isPtyExhausted && (
+        <div className="absolute inset-0 flex items-center justify-center bg-[#0a0a0a]/90 z-10">
+          <div className="text-center max-w-[280px]">
+            <span className="text-sm text-[var(--color-danger)] font-mono block mb-2">
+              {t('terminal.ptyExhausted')}
+            </span>
+            <span className="text-[10px] text-[var(--color-fg-muted)] font-mono block mb-3 leading-relaxed">
+              {t('terminal.ptyExhaustedHint')}
+            </span>
+            <button
+              onClick={() => {
+                setChannelError(null)
+                window.location.reload()
+              }}
+              className="text-xs font-mono px-3 py-1 border border-[var(--color-danger)] text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10"
+            >
+              {t('terminal.reconnect')}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {channelError && !isPtyExhausted && (
+        <div className="absolute inset-0 flex items-center justify-center bg-[#0a0a0a]/90 z-10">
+          <div className="text-center max-w-[280px]">
+            <span className="text-xs text-[var(--color-warning)] font-mono block mb-2">
+              {t('terminal.channelError')}
+            </span>
+            <span className="text-[10px] text-[var(--color-fg-muted)] font-mono block mb-3 leading-relaxed break-all">
+              {channelError}
+            </span>
+            <button
+              onClick={() => {
+                setChannelError(null)
+                window.location.reload()
+              }}
+              className="text-xs font-mono px-3 py-1 border border-[var(--color-warning)] text-[var(--color-warning)] hover:bg-[var(--color-warning)]/10"
+            >
+              {t('terminal.retry')}
+            </button>
+          </div>
         </div>
       )}
 
@@ -421,7 +474,7 @@ export function TerminalPane({
         <div className="absolute inset-0 flex items-center justify-center bg-[#0a0a0a]/80 z-10">
           <div className="text-center">
             <span className="text-xs text-[var(--color-warning)] font-mono block mb-2">
-              Reconnecting...
+              {t('terminal.reconnecting')}
             </span>
             <div className="w-4 h-4 border-2 border-[var(--color-warning)] border-t-transparent rounded-full animate-spin mx-auto" />
           </div>
@@ -432,7 +485,7 @@ export function TerminalPane({
         <div className="absolute inset-0 flex items-center justify-center bg-[#0a0a0a]/80 z-10">
           <div className="text-center">
             <span className="text-xs text-[var(--color-fg-muted)] font-mono block mb-2">
-              Process exited with code {exitCode}
+              {t('terminal.exitCode', { code: String(exitCode) })}
             </span>
             <button
               onClick={() => {
@@ -441,7 +494,7 @@ export function TerminalPane({
               }}
               className="text-xs font-mono px-3 py-1 border border-[#00ff41] text-[#00ff41] hover:bg-[#00ff41]/10"
             >
-              Reconnect
+              {t('terminal.reconnect')}
             </button>
           </div>
         </div>

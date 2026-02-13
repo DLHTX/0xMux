@@ -11,10 +11,14 @@ use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 use std::io::Read;
 use std::sync::{Arc, LazyLock, Mutex};
-use tokio::sync::{Notify, mpsc};
+use tokio::sync::{Notify, Semaphore, mpsc};
 
 use crate::services::tmux;
 use crate::state::AppState;
+
+/// Limit concurrent PTY+tmux-session creation to 1 at a time.
+/// macOS `openpty`/`forkpty` fails with ENXIO when too many calls race.
+static PTY_SETUP_SEMAPHORE: LazyLock<Semaphore> = LazyLock::new(|| Semaphore::new(1));
 
 // ── Global registry of active `_0xmux_*` grouped sessions ──
 // Tracked so the periodic GC and shutdown handler know which sessions are
@@ -165,6 +169,11 @@ async fn handle_mux_socket(socket: WebSocket, state: AppState) {
     }
 
     // ── Main event loop ──
+    // Client sends a ping every 30s; if we hear nothing for 45s the connection
+    // is almost certainly dead (tab closed, network lost, etc.).
+    let client_timeout = tokio::time::Duration::from_secs(45);
+    let mut deadline = tokio::time::Instant::now() + client_timeout;
+
     loop {
         tokio::select! {
             // Internal events from background tasks
@@ -219,6 +228,7 @@ async fn handle_mux_socket(socket: WebSocket, state: AppState) {
             msg = ws_receiver.next() => {
                 match msg {
                     Some(Ok(Message::Text(text))) => {
+                        deadline = tokio::time::Instant::now() + client_timeout;
                         handle_text_frame(
                             &text,
                             &mut channels,
@@ -227,19 +237,34 @@ async fn handle_mux_socket(socket: WebSocket, state: AppState) {
                         ).await;
                     }
                     Some(Ok(Message::Binary(data))) => {
+                        deadline = tokio::time::Instant::now() + client_timeout;
                         handle_binary_frame(&data, &channels);
                     }
                     Some(Ok(Message::Close(_))) | None => break,
-                    _ => {}
+                    _ => {
+                        deadline = tokio::time::Instant::now() + client_timeout;
+                    }
                 }
+            }
+
+            // No client message received within timeout — connection is dead
+            _ = tokio::time::sleep_until(deadline) => {
+                tracing::warn!("MuxSocket client timed out (no data for {client_timeout:?}), closing");
+                break;
             }
         }
     }
 
     // ── Cleanup on disconnect ──
-    for (_, mut ch) in channels.drain() {
-        cleanup_channel(&mut ch);
-    }
+    // Run in spawn_blocking so we don't stall the tokio runtime, but each
+    // channel's tmux kill-session finishes synchronously before returning —
+    // this prevents races with a reconnecting client's tmux new-session.
+    let cleanup_task = tokio::task::spawn_blocking(move || {
+        for (_, mut ch) in channels.drain() {
+            cleanup_channel(&mut ch);
+        }
+    });
+    let _ = cleanup_task.await;
     shutdown.notify_waiters();
     let _ = sender_task.await;
 
@@ -285,10 +310,14 @@ async fn handle_text_frame(
 
             // Spawn channel creation in background (involves blocking I/O)
             let event_tx = event_tx.clone();
+            tracing::info!("Opening channel {ch} for {session} window {window:?}");
             tokio::spawn(async move {
                 match open_channel(ch, session, window, cols, rows, event_tx.clone()).await {
-                    Ok(()) => {} // ChannelReady sent inside open_channel
+                    Ok(()) => {
+                        tracing::info!("Channel {ch} opened successfully");
+                    }
                     Err(e) => {
+                        tracing::error!("Channel {ch} open failed: {e}");
                         let _ = event_tx.send(MuxEvent::ChannelError(ch, e));
                     }
                 }
@@ -377,11 +406,17 @@ async fn open_channel(
     rows: u16,
     event_tx: mpsc::UnboundedSender<MuxEvent>,
 ) -> Result<(), String> {
+    // Serialize PTY creation — concurrent openpty/forkpty on macOS causes ENXIO
+    let permit = PTY_SETUP_SEMAPHORE.acquire().await.map_err(|e| format!("Semaphore closed: {e}"))?;
+
     // Run all blocking PTY setup in a single spawn_blocking
     let parts =
         tokio::task::spawn_blocking(move || setup_pty_blocking(&session_name, window, cols, rows))
             .await
             .map_err(|e| format!("PTY setup task panicked: {e}"))??;
+
+    // Release permit immediately — only the setup phase needs serialization
+    drop(permit);
 
     // Create input channel for PTY writer
     let (input_tx, input_rx) = mpsc::unbounded_channel::<Vec<u8>>();
@@ -448,30 +483,49 @@ fn setup_pty_blocking(
         pixel_width: 0,
         pixel_height: 0,
     };
-    let pair = pty_system
-        .openpty(pty_size)
-        .map_err(|e| format!("Failed to open PTY: {e}"))?;
+    let pair = pty_system.openpty(pty_size).map_err(|e| {
+        let msg = e.to_string();
+        if msg.contains("Device not configured") || msg.contains("out of pty") {
+            format!("PTY_EXHAUSTED: 系统伪终端(PTY)已耗尽，请清理僵尸进程后重试 ({e})")
+        } else {
+            format!("Failed to open PTY: {e}")
+        }
+    })?;
 
     // 3. Create a grouped tmux session for independent window tracking
+    //    Retry up to 3 times — on page refresh the old connection's cleanup may
+    //    still be running `tmux kill-session`, causing a brief race.
     let group_session = format!("_0xmux_{}", uuid::Uuid::new_v4().simple());
 
-    let status = std::process::Command::new("tmux")
-        .env_clear()
-        .envs(clean_env_iter())
-        .args([
-            "new-session",
-            "-d",
-            "-t",
-            session_name,
-            "-s",
-            &group_session,
-        ])
-        .status()
-        .map_err(|e| format!("Failed to create grouped session: {e}"))?;
+    let mut last_status = None;
+    for attempt in 0..3 {
+        if attempt > 0 {
+            std::thread::sleep(std::time::Duration::from_millis(200 * attempt as u64));
+        }
+        let status = std::process::Command::new("tmux")
+            .env_clear()
+            .envs(clean_env_iter())
+            .args([
+                "new-session",
+                "-d",
+                "-t",
+                session_name,
+                "-s",
+                &group_session,
+            ])
+            .status()
+            .map_err(|e| format!("Failed to create grouped session: {e}"))?;
 
-    if !status.success() {
+        if status.success() {
+            last_status = None;
+            break;
+        }
+        last_status = Some(status);
+    }
+
+    if let Some(status) = last_status {
         return Err(format!(
-            "tmux new-session (group) exited with {status} for '{session_name}'"
+            "PTY_EXHAUSTED: tmux 创建分组会话失败(exit {status})，可能是系统PTY耗尽，请清理僵尸进程"
         ));
     }
 
@@ -485,11 +539,13 @@ fn setup_pty_blocking(
         .args(["set-option", "-t", &group_session, "status", "off"])
         .status();
 
-    // Ensure wheel events can drive tmux history inside attached clients.
+    // Disable tmux mouse mode so xterm.js handles mouse events locally.
+    // This allows text selection & copy in the web UI.  Scrolling is
+    // handled independently via the WebSocket scroll bridge.
     let _ = std::process::Command::new("tmux")
         .env_clear()
         .envs(clean_env_iter())
-        .args(["set-option", "-t", &group_session, "mouse", "on"])
+        .args(["set-option", "-t", &group_session, "mouse", "off"])
         .status();
 
     let _ = std::process::Command::new("tmux")
@@ -745,16 +801,22 @@ fn read_group_scroll_state(group_session: &str) -> Result<(u32, u32), String> {
     Ok((history, position.min(history)))
 }
 
-/// Clean up a single channel: kill child, kill grouped tmux session, deregister.
+/// Clean up a single channel: kill child, reap it, kill grouped tmux session.
 fn cleanup_channel(channel: &mut PtyChannel) {
     // Dropping input_tx and resize_tx will cause the writer/resize threads to exit
     // (their blocking_recv returns None)
+
+    // Kill and reap the tmux-attach child process.  SIGKILL is unblockable so
+    // wait() returns almost instantly, and reaping the zombie is what actually
+    // releases the PTY file descriptors back to the OS.
     channel.child.kill().ok();
     channel.child.wait().ok();
 
     // Remove from global active set BEFORE killing tmux session
     deregister_group(&channel.group_session);
 
+    // Kill the grouped tmux session synchronously — fast (~5ms) and MUST
+    // complete before return to avoid racing with a reconnecting client.
     let _ = std::process::Command::new("tmux")
         .args(["kill-session", "-t", &channel.group_session])
         .status();

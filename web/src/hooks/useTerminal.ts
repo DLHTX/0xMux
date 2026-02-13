@@ -134,11 +134,11 @@ export function useTerminal(options: UseTerminalOptions = {}) {
 
         if (source === 'wheel') {
           const now = Date.now()
-          if (now - lastWheelRemoteAt < 70) return true
+          if (now - lastWheelRemoteAt < 16) return true
           lastWheelRemoteAt = now
         }
 
-        const maxStep = source === 'wheel' ? 3 : 6
+        const maxStep = source === 'wheel' ? 15 : 12
         const step = Math.max(1, Math.min(maxStep, absLines))
         options.onScrollRequest((deltaLines < 0 ? -1 : 1) * step)
         return true
@@ -147,7 +147,7 @@ export function useTerminal(options: UseTerminalOptions = {}) {
       const onWheel = (event: WheelEvent) => {
         const rawLines = event.deltaMode === 1 ? event.deltaY : event.deltaY / 36
         if (Math.abs(rawLines) < 0.2) return
-        const lines = (rawLines < 0 ? -1 : 1) * Math.max(1, Math.min(4, Math.round(Math.abs(rawLines))))
+        const lines = (rawLines < 0 ? -1 : 1) * Math.max(1, Math.min(15, Math.round(Math.abs(rawLines))))
         if (scrollByDelta(lines) || requestRemoteScroll(lines, 'wheel')) {
           event.preventDefault()
         }

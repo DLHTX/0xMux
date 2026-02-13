@@ -11,7 +11,7 @@ import { useSessions } from './hooks/useSessions'
 import { useDeps } from './hooks/useDeps'
 import { useSplitLayout } from './hooks/useSplitLayout'
 import { useSettings } from './hooks/useSettings'
-import { useMobile } from './hooks/useMobile'
+import { useMobile, useCompact } from './hooks/useMobile'
 import { useToast } from './hooks/useToast'
 import { useAuth } from './hooks/useAuth'
 import { useImagePaste } from './hooks/useImagePaste'
@@ -70,20 +70,6 @@ function AppContent() {
   const mux = useMux()
   const { deps, loading: depsLoading, allReady, installPackage } = useDeps()
 
-  const [showCreate, setShowCreate] = useState(false)
-  const [showSettings, setShowSettings] = useState(false)
-  const [showPluginCenter, setShowPluginCenter] = useState(false)
-  const [selectedWindow, setSelectedWindow] = useState<{ sessionName: string; windowIndex: number } | null>(null)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const [mobileView, setMobileView] = useState<MobileView>('sessions')
-  const [windows, setWindows] = useState<Map<string, TmuxWindow[]>>(new Map())
-  const [aiStatus, setAiStatus] = useState<AiStatusResponse | null>(null)
-  const [aiCatalog, setAiCatalog] = useState<AiCatalogResponse | null>(null)
-  const [aiSyncResult, setAiSyncResult] = useState<AiSyncResponse | null>(null)
-  const [aiUninstallResult, setAiUninstallResult] = useState<AiUninstallResponse | null>(null)
-  const [aiLoading, setAiLoading] = useState(false)
-  const [aiSyncing, setAiSyncing] = useState(false)
-
   const { settings } = useSettings()
   const {
     layout,
@@ -106,7 +92,22 @@ function AppContent() {
     getAllTrackedWindowKeys,
   } = useSplitLayout()
   const isMobile = useMobile()
+  const isCompact = useCompact()
   const { toasts, addToast, removeToast } = useToast()
+
+  const [showCreate, setShowCreate] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
+  const [showPluginCenter, setShowPluginCenter] = useState(false)
+  const [selectedWindow, setSelectedWindow] = useState<{ sessionName: string; windowIndex: number } | null>(null)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(isCompact)
+  const [mobileView, setMobileView] = useState<MobileView>('sessions')
+  const [windows, setWindows] = useState<Map<string, TmuxWindow[]>>(new Map())
+  const [aiStatus, setAiStatus] = useState<AiStatusResponse | null>(null)
+  const [aiCatalog, setAiCatalog] = useState<AiCatalogResponse | null>(null)
+  const [aiSyncResult, setAiSyncResult] = useState<AiSyncResponse | null>(null)
+  const [aiUninstallResult, setAiUninstallResult] = useState<AiUninstallResponse | null>(null)
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiSyncing, setAiSyncing] = useState(false)
   const mobileTerminalRef = useRef<Terminal | null>(null)
   const activeTerminalRef = useRef<Terminal | null>(null)
 
@@ -219,6 +220,11 @@ function AppContent() {
   )
 
   const needsSetup = deps && !allReady
+
+  // Auto-collapse sidebar on compact screens (foldables / small tablets)
+  useEffect(() => {
+    setSidebarCollapsed(isCompact)
+  }, [isCompact])
 
   useEffect(() => {
     if (!authStatus?.authenticated || needsSetup) return

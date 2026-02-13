@@ -3,9 +3,11 @@ use axum::{Json, extract::State, response::IntoResponse};
 use crate::state::AppState;
 
 pub async fn health_handler() -> impl IntoResponse {
+    let pty_count = crate::ws::mux::active_group_names().len();
     Json(serde_json::json!({
         "status": "ok",
-        "version": env!("CARGO_PKG_VERSION")
+        "version": env!("CARGO_PKG_VERSION"),
+        "pty_count": pty_count
     }))
 }
 
