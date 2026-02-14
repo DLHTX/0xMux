@@ -34,15 +34,16 @@ pub fn spawn_session_watcher(tx: broadcast::Sender<String>) {
     });
 }
 
-/// Periodically reap orphaned `_0xmux_*` grouped sessions that are not in the
-/// active channel registry.  Runs every 30 seconds as a safety net for any
-/// cleanup failures (server crash recovery is handled at startup).
+/// Periodically reap orphaned grouped sessions owned by THIS instance that are
+/// not in the active channel registry.  Runs every 30 seconds as a safety net
+/// for cleanup failures (server crash recovery is handled at startup).
 pub fn spawn_group_gc() {
-    tokio::spawn(async {
+    let prefix = mux::instance_prefix().to_string();
+    tokio::spawn(async move {
         loop {
             tokio::time::sleep(std::time::Duration::from_secs(30)).await;
             let active = mux::active_group_names();
-            tmux::gc_orphaned_groups(&active);
+            tmux::gc_orphaned_groups(&prefix, &active);
         }
     });
 }

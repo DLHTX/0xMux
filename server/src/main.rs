@@ -33,8 +33,9 @@ async fn main() {
         )
         .init();
 
-    // Clean up orphaned grouped sessions from previous server crashes
-    services::tmux::cleanup_orphaned_groups();
+    // Clean up ALL orphaned grouped sessions from previous server crashes.
+    // Uses the generic "_0xmux_" prefix to catch sessions from any instance.
+    services::tmux::cleanup_orphaned_groups("_0xmux_");
 
     let config = ServerConfig::parse();
     let addr = config.addr();
@@ -125,9 +126,8 @@ async fn main() {
         std::process::exit(1);
     }
 
-    // Final safety net: kill any remaining grouped sessions after all WS
-    // connections have been drained.
+    // Final safety net: kill remaining grouped sessions owned by THIS instance.
     tracing::info!("Cleaning up remaining grouped sessions…");
-    services::tmux::cleanup_orphaned_groups();
+    services::tmux::cleanup_orphaned_groups(ws::mux::instance_prefix());
     tracing::info!("0xMux server stopped.");
 }

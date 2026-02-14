@@ -22,6 +22,20 @@ use crate::state::AppState;
 /// macOS `openpty`/`forkpty` fails with ENXIO when too many calls race.
 static PTY_SETUP_SEMAPHORE: LazyLock<Semaphore> = LazyLock::new(|| Semaphore::new(1));
 
+/// Unique prefix for this server instance's grouped sessions.
+/// Format: `_0xmux_{instance_id}_`.  Multiple servers sharing the same tmux
+/// socket each have their own prefix so GC only kills sessions that THIS
+/// instance created — preventing cross-instance interference.
+static INSTANCE_PREFIX: LazyLock<String> = LazyLock::new(|| {
+    let short_id = &uuid::Uuid::new_v4().simple().to_string()[..8];
+    format!("_0xmux_{short_id}_")
+});
+
+/// Return the instance prefix (e.g. `_0xmux_a1b2c3d4_`).
+pub fn instance_prefix() -> &'static str {
+    &INSTANCE_PREFIX
+}
+
 // ── Global registry of active `_0xmux_*` grouped sessions ──
 // Tracked so the periodic GC and shutdown handler know which sessions are
 // legitimately in use vs orphaned.
@@ -551,7 +565,11 @@ fn setup_pty_blocking(
     // 3. Create a grouped tmux session for independent window tracking
     //    Retry up to 3 times — on page refresh the old connection's cleanup may
     //    still be running `tmux kill-session`, causing a brief race.
-    let group_session = format!("_0xmux_{}", uuid::Uuid::new_v4().simple());
+    let group_session = format!(
+        "{}{}",
+        instance_prefix(),
+        &uuid::Uuid::new_v4().simple().to_string()[..8]
+    );
 
     let mut last_status = None;
     for attempt in 0..3 {

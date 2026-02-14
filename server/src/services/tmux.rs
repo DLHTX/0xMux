@@ -77,9 +77,12 @@ fn validate_name(name: &str) -> Result<(), AppError> {
     Ok(())
 }
 
-/// Kill any orphaned `_0xmux_` grouped sessions left over from a previous
-/// server crash or unclean shutdown.  Should be called once at startup.
-pub fn cleanup_orphaned_groups() {
+/// Kill orphaned `_0xmux_` grouped sessions left over from a previous server
+/// crash or unclean shutdown.  Only kills sessions matching THIS instance's
+/// prefix so it won't interfere with other running servers.
+///
+/// `prefix` is this instance's `INSTANCE_PREFIX` (e.g. `_0xmux_a1b2c3d4_`).
+pub fn cleanup_orphaned_groups(prefix: &str) {
     let output = tmux_cmd()
         .args(["list-sessions", "-F", "#{session_name}"])
         .output();
@@ -89,7 +92,7 @@ pub fn cleanup_orphaned_groups() {
     {
         let stdout = String::from_utf8_lossy(&out.stdout);
         for name in stdout.lines() {
-            if name.starts_with("_0xmux_") {
+            if name.starts_with(prefix) {
                 let _ = tmux_cmd().args(["kill-session", "-t", name]).status();
                 tracing::info!("Cleaned up orphaned grouped session: {name}");
             }
@@ -97,9 +100,10 @@ pub fn cleanup_orphaned_groups() {
     }
 }
 
-/// Kill `_0xmux_*` sessions that exist in tmux but are NOT in the `active` set.
-/// Called periodically by the background GC task while the server is running.
-pub fn gc_orphaned_groups(active: &HashSet<String>) {
+/// Kill grouped sessions that belong to THIS instance (`prefix`) but are NOT
+/// in the `active` set.  Called periodically as a safety net for cleanup
+/// failures.  Never touches sessions owned by other server instances.
+pub fn gc_orphaned_groups(prefix: &str, active: &HashSet<String>) {
     let output = tmux_cmd()
         .args(["list-sessions", "-F", "#{session_name}"])
         .output();
@@ -109,7 +113,7 @@ pub fn gc_orphaned_groups(active: &HashSet<String>) {
     {
         let stdout = String::from_utf8_lossy(&out.stdout);
         for name in stdout.lines() {
-            if name.starts_with("_0xmux_") && !active.contains(name) {
+            if name.starts_with(prefix) && !active.contains(name) {
                 let _ = tmux_cmd().args(["kill-session", "-t", name]).status();
                 tracing::info!("GC: reaped orphaned grouped session: {name}");
             }
