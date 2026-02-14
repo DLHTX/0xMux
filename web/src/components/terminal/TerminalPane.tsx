@@ -4,8 +4,9 @@ import { useMux } from '../../contexts/MuxContext'
 import { useMobile } from '../../hooks/useMobile'
 import { useI18n } from '../../hooks/useI18n'
 import { consumePendingInit } from '../../lib/init-commands'
-import { resolveAbsoluteFilePath, uploadFiles } from '../../lib/api'
+import { resolveAbsoluteFilePath, resolveFilePath, uploadFiles, deleteImage } from '../../lib/api'
 import { getTerminalFileDragData, isTerminalFileDrag } from '../../lib/terminalFileDrag'
+import { ImagePreviewTooltip } from '../ui/ImagePreviewTooltip'
 import type { WorkspaceContext } from '../../lib/types'
 import type { MuxChannelHandle } from '../../hooks/useMuxSocket'
 
@@ -24,6 +25,8 @@ interface TerminalPaneProps {
   atTriggerEnabled?: boolean
   /** Called when a file path link is clicked in terminal output */
   onFileClick?: (path: string, line?: number, workspace?: WorkspaceContext) => void
+  /** Called when an image link is clicked in terminal output */
+  onImageClick?: (imageUrl: string) => void
 }
 
 export function TerminalPane({
@@ -37,6 +40,7 @@ export function TerminalPane({
   onAtTrigger,
   atTriggerEnabled = true,
   onFileClick,
+  onImageClick,
 }: TerminalPaneProps) {
   const mux = useMux()
   const { t } = useI18n()
@@ -74,6 +78,44 @@ export function TerminalPane({
   const onFileClickRef = useRef(onFileClick)
   onFileClickRef.current = onFileClick
 
+  // Image tooltip state
+  const [imageTooltip, setImageTooltip] = useState<{
+    imageUrl: string; imagePath: string; mouseX: number; mouseY: number
+  } | null>(null)
+  const imageHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const imageLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const onImageClickRef = useRef(onImageClick)
+  onImageClickRef.current = onImageClick
+
+  const handleImageHover = useCallback((event: MouseEvent, imageUrl: string, imagePath: string) => {
+    if (imageLeaveTimerRef.current) { clearTimeout(imageLeaveTimerRef.current); imageLeaveTimerRef.current = null }
+    if (imageHoverTimerRef.current) clearTimeout(imageHoverTimerRef.current)
+    imageHoverTimerRef.current = setTimeout(() => {
+      setImageTooltip({ imageUrl, imagePath, mouseX: event.clientX, mouseY: event.clientY })
+    }, 200)
+  }, [])
+
+  const handleImageLeave = useCallback(() => {
+    if (imageHoverTimerRef.current) { clearTimeout(imageHoverTimerRef.current); imageHoverTimerRef.current = null }
+    imageLeaveTimerRef.current = setTimeout(() => {
+      setImageTooltip(null)
+    }, 150)
+  }, [])
+
+  const handleImageTooltipEnter = useCallback(() => {
+    if (imageLeaveTimerRef.current) { clearTimeout(imageLeaveTimerRef.current); imageLeaveTimerRef.current = null }
+  }, [])
+
+  const handleImageDelete = useCallback(async (imagePath: string) => {
+    const filename = imagePath.split('/').pop()
+    if (!filename) return
+    try {
+      await deleteImage(filename)
+    } catch {
+      console.error('Failed to delete image:', filename)
+    }
+  }, [])
+
   const handleFileLinkClick = useCallback(async (rawPath: string, line?: number) => {
     const cb = onFileClickRef.current
     if (!cb) return
@@ -83,17 +125,31 @@ export function TerminalPane({
       window: windowIndex ?? 0,
     }
 
-    let absolutePath = rawPath
-    if (!rawPath.startsWith('/')) {
+    let filePath = rawPath
+    if (rawPath.startsWith('/')) {
+      // Absolute path — strip workspace root to get relative path for the API
       try {
-        const resolved = await resolveAbsoluteFilePath(rawPath, workspace)
-        absolutePath = resolved.path
+        const { path: root } = await resolveAbsoluteFilePath('.', workspace)
+        const rootPrefix = root.endsWith('/') ? root : root + '/'
+        if (rawPath.startsWith(rootPrefix)) {
+          filePath = rawPath.slice(rootPrefix.length)
+        }
       } catch {
-        // Use raw path as fallback
+        // Fallback: pass as-is
       }
     }
 
-    cb(absolutePath, line, workspace)
+    // Fuzzy resolve: handles missing prefix (e.g. "src/App.tsx" → "web/src/App.tsx")
+    if (!filePath.startsWith('/')) {
+      try {
+        const { path: resolved } = await resolveFilePath(filePath, workspace)
+        filePath = resolved
+      } catch {
+        // Fallback: use as-is
+      }
+    }
+
+    cb(filePath, line, workspace)
   }, [sessionName, windowIndex])
 
   const handleFileLinkClickRef = useRef(handleFileLinkClick)
@@ -133,9 +189,13 @@ export function TerminalPane({
     fontSize,
     // Keep local history so wheel/touch scroll works inside terminal.
     scrollback: isMobile ? 3000 : 5000,
+    workspace: { session: sessionName, window: windowIndex ?? 0 },
     onFileClick: (path, line, _col) => {
       handleFileLinkClickRef.current(path, line)
     },
+    onImageHover: handleImageHover,
+    onImageLeave: handleImageLeave,
+    onImageClick: (imageUrl) => { onImageClickRef.current?.(imageUrl) },
     onData: (data) => {
       if (data === '@' && atTriggerEnabledRef.current && onAtTriggerRef.current) {
         onAtTriggerRef.current()
@@ -682,6 +742,22 @@ export function TerminalPane({
             </button>
           </div>
         </div>
+      )}
+
+      {imageTooltip && (
+        <ImagePreviewTooltip
+          imageUrl={imageTooltip.imageUrl}
+          imagePath={imageTooltip.imagePath}
+          mouseX={imageTooltip.mouseX}
+          mouseY={imageTooltip.mouseY}
+          onClose={() => setImageTooltip(null)}
+          onKeepAlive={handleImageTooltipEnter}
+          onOpenViewer={(url) => {
+            setImageTooltip(null)
+            onImageClickRef.current?.(url)
+          }}
+          onDelete={handleImageDelete}
+        />
       )}
     </div>
   )

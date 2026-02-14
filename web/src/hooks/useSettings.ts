@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ModalBlur, UserSettings } from '../lib/types'
 import { DEFAULT_EDITOR_SKIN, isEditorSkin } from '../lib/editor-skins'
+import { loadJSON, saveJSON } from '../lib/storage'
 
 const BLUR_VALUES: Record<ModalBlur, string> = {
   none: 'blur(0px)',
@@ -29,36 +30,27 @@ const DEFAULT_SETTINGS: UserSettings = {
 }
 
 function loadSettings(): UserSettings {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) {
-      const parsed = JSON.parse(raw) as Partial<UserSettings>
-      return {
-        ...DEFAULT_SETTINGS,
-        ...parsed,
-        editorSkin: isEditorSkin(parsed.editorSkin) ? parsed.editorSkin : DEFAULT_SETTINGS.editorSkin,
-        modalBlur: isModalBlur(parsed.modalBlur) ? parsed.modalBlur : DEFAULT_SETTINGS.modalBlur,
-        // Markdown editor is intentionally fixed to WYSIWYG.
-        markdownRenderMode: 'wysiwyg',
-      }
+  const parsed = loadJSON<Partial<UserSettings>>(STORAGE_KEY)
+  if (parsed) {
+    return {
+      ...DEFAULT_SETTINGS,
+      ...parsed,
+      editorSkin: isEditorSkin(parsed.editorSkin) ? parsed.editorSkin : DEFAULT_SETTINGS.editorSkin,
+      modalBlur: isModalBlur(parsed.modalBlur) ? parsed.modalBlur : DEFAULT_SETTINGS.modalBlur,
+      // Markdown editor is intentionally fixed to WYSIWYG.
+      markdownRenderMode: 'wysiwyg',
     }
-  } catch {
-    // ignore parse errors
   }
   return DEFAULT_SETTINGS
 }
 
 function saveSettings(settings: UserSettings) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
-    window.dispatchEvent(
-      new CustomEvent<UserSettings>(SETTINGS_UPDATED_EVENT, {
-        detail: settings,
-      }),
-    )
-  } catch {
-    // ignore storage errors
-  }
+  saveJSON(STORAGE_KEY, settings)
+  window.dispatchEvent(
+    new CustomEvent<UserSettings>(SETTINGS_UPDATED_EVENT, {
+      detail: settings,
+    }),
+  )
 }
 
 export function useSettings() {

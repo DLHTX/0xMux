@@ -5,6 +5,8 @@
  * session will automatically execute the command after the shell initialises.
  */
 
+import { loadJSON, saveJSON } from './storage'
+
 const STORAGE_KEY = '0xmux-init-cmds'
 
 // ── Pending queue (module-scoped, not persisted — survives only within a page lifecycle) ──
@@ -18,16 +20,11 @@ function windowKey(session: string, windowIndex: number) {
 // ── Persistent storage ──
 
 function loadAll(): Record<string, string> {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    return raw ? JSON.parse(raw) : {}
-  } catch {
-    return {}
-  }
+  return loadJSON<Record<string, string>>(STORAGE_KEY) ?? {}
 }
 
 function saveAll(map: Record<string, string>) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(map))
+  saveJSON(STORAGE_KEY, map)
 }
 
 /** Save an init command for a session. Pass empty string to remove. */

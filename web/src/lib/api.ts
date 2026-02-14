@@ -357,6 +357,14 @@ export async function resolveAbsoluteFilePath(
   return request(`/files/absolute?${params}`)
 }
 
+export async function resolveFilePath(
+  path: string,
+  workspace?: WorkspaceContext
+): Promise<{ path: string }> {
+  const params = withWorkspaceParams(new URLSearchParams({ path }), workspace)
+  return request(`/files/resolve?${params}`)
+}
+
 export async function searchFiles(
   query: string,
   options?: { regex?: boolean; case?: boolean; glob?: string; max?: number },
@@ -550,4 +558,20 @@ export async function gitUnstageAll(workspace?: WorkspaceContext): Promise<void>
   const body: Record<string, unknown> = {}
   if (workspace) { body.session = workspace.session; body.window = workspace.window }
   return request('/git/unstage-all', { method: 'POST', body: JSON.stringify(body) })
+}
+
+// ── Image API ──
+
+export async function deleteImage(filename: string): Promise<void> {
+  return request(`/images/${encodeURIComponent(filename)}`, { method: 'DELETE' })
+}
+
+export interface CachedImage {
+  filename: string
+  path: string
+  url: string
+}
+
+export async function listImages(): Promise<{ images: CachedImage[] }> {
+  return request('/images')
 }

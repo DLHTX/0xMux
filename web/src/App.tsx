@@ -33,8 +33,9 @@ import { ThemeProvider, useTheme } from './hooks/useTheme'
 import { I18nProvider, useI18n } from './hooks/useI18n'
 import { MuxProvider, useMux } from './contexts/MuxContext'
 import { FUSION_PIXEL_FONT, SILKSCREEN_FONT } from './lib/theme'
-import { getGitDiff, uploadFiles } from './lib/api'
+import { getGitDiff, getGitStatus, uploadFiles } from './lib/api'
 import { isTerminalFileDrag } from './lib/terminalFileDrag'
+import { useImageSync } from './hooks/useImageSync'
 import { Icon } from '@iconify/react'
 import { IconTerminal, IconChevronLeft, IconChevronRight, IconPlus, IconTrash, IconX } from './lib/icons'
 import type { Terminal } from '@xterm/xterm'
@@ -373,6 +374,9 @@ function AppContent() {
 
   // Enable image paste feature
   useImagePaste(activeTerminalRef)
+
+  // Keep image registry in sync with server (polls every 3s)
+  useImageSync()
 
   // Check if a window is part of the current split group.
   // Returns true even during quick-peek (when the split is temporarily hidden)
@@ -797,6 +801,18 @@ function AppContent() {
       }
     : undefined
 
+  // Git change count for activity bar badge — fetch once on workspace change,
+  // then kept in sync by GitPanel's onChangeCount callback on every refresh/action.
+  const [gitChangeCount, setGitChangeCount] = useState(0)
+
+  useEffect(() => {
+    let cancelled = false
+    getGitStatus(activeWorkspace)
+      .then(s => { if (!cancelled) setGitChangeCount(s.files.length) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [activeWorkspace?.session, activeWorkspace?.window])
+
   // Open file in floating editor from file explorer / search results
   const handleOpenFile = useCallback((path: string, line?: number) => {
     floatingEditor.openFile(path, line, 'edit', undefined, activeWorkspace)
@@ -811,6 +827,11 @@ function AppContent() {
   const handleTerminalFileClick = useCallback((path: string, line?: number, workspace?: WorkspaceContext) => {
     floatingEditor.openFile(path, line, 'edit', undefined, workspace)
   }, [floatingEditor])
+
+  // Image link clicked in terminal — open in ImageViewer
+  const handleTerminalImageClick = useCallback((imageUrl: string) => {
+    setImageViewerSrc(imageUrl)
+  }, [])
 
   // Open diff in floating editor from git panel
   const handleOpenDiff = useCallback(async (path: string, staged: boolean) => {
@@ -1155,6 +1176,7 @@ function AppContent() {
                     onAtTrigger={handleAtTrigger}
                     atTriggerEnabled={settings.quickFileTrigger}
                     onFileClick={handleTerminalFileClick}
+                    onImageClick={handleTerminalImageClick}
                   />
                 </div>
               )}
@@ -1166,9 +1188,9 @@ function AppContent() {
         </div>
       ) : (
         /* Desktop layout: ActivityBar + SidebarContainer + workspace */
-        <div className="flex-1 flex overflow-hidden relative">
+        <div className="flex-1 flex overflow-hidden relative bg-[var(--color-bg)]">
           {/* Activity Bar (always visible, 48px) */}
-          <ActivityBar activeView={activeView} onViewChange={handleViewChange} unreadCount={unreadCount} />
+          <ActivityBar activeView={activeView} onViewChange={handleViewChange} unreadCount={unreadCount} gitChangeCount={gitChangeCount} />
 
           {/* Sidebar panels */}
           <SidebarContainer
@@ -1196,7 +1218,7 @@ function AppContent() {
               ),
               files: <FileExplorer onFileOpen={handleOpenFile} workspace={activeWorkspace} />,
               search: <SearchPanel onOpenFile={handleOpenFile} workspace={activeWorkspace} />,
-              git: <GitPanel onOpenDiff={handleOpenDiff} workspace={activeWorkspace} addToast={addToast} />,
+              git: <GitPanel onOpenDiff={handleOpenDiff} workspace={activeWorkspace} addToast={addToast} onChangeCount={setGitChangeCount} />,
               notifications: (
                 <NotificationPanel
                   notifications={notifications}
@@ -1231,6 +1253,7 @@ function AppContent() {
                     onAtTrigger={handleAtTrigger}
                     atTriggerEnabled={settings.quickFileTrigger}
                     onFileClick={handleTerminalFileClick}
+                    onImageClick={handleTerminalImageClick}
                   />
               </div>
             ) : (

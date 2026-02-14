@@ -15,6 +15,12 @@ use toml::Value as TomlValue;
 const PROVIDERS: &[&str] = &["claude", "codex"];
 const SYNC_TYPES: &[&str] = &["skills", "mcp"];
 
+/// Bundled skills shipped with the 0xMux binary.
+/// Each entry: (id, version, content).
+const BUNDLED_SKILLS: &[(&str, &str, &str)] = &[
+    ("commands/0xmux", "0.5.0", include_str!("../../../ai/skills/commands/0xmux.md")),
+];
+
 #[derive(Clone, Debug)]
 struct SkillSource {
     id: String,
@@ -930,7 +936,17 @@ fn build_skill_catalog(
 ) -> Result<Vec<SkillCatalogItem>, AppError> {
     let global_skills = discover_skills(mux_home)?;
     let claude_home = claude_home()?;
-    let claude_skills = discover_provider_skills(&claude_skills_root(&claude_home), ".md")?;
+    let mut claude_skills = discover_provider_skills(&claude_skills_root(&claude_home), ".md")?;
+    // Also discover skills installed into ~/.claude/commands/ (the correct
+    // path for Claude Code slash commands).
+    let claude_commands_root = claude_home.join("commands");
+    if claude_commands_root.is_dir() {
+        for mut skill in discover_provider_skills(&claude_commands_root, ".md")? {
+            // Prefix the id with "commands/" so it matches global skill ids.
+            skill.id = format!("commands/{}", skill.id);
+            claude_skills.push(skill);
+        }
+    }
     let codex_skills = discover_provider_skills(&codex_home.join("skills"), "/SKILL.md")?;
 
     let mut global_map = BTreeMap::new();
@@ -1329,35 +1345,57 @@ fn discover_claude_seed_skills(claude_home: &Path) -> Result<Vec<SkillSource>, A
     let root = claude_skills_root(claude_home);
     let mut files = Vec::new();
     collect_markdown_files(&root, &mut files)?;
+
+    // Also scan ~/.claude/commands/ – that is where Claude Code actually
+    // reads slash commands from.
+    let commands_root = claude_home.join("commands");
+    collect_markdown_files(&commands_root, &mut files)?;
+
     files.sort();
 
     let mut out = Vec::new();
-    for path in files {
-        let relative = path
-            .strip_prefix(&root)
-            .unwrap_or(path.as_path())
-            .to_string_lossy()
-            .replace('\\', "/");
-        if relative.starts_with(".system/") {
-            continue;
-        }
+    for path in &files {
+        // Determine whether this file sits under ~/.claude/commands/ or
+        // ~/.claude/skills/ and compute the canonical skill id accordingly.
+        let (id, source_display);
 
-        let id = if relative.ends_with("/SKILL.md") {
-            relative.trim_end_matches("/SKILL.md").to_string()
-        } else if (relative.starts_with("commands/") || relative.starts_with("agents/"))
-            && relative.ends_with(".md")
-        {
-            relative.trim_end_matches(".md").to_string()
+        if let Ok(rel) = path.strip_prefix(&commands_root) {
+            // File lives in ~/.claude/commands/<name>.md  →  id = commands/<name>
+            let rel_str = rel.to_string_lossy().replace('\\', "/");
+            if !rel_str.ends_with(".md") {
+                continue;
+            }
+            let stem = rel_str.trim_end_matches(".md");
+            if stem.is_empty() {
+                continue;
+            }
+            id = format!("commands/{}", stem);
+            source_display = display_path(path);
+        } else if let Ok(rel) = path.strip_prefix(&root) {
+            let relative = rel.to_string_lossy().replace('\\', "/");
+            if relative.starts_with(".system/") {
+                continue;
+            }
+
+            if relative.ends_with("/SKILL.md") {
+                id = relative.trim_end_matches("/SKILL.md").to_string();
+            } else if (relative.starts_with("commands/") || relative.starts_with("agents/"))
+                && relative.ends_with(".md")
+            {
+                id = relative.trim_end_matches(".md").to_string();
+            } else {
+                continue;
+            }
+
+            if id.is_empty() {
+                continue;
+            }
+            source_display = display_path(path);
         } else {
             continue;
         };
 
-        if id.is_empty() {
-            continue;
-        }
-
-        let source_display = display_path(&path);
-        let name = parse_skill_frontmatter_name(&path).unwrap_or_else(|| {
+        let name = parse_skill_frontmatter_name(path).unwrap_or_else(|| {
             path.file_stem()
                 .and_then(|s| s.to_str())
                 .unwrap_or("skill")
@@ -1368,7 +1406,7 @@ fn discover_claude_seed_skills(claude_home: &Path) -> Result<Vec<SkillSource>, A
             id,
             name,
             description: String::new(),
-            source_path: path,
+            source_path: path.clone(),
             source_display,
             recommended: false,
             official: false,
@@ -1524,6 +1562,127 @@ fn dir_contents_match(source: &Path, target: &Path) -> bool {
     true
 }
 
+fn seed_bundled_skills(
+    mux_home: &Path,
+    dry_run: bool,
+    actions: &mut Vec<SyncAction>,
+) -> Result<(), AppError> {
+    let skills_root = mux_home.join("skills");
+
+    for &(id, bundled_ver, content) in BUNDLED_SKILLS {
+        let target = skills_root.join(format!("{}.md", id));
+
+        if target.exists() {
+            let existing = fs::read_to_string(&target).unwrap_or_default();
+            let local_ver = parse_frontmatter_version(&existing);
+            if !is_version_newer(bundled_ver, local_ver.as_deref()) {
+                continue;
+            }
+            // 内置版本更高，需要更新
+            let msg = format!(
+                "内置 skill 更新: {} → {}",
+                local_ver.as_deref().unwrap_or("无版本"),
+                bundled_ver
+            );
+
+            if dry_run {
+                actions.push(SyncAction {
+                    kind: "skills".to_string(),
+                    id: id.to_string(),
+                    name: id.to_string(),
+                    provider: "bundled".to_string(),
+                    status: "planned".to_string(),
+                    source: Some("(built-in)".to_string()),
+                    target: Some(display_path(&target)),
+                    message: Some(msg),
+                });
+                continue;
+            }
+
+            fs::write(&target, content)
+                .map_err(|err| AppError::Internal(format!("更新内置 skill 失败: {}", err)))?;
+
+            actions.push(SyncAction {
+                kind: "skills".to_string(),
+                id: id.to_string(),
+                name: id.to_string(),
+                provider: "bundled".to_string(),
+                status: "updated".to_string(),
+                source: Some("(built-in)".to_string()),
+                target: Some(display_path(&target)),
+                message: Some(msg),
+            });
+            continue;
+        }
+
+        // 文件不存在，首次 seed
+        if dry_run {
+            actions.push(SyncAction {
+                kind: "skills".to_string(),
+                id: id.to_string(),
+                name: id.to_string(),
+                provider: "bundled".to_string(),
+                status: "planned".to_string(),
+                source: Some("(built-in)".to_string()),
+                target: Some(display_path(&target)),
+                message: Some("内置 skill，首次 seed".to_string()),
+            });
+            continue;
+        }
+
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|err| AppError::Internal(format!("创建内置 skill 目录失败: {}", err)))?;
+        }
+        fs::write(&target, content)
+            .map_err(|err| AppError::Internal(format!("写入内置 skill 失败: {}", err)))?;
+
+        actions.push(SyncAction {
+            kind: "skills".to_string(),
+            id: id.to_string(),
+            name: id.to_string(),
+            provider: "bundled".to_string(),
+            status: "created".to_string(),
+            source: Some("(built-in)".to_string()),
+            target: Some(display_path(&target)),
+            message: Some(format!("已写入内置 skill v{}", bundled_ver)),
+        });
+    }
+    Ok(())
+}
+
+/// 从 frontmatter 中提取 version 字段
+fn parse_frontmatter_version(input: &str) -> Option<String> {
+    let s = input.trim_start_matches('\u{feff}');
+    if !s.starts_with("---\n") {
+        return None;
+    }
+    let rest = &s[4..];
+    let end = rest.find("\n---\n")?;
+    let fm = &rest[..end];
+    for line in fm.lines() {
+        let trimmed = line.trim();
+        if let Some(val) = trimmed.strip_prefix("version:") {
+            return Some(val.trim().trim_matches('"').trim_matches('\'').to_string());
+        }
+    }
+    None
+}
+
+/// 比较版本号，判断 bundled 是否比 local 更新
+fn is_version_newer(bundled: &str, local: Option<&str>) -> bool {
+    let Some(local) = local else {
+        // 本地无版本号，视为旧版本，需要更新
+        return true;
+    };
+    let parse = |v: &str| -> Vec<u32> {
+        v.split('.').filter_map(|s| s.parse().ok()).collect()
+    };
+    let b = parse(bundled);
+    let l = parse(local);
+    b > l
+}
+
 fn seed_global_sources_if_empty(
     mux_home: &Path,
     codex_home: &Path,
@@ -1531,6 +1690,9 @@ fn seed_global_sources_if_empty(
     dry_run: bool,
     actions: &mut Vec<SyncAction>,
 ) -> Result<(), AppError> {
+    // 始终 seed 内置 skills（不受 "if empty" 限制）
+    seed_bundled_skills(mux_home, dry_run, actions)?;
+
     if sync_types.contains("skills") {
         seed_global_skills_from_codex_if_empty(mux_home, codex_home, dry_run, actions)?;
     }
@@ -2295,7 +2457,13 @@ fn claude_skills_root(claude_home: &Path) -> PathBuf {
 }
 
 fn claude_skill_target(claude_home: &Path, skill_id: &str) -> PathBuf {
-    claude_skills_root(claude_home).join(format!("{}.md", skill_id))
+    // Claude Code reads slash commands from ~/.claude/commands/, NOT
+    // ~/.claude/skills/commands/.  Route commands/* IDs accordingly.
+    if let Some(name) = skill_id.strip_prefix("commands/") {
+        claude_home.join("commands").join(format!("{}.md", name))
+    } else {
+        claude_skills_root(claude_home).join(format!("{}.md", skill_id))
+    }
 }
 
 /// Target directory for a directory skill on Claude.
@@ -2347,7 +2515,19 @@ fn render_claude_skill_bytes(skill: &SkillSource) -> Result<Vec<u8>, AppError> {
     })?;
     let normalized = raw.replace("\r\n", "\n");
     let without_bom = normalized.trim_start_matches('\u{feff}');
-    let mut out = without_bom.to_string();
+
+    // Strip 0xMux-specific frontmatter (recommended, official, etc.) that
+    // Claude Code does not recognise.  Claude's `commands/` directory
+    // expects plain markdown; unknown frontmatter fields or names with
+    // spaces break slash-command discovery.
+    let source_meta = parse_skill_frontmatter(without_bom);
+    let mut out = if source_meta.name.is_some() || source_meta.description.is_some() {
+        // Has frontmatter – strip it, emit body only
+        strip_initial_frontmatter(without_bom).trim_start().to_string()
+    } else {
+        without_bom.to_string()
+    };
+
     if !out.ends_with('\n') {
         out.push('\n');
     }

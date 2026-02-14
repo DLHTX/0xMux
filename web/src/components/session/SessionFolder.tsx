@@ -79,7 +79,7 @@ export function SessionFolder({
 
         {/* Status dot — simple green/gray for attached state */}
         <div
-          className={`w-2 h-2 shrink-0 rounded-full ${
+          className={`w-2 h-2 shrink-0 ${
             session.attached
               ? 'bg-[var(--color-success)]'
               : 'bg-[var(--color-border-light)]'
@@ -104,9 +104,8 @@ export function SessionFolder({
           onClick={handleCreateWindow}
           onMouseDown={(e) => e.stopPropagation()}
           className="
-            shrink-0 w-5 h-5 flex items-center justify-center transition-all
-            opacity-0 group-hover:opacity-100
-            text-[var(--color-fg-muted)] hover:text-[var(--color-success)]
+            shrink-0 w-5 h-5 flex items-center justify-center transition-colors
+            text-[var(--color-border-light)] hover:text-[var(--color-success)]
           "
           title="Create new window"
         >
@@ -118,8 +117,8 @@ export function SessionFolder({
           onClick={handleDeleteSession}
           onMouseDown={(e) => e.stopPropagation()}
           className="
-            shrink-0 w-5 h-5 flex items-center justify-center transition-all text-[10px]
-            opacity-0 group-hover:opacity-100 text-[var(--color-fg-muted)] hover:text-[var(--color-danger)]
+            shrink-0 w-5 h-5 flex items-center justify-center transition-colors
+            text-[var(--color-border-light)] hover:text-[var(--color-danger)]
           "
           title="Delete session"
         >

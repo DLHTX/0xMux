@@ -3,20 +3,27 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
+import { isImagePath, resolveImageUrl, resolveImageByIndex } from '../lib/imageRegistry'
+import type { WorkspaceContext } from '../lib/types'
 
 export interface UseTerminalOptions {
   fontSize?: number
   fontFamily?: string
   theme?: Record<string, string>
   scrollback?: number
+  workspace?: WorkspaceContext
   onData?: (data: string) => void
   onResize?: (cols: number, rows: number) => void
   onScrollRequest?: (lines: number) => void
   onFileClick?: (path: string, line?: number, col?: number) => void
+  onImageHover?: (event: MouseEvent, imageUrl: string, imagePath: string) => void
+  onImageLeave?: () => void
+  onImageClick?: (imageUrl: string) => void
 }
 
 // Regex: matches paths with at least one `/` segment and a file extension, plus optional :line:col
 const FILE_PATH_RE = /(?:\.{0,2}\/)?(?:[\w@.\-]+\/)+[\w.\-]+\.\w{1,10}(?::(\d+)(?::(\d+))?)?/g
+const IMAGE_REF_RE = /\[Image #(\d+)\]/g
 
 export function useTerminal(options: UseTerminalOptions = {}) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -26,6 +33,14 @@ export function useTerminal(options: UseTerminalOptions = {}) {
   const detachScrollBridgeRef = useRef<(() => void) | null>(null)
   const onFileClickRef = useRef(options.onFileClick)
   onFileClickRef.current = options.onFileClick
+  const onImageHoverRef = useRef(options.onImageHover)
+  onImageHoverRef.current = options.onImageHover
+  const onImageLeaveRef = useRef(options.onImageLeave)
+  onImageLeaveRef.current = options.onImageLeave
+  const onImageClickRef = useRef(options.onImageClick)
+  onImageClickRef.current = options.onImageClick
+  const workspaceRef = useRef(options.workspace)
+  workspaceRef.current = options.workspace
 
   const initTerminal = useCallback(() => {
     if (!containerRef.current || terminalRef.current) return
@@ -63,14 +78,72 @@ export function useTerminal(options: UseTerminalOptions = {}) {
 
     terminal.open(containerRef.current)
 
-    // Register custom file path link provider
+    // Register custom file path link provider (includes image detection).
+    // Handles wrapped lines: when a long path spans multiple terminal rows,
+    // xterm.js stores each row as a separate buffer line with isWrapped=true
+    // on continuation lines. We join the full logical line before matching.
     terminal.registerLinkProvider({
       provideLinks(bufferLineNumber, callback) {
-        const line = terminal.buffer.active.getLine(bufferLineNumber - 1)
+        const buf = terminal.buffer.active
+        const line = buf.getLine(bufferLineNumber - 1)
         if (!line) { callback(undefined); return }
 
-        const text = line.translateToString(true)
-        const links: { range: { start: { x: number; y: number }; end: { x: number; y: number } }; text: string; activate: () => void; decorations: { pointerCursor: boolean; underline: boolean } }[] = []
+        // Build the full logical line by joining wrapped rows.
+        // Walk backward to find the logical line start, then forward to collect all parts.
+        let logicalStartRow = bufferLineNumber - 1 // 0-based
+        while (logicalStartRow > 0) {
+          const prev = buf.getLine(logicalStartRow)
+          if (!prev || !prev.isWrapped) break
+          logicalStartRow--
+        }
+
+        const rowTexts: string[] = []
+        const rowCols: number[] = [] // cumulative char offset for each row
+        let cumLen = 0
+        for (let r = logicalStartRow; r < buf.length; r++) {
+          const row = buf.getLine(r)
+          if (!row) break
+          if (r > logicalStartRow && !row.isWrapped) break
+          const t = row.translateToString(false) // keep trailing spaces for accurate column mapping
+          rowCols.push(cumLen)
+          rowTexts.push(t)
+          cumLen += t.length
+        }
+        const logicalEndRow = logicalStartRow + rowTexts.length - 1 // 0-based inclusive
+
+        // Only process once per logical line: when bufferLineNumber is the first row.
+        // For continuation rows, still process (xterm calls provideLinks per visible row).
+        const fullText = rowTexts.join('')
+        // Trim trailing whitespace for regex matching
+        const text = fullText.replace(/\s+$/, '')
+
+        // Helper: convert a char offset in the logical line to { x (1-based), y (1-based row) }
+        const offsetToPos = (offset: number): { x: number; y: number } => {
+          for (let i = rowCols.length - 1; i >= 0; i--) {
+            if (offset >= rowCols[i]) {
+              return { x: offset - rowCols[i] + 1, y: logicalStartRow + i + 1 }
+            }
+          }
+          return { x: 1, y: logicalStartRow + 1 }
+        }
+
+        // Check if a range overlaps with the current bufferLineNumber
+        const overlapsCurrentRow = (startOff: number, endOff: number): boolean => {
+          const startPos = offsetToPos(startOff)
+          const endPos = offsetToPos(endOff - 1) // endOff is exclusive
+          const row1 = bufferLineNumber // 1-based
+          return startPos.y <= row1 && endPos.y >= row1
+        }
+
+        type LinkEntry = {
+          range: { start: { x: number; y: number }; end: { x: number; y: number } }
+          text: string
+          activate: (event: MouseEvent) => void
+          hover?: (event: MouseEvent, text: string) => void
+          leave?: (event: MouseEvent, text: string) => void
+          decorations: { pointerCursor: boolean; underline: boolean }
+        }
+        const links: LinkEntry[] = []
 
         FILE_PATH_RE.lastIndex = 0
         let m: RegExpExecArray | null
@@ -81,6 +154,9 @@ export function useTerminal(options: UseTerminalOptions = {}) {
           // Skip if this match is part of a URL (preceded by ://)
           if (matchStart >= 3 && text.substring(matchStart - 3, matchStart).includes('://')) continue
 
+          // Only return links that overlap the current row
+          if (!overlapsCurrentRow(matchStart, matchEnd)) continue
+
           // Extract path (strip :line:col suffix)
           let filePath = m[0]
           const lineNum = m[1] ? parseInt(m[1], 10) : undefined
@@ -89,14 +165,63 @@ export function useTerminal(options: UseTerminalOptions = {}) {
             filePath = filePath.replace(/:(\d+)(?::(\d+))?$/, '')
           }
 
+          const startPos = offsetToPos(matchStart)
+          const endPos = offsetToPos(matchEnd)
+
+          // Check if this is an image path
+          if (isImagePath(filePath)) {
+            const imageUrl = resolveImageUrl(filePath, workspaceRef.current)
+            if (imageUrl) {
+              links.push({
+                range: { start: startPos, end: endPos },
+                text: m[0],
+                decorations: { pointerCursor: true, underline: true },
+                activate: () => { onImageClickRef.current?.(imageUrl) },
+                hover: (event: MouseEvent) => { onImageHoverRef.current?.(event, imageUrl, filePath) },
+                leave: () => { onImageLeaveRef.current?.() },
+              })
+              continue
+            }
+          }
+
           links.push({
-            range: {
-              start: { x: matchStart + 1, y: bufferLineNumber },
-              end: { x: matchEnd + 1, y: bufferLineNumber },
-            },
+            range: { start: startPos, end: endPos },
             text: m[0],
             decorations: { pointerCursor: true, underline: true },
             activate: () => { onFileClickRef.current?.(filePath, lineNum, colNum) },
+          })
+        }
+
+        // Match [Image #N] references — always create the link so the
+        // underline + pointer cursor appear immediately.  The actual image
+        // URL is resolved lazily on hover/activate, which means newly
+        // uploaded images that arrive via the polling registry refresh
+        // will be picked up without needing to re-render the terminal.
+        IMAGE_REF_RE.lastIndex = 0
+        while ((m = IMAGE_REF_RE.exec(text)) !== null) {
+          const n = parseInt(m[1], 10)
+
+          const matchStart = m.index
+          const matchEnd = matchStart + m[0].length
+
+          if (!overlapsCurrentRow(matchStart, matchEnd)) continue
+
+          const startPos = offsetToPos(matchStart)
+          const endPos = offsetToPos(matchEnd)
+
+          links.push({
+            range: { start: startPos, end: endPos },
+            text: m[0],
+            decorations: { pointerCursor: true, underline: true },
+            activate: () => {
+              const r = resolveImageByIndex(n)
+              if (r) onImageClickRef.current?.(r.url)
+            },
+            hover: (event: MouseEvent) => {
+              const r = resolveImageByIndex(n)
+              if (r) onImageHoverRef.current?.(event, r.url, r.path)
+            },
+            leave: () => { onImageLeaveRef.current?.() },
           })
         }
 

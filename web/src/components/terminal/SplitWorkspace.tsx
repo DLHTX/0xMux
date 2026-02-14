@@ -102,6 +102,8 @@ interface SplitWorkspaceProps {
   atTriggerEnabled?: boolean
   /** Called when a file path link is clicked in terminal output */
   onFileClick?: (path: string, line?: number, workspace?: import('../../lib/types').WorkspaceContext) => void
+  /** Called when an image link is clicked in terminal output */
+  onImageClick?: (imageUrl: string) => void
 }
 
 function ResizeHandle({ direction }: { direction: 'horizontal' | 'vertical' }) {
@@ -110,7 +112,7 @@ function ResizeHandle({ direction }: { direction: 'horizontal' | 'vertical' }) {
       className={`
         group relative flex items-center justify-center
         ${direction === 'horizontal' ? 'w-[1px]' : 'h-[1px]'}
-        bg-[var(--color-border-light)]/40
+        bg-[var(--color-border-light)]/30
         hover:bg-[var(--color-success)] active:bg-[var(--color-success)]
         transition-colors
       `}
@@ -166,21 +168,24 @@ function EmptyPaneSlot({
 
   return (
     <div
-      className={`group/pane flex flex-col h-full w-full cursor-pointer
+      className={`group/pane relative flex flex-col h-full w-full cursor-pointer
         ${isDropOver ? 'bg-[var(--color-primary)]/10 border-2 border-dashed border-[var(--color-primary)]/50' : ''}
       `}
-      style={{
-        border: isActive ? '1px solid color-mix(in srgb, var(--color-primary) 40%, transparent)' : '1px solid color-mix(in srgb, var(--color-border-light) 20%, transparent)',
-        transition: 'border 0.2s ease',
-      }}
       onClick={() => onPaneFocus(nodeId)}
       onDragOver={handleDragOver}
       onDragLeave={() => setIsDropOver(false)}
       onDrop={handleDrop}
     >
+      {/* Focus border overlay */}
+      {isActive && (
+        <div
+          className="absolute inset-0 pointer-events-none z-10"
+          style={{ border: '1px solid color-mix(in srgb, var(--color-primary) 40%, transparent)' }}
+        />
+      )}
       {/* Top toolbar — fixed at pane top */}
       <div className="shrink-0 flex items-center gap-0.5
-        bg-[var(--color-bg)] border-b border-b-[var(--color-border-light)]/40
+        bg-[var(--color-bg)] border-b border-b-[var(--color-border-light)]/15
         px-1 py-0.5"
       >
         <button
@@ -362,20 +367,23 @@ function PaneSlot({
 
   return (
     <div
-      className="group/pane flex flex-col h-full w-full"
-      style={{
-        border: inSplit
-          ? `1px solid ${isActive ? SPLIT_GROUP_COLOR + '60' : SPLIT_GROUP_COLOR + '25'}`
-          : isActive
-            ? '1px solid color-mix(in srgb, var(--color-primary) 50%, transparent)'
-            : '1px solid color-mix(in srgb, var(--color-border-light) 20%, transparent)',
-        transition: 'border 0.2s ease',
-      }}
+      className="group/pane relative flex flex-col h-full w-full"
       onClick={() => onPaneFocus(nodeId)}
     >
+      {/* Focus border overlay */}
+      {(isActive || inSplit) && (
+        <div
+          className="absolute inset-0 pointer-events-none z-10"
+          style={{
+            border: inSplit
+              ? `1px solid ${isActive ? SPLIT_GROUP_COLOR + '60' : SPLIT_GROUP_COLOR + '25'}`
+              : '1px solid color-mix(in srgb, var(--color-primary) 50%, transparent)',
+          }}
+        />
+      )}
       {/* Top toolbar — fixed at pane top */}
       <div className="shrink-0 flex items-center gap-0.5
-        bg-[var(--color-bg)] border-b border-b-[var(--color-border-light)]/40
+        bg-[var(--color-bg)] border-b border-b-[var(--color-border-light)]/15
         px-1 py-0.5"
       >
         <button
@@ -688,6 +696,7 @@ export function SplitWorkspace(props: SplitWorkspaceProps) {
             onAtTrigger={props.onAtTrigger}
             atTriggerEnabled={props.atTriggerEnabled}
             onFileClick={props.onFileClick}
+            onImageClick={props.onImageClick}
           />,
           container
         )

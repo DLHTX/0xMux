@@ -62,7 +62,7 @@ export function SidebarContainer({ activeView, children, width, onWidthChange }:
 
   return (
     <div
-      className="relative shrink-0 overflow-hidden bg-[var(--color-bg)] border-r-[length:var(--border-w)] border-[var(--color-border)] flex flex-col"
+      className="relative shrink-0 overflow-hidden flex flex-col bg-[var(--color-bg)]"
       style={{
         width: isOpen ? draftWidth : 0,
         transition: 'width 200ms ease',

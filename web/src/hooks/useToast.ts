@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { generateUUID } from '../lib/uuid'
 
 export interface ToastItem {
   id: string
@@ -17,10 +18,7 @@ export function useToast() {
   const [toasts, setToasts] = useState<ToastItem[]>([])
 
   const addToast = useCallback((message: string, type: ToastItem['type'] = 'error', options?: AddToastOptions) => {
-    // crypto.randomUUID() is unavailable over plain HTTP on LAN; use fallback
-    const id = typeof crypto.randomUUID === 'function'
-      ? crypto.randomUUID()
-      : Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('')
+    const id = generateUUID()
     setToasts((prev) => [...prev, { id, message, type, imageUrl: options?.imageUrl, onClick: options?.onClick }])
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id))

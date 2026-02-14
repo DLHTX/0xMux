@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import type { FloatingWindowState, EditorTab, WorkspaceContext } from '../lib/types.ts'
 import { readFile, writeFile } from '../lib/api.ts'
+import { saveJSON } from '../lib/storage.ts'
 
 const STORAGE_KEY = '0xmux-floating-editor'
 const MIN_WINDOW_WIDTH = 320
@@ -119,29 +120,22 @@ function loadPersistedState(): PersistedState | null {
 /** Persist floating-editor state to localStorage */
 function persistState(state: FloatingWindowState) {
   const activeTab = state.tabs.find((tab) => tab.id === state.activeTabId)
-  try {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        x: state.x,
-        y: state.y,
-        width: state.width,
-        height: state.height,
-        opacity: state.opacity,
-        isOpen: state.isOpen,
-        minimized: state.minimized,
-        tabs: state.tabs.map((tab) => ({
-          filePath: tab.filePath,
-          mode: tab.mode,
-          diffOriginal: tab.diffOriginal,
-          workspace: tab.workspace,
-        })),
-        activeTabKey: activeTab ? getTabKey(activeTab) : null,
-      }),
-    )
-  } catch {
-    // Ignore storage errors
-  }
+  saveJSON(STORAGE_KEY, {
+    x: state.x,
+    y: state.y,
+    width: state.width,
+    height: state.height,
+    opacity: state.opacity,
+    isOpen: state.isOpen,
+    minimized: state.minimized,
+    tabs: state.tabs.map((tab) => ({
+      filePath: tab.filePath,
+      mode: tab.mode,
+      diffOriginal: tab.diffOriginal,
+      workspace: tab.workspace,
+    })),
+    activeTabKey: activeTab ? getTabKey(activeTab) : null,
+  })
 }
 
 const IMAGE_EXTENSIONS = new Set([
@@ -168,9 +162,9 @@ function detectLanguage(filePath: string): string {
   if (IMAGE_EXTENSIONS.has(ext)) return 'image'
   const map: Record<string, string> = {
     ts: 'typescript',
-    tsx: 'typescript',
+    tsx: 'typescriptreact',
     js: 'javascript',
-    jsx: 'javascript',
+    jsx: 'javascriptreact',
     json: 'json',
     md: 'markdown',
     rs: 'rust',

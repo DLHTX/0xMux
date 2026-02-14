@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import type { Terminal } from '@xterm/xterm'
+import { registerImage } from '../lib/imageRegistry'
 
 export function useImagePaste(terminalRef: React.RefObject<Terminal | null>) {
   useEffect(() => {
@@ -27,10 +28,15 @@ export function useImagePaste(terminalRef: React.RefObject<Terminal | null>) {
 
             const { path } = await res.json()
 
+            // Register image in global registry
+            const filename = path.split('/').pop()
+            if (filename) {
+              registerImage(path, `/api/images/${encodeURIComponent(filename)}`)
+            }
+
             // 粘贴路径到terminal
             terminalRef.current?.paste(path)
 
-            // TODO: 显示Toast提示
             console.log(`图片已保存到: ${path}`)
           } catch (err) {
             console.error('图片上传失败:', err)

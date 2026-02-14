@@ -203,26 +203,4 @@ impl AuthService {
         Ok(())
     }
 
-    /// 登录成功后重置速率限制（可选，根据需求）
-    #[allow(dead_code)]
-    pub async fn reset_rate_limit(&self, _ip: &str) {
-        // 根据spec，成功登录不重置失败计数器
-        // 所以这个函数留空
-    }
-
-    /// 清理过期的速率限制记录（可以在后台定期调用）
-    #[allow(dead_code)]
-    pub async fn cleanup_rate_limit(&self) {
-        let mut rate_limit = self.rate_limit.write().await;
-        let now = SystemTime::now();
-
-        rate_limit.retain(|_, entry| {
-            if let Some(locked_until) = entry.locked_until {
-                now < locked_until
-            } else {
-                // 保留未锁定的记录（简化实现）
-                true
-            }
-        });
-    }
 }

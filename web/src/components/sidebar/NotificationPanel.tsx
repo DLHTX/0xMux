@@ -1,5 +1,5 @@
 import { Icon } from '@iconify/react'
-import { IconTrash, IconImage, IconCheck } from '../../lib/icons'
+import { IconTrash, IconCheck } from '../../lib/icons'
 import { useI18n } from '../../hooks/useI18n'
 import type { Notification } from '../../lib/types'
 
@@ -98,11 +98,7 @@ export function NotificationPanel({
                 <p className="text-[11px] text-[var(--color-fg-muted)] truncate mt-0.5">
                   {n.message}
                 </p>
-                {n.image_url && !n.image_url && (
-                  <span className="inline-flex items-center gap-0.5 text-[10px] text-[var(--color-fg-muted)] mt-0.5">
-                    <Icon icon={IconImage} width={10} />
-                  </span>
-                )}
+
               </div>
 
               {/* Delete button */}

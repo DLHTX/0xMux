@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import { getGitStatus, getGitLog, getGitBranches } from '../lib/api'
 import type { GitStatus, GitCommit, GitBranch, WorkspaceContext } from '../lib/types'
+import { getErrorMessage } from '../lib/error'
 
 export function useGitStatus(workspace?: WorkspaceContext) {
   const [status, setStatus] = useState<GitStatus | null>(null)
@@ -22,10 +23,7 @@ export function useGitStatus(workspace?: WorkspaceContext) {
       setCommits(l.commits)
       setBranches(b.branches)
     } catch (e: unknown) {
-      const msg = e && typeof e === 'object' && 'message' in e
-        ? (e as { message: string }).message
-        : 'Failed to fetch git status'
-      setError(msg)
+      setError(getErrorMessage(e, 'Failed to fetch git status'))
     } finally {
       setLoading(false)
     }

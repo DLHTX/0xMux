@@ -6,11 +6,13 @@ import { useGitStatus } from '../../hooks/useGitStatus'
 import { gitCommit, gitPush, gitStage, gitUnstage, gitStageAll, gitUnstageAll } from '../../lib/api'
 import type { GitChangedFile, WorkspaceContext } from '../../lib/types'
 import { getGitStatusBadge, getGitStatusColor } from '../../lib/gitDecorations'
+import { getErrorMessage } from '../../lib/error'
 
 interface GitPanelProps {
   onOpenDiff: (path: string, staged: boolean) => void
   workspace?: WorkspaceContext
   addToast: (message: string, type: ToastItem['type']) => void
+  onChangeCount?: (count: number) => void
 }
 
 function FileItem({ file, onOpen, action, actionIcon, actionTitle }: {
@@ -72,7 +74,7 @@ function SectionHeader({ title, count, open, onToggle, actions }: {
   )
 }
 
-export function GitPanel({ onOpenDiff, workspace, addToast }: GitPanelProps) {
+export function GitPanel({ onOpenDiff, workspace, addToast, onChangeCount }: GitPanelProps) {
   const { status, commits, branches, loading, error, refresh } = useGitStatus(workspace)
   const [showCommits, setShowCommits] = useState(false)
   const [showBranches, setShowBranches] = useState(false)
@@ -87,30 +89,24 @@ export function GitPanel({ onOpenDiff, workspace, addToast }: GitPanelProps) {
   const hasStagedChanges = status ? status.files.some(f => f.staged) : false
   const hasUnpushedCommits = status ? status.ahead > 0 : false
 
-  function errMsg(e: unknown): string {
-    return e && typeof e === 'object' && 'message' in e
-      ? (e as { message: string }).message
-      : 'Operation failed'
-  }
-
   async function handleStage(paths: string[]) {
     setActionError(null)
-    try { await gitStage(paths, workspace); refresh() } catch (e) { setActionError(errMsg(e)) }
+    try { await gitStage(paths, workspace); refresh() } catch (e) { setActionError(getErrorMessage(e, 'Stage failed')) }
   }
 
   async function handleUnstage(paths: string[]) {
     setActionError(null)
-    try { await gitUnstage(paths, workspace); refresh() } catch (e) { setActionError(errMsg(e)) }
+    try { await gitUnstage(paths, workspace); refresh() } catch (e) { setActionError(getErrorMessage(e, 'Unstage failed')) }
   }
 
   async function handleStageAll() {
     setActionError(null)
-    try { await gitStageAll(workspace); refresh() } catch (e) { setActionError(errMsg(e)) }
+    try { await gitStageAll(workspace); refresh() } catch (e) { setActionError(getErrorMessage(e, 'Stage all failed')) }
   }
 
   async function handleUnstageAll() {
     setActionError(null)
-    try { await gitUnstageAll(workspace); refresh() } catch (e) { setActionError(errMsg(e)) }
+    try { await gitUnstageAll(workspace); refresh() } catch (e) { setActionError(getErrorMessage(e, 'Unstage all failed')) }
   }
 
   async function handleCommit() {
@@ -123,7 +119,7 @@ export function GitPanel({ onOpenDiff, workspace, addToast }: GitPanelProps) {
       addToast(`Committed ${result.short_hash}`, 'success')
       refresh()
     } catch (e) {
-      const msg = errMsg(e)
+      const msg = getErrorMessage(e, 'Commit failed')
       setActionError(msg)
       addToast(`Commit failed: ${msg}`, 'error')
     } finally { setCommitting(false) }
@@ -137,7 +133,7 @@ export function GitPanel({ onOpenDiff, workspace, addToast }: GitPanelProps) {
       addToast('Push completed', 'success')
       refresh()
     } catch (e) {
-      const msg = errMsg(e)
+      const msg = getErrorMessage(e, 'Push failed')
       setActionError(msg)
       addToast(`Push failed: ${msg}`, 'error')
     } finally { setPushing(false) }
@@ -146,6 +142,11 @@ export function GitPanel({ onOpenDiff, workspace, addToast }: GitPanelProps) {
   useEffect(() => {
     refresh()
   }, [refresh, workspace?.session, workspace?.window])
+
+  // Report change count to parent for badge
+  useEffect(() => {
+    onChangeCount?.(status?.files.length ?? 0)
+  }, [status, onChangeCount])
 
   if (error) {
     return (

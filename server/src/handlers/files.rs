@@ -59,8 +59,19 @@ pub async fn absolute_path_handler(
     Query(q): Query<AbsolutePathQuery>,
 ) -> Result<impl IntoResponse, AppError> {
     let root = workspace::resolve_workspace_root(q.session.as_deref(), q.window)?;
-    let absolute = fs::resolve_absolute_path(&root, &q.path)?;
+    let absolute = fs::validate_path(&root, &q.path)?;
     Ok(Json(json!({ "path": absolute.to_string_lossy().to_string() })))
+}
+
+// ── GET /api/files/resolve?path= ────────────────────────────────────
+// Fuzzy path resolution: tries direct path first, then prepends top-level subdirectories.
+
+pub async fn resolve_path_handler(
+    Query(q): Query<AbsolutePathQuery>,
+) -> Result<impl IntoResponse, AppError> {
+    let root = workspace::resolve_workspace_root(q.session.as_deref(), q.window)?;
+    let resolved = fs::fuzzy_resolve_path(&root, &q.path)?;
+    Ok(Json(json!({ "path": resolved })))
 }
 
 // ── GET /api/files/read?path= ───────────────────────────────────────
@@ -116,7 +127,7 @@ pub async fn raw_handler(
     let bytes = std::fs::read(&file_path)
         .map_err(|e| AppError::Internal(format!("Cannot read file: {e}")))?;
 
-    let mime = mime_from_extension(&file_path);
+    let mime = crate::utils::mime::mime_from_path(&file_path);
 
     let mut resp = Response::new(Body::from(bytes));
     resp.headers_mut().insert(
@@ -128,26 +139,6 @@ pub async fn raw_handler(
         HeaderValue::from_static("public, max-age=60"),
     );
     Ok(resp)
-}
-
-fn mime_from_extension(path: &std::path::Path) -> &'static str {
-    let ext = path
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("")
-        .to_lowercase();
-    match ext.as_str() {
-        "png" => "image/png",
-        "jpg" | "jpeg" => "image/jpeg",
-        "gif" => "image/gif",
-        "webp" => "image/webp",
-        "bmp" => "image/bmp",
-        "ico" => "image/x-icon",
-        "avif" => "image/avif",
-        "tif" | "tiff" => "image/tiff",
-        "svg" => "image/svg+xml",
-        _ => "application/octet-stream",
-    }
 }
 
 // ── DELETE /api/files/delete ───────────────────────────────────────

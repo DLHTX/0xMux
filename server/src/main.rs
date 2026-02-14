@@ -1,7 +1,6 @@
 use clap::Parser;
-use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{RwLock, broadcast};
+use tokio::sync::broadcast;
 use tracing_subscriber::EnvFilter;
 
 mod banner;
@@ -15,6 +14,7 @@ mod services;
 mod state;
 #[cfg(feature = "embed-frontend")]
 mod static_files;
+mod utils;
 mod ws;
 
 use config::ServerConfig;
@@ -81,7 +81,6 @@ async fn main() {
         notification_tx,
         config: Arc::new(config),
         install_manager: InstallManager::new(),
-        pty_sessions: Arc::new(RwLock::new(HashMap::new())),
         auth_service,
         notification_service,
     };

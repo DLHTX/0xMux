@@ -61,7 +61,7 @@ export function SessionSidebar({
 
   return (
     <aside
-      className="flex flex-col border-r-[length:var(--border-w)] border-[var(--color-border)] bg-[var(--color-bg)] shrink-0 overflow-hidden"
+      className="flex flex-col bg-[var(--color-bg)] shrink-0 overflow-hidden"
       style={{
         width: collapsed ? 48 : '100%',
         transition: 'width 200ms ease',

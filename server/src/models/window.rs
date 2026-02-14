@@ -36,3 +36,29 @@ pub struct WindowInfoResponse {
     pub pane_current_path: String,
     pub pane_current_command: String,
 }
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct TmuxPane {
+    pub index: u32,
+    pub active: bool,
+    pub width: u32,
+    pub height: u32,
+    pub pid: String,
+    pub current_path: String,
+    pub current_command: String,
+}
+
+#[derive(Deserialize)]
+pub struct SplitPaneRequest {
+    /// "horizontal" (side by side) or "vertical" (stacked)
+    pub direction: String,
+}
+
+#[derive(Serialize)]
+pub struct PaneInfoResponse {
+    pub index: u32,
+    pub active: bool,
+    pub pid: String,
+    pub current_path: String,
+    pub current_command: String,
+}

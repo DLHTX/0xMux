@@ -208,11 +208,7 @@ pub fn get_diff(
     staged: bool,
 ) -> Result<GitDiffResponse, AppError> {
     // Get HEAD version
-    let head_ref = if staged {
-        "HEAD" // Compare staged vs HEAD
-    } else {
-        "HEAD"
-    };
+    let head_ref = "HEAD";
 
     let original = git_cmd(repo_path)
         .args(["show", &format!("{head_ref}:{file_path}")])

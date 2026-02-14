@@ -127,10 +127,15 @@ pub fn build(state: AppState) -> Router {
             "/api/notifications/{id}/read",
             put(handlers::notification::mark_read_handler),
         )
-        // Image serving
+        // Image serving & management
+        .route(
+            "/api/images",
+            get(handlers::notification::list_images_handler),
+        )
         .route(
             "/api/images/{filename}",
-            get(handlers::notification::serve_image_handler),
+            get(handlers::notification::serve_image_handler)
+                .delete(handlers::notification::delete_image_handler),
         )
         .route(
             "/api/layouts",
@@ -141,6 +146,10 @@ pub fn build(state: AppState) -> Router {
         .route(
             "/api/files/absolute",
             get(handlers::files::absolute_path_handler),
+        )
+        .route(
+            "/api/files/resolve",
+            get(handlers::files::resolve_path_handler),
         )
         .route("/api/files/read", get(handlers::files::read_handler))
         .route("/api/files/raw", get(handlers::files::raw_handler))
@@ -197,6 +206,31 @@ pub fn build(state: AppState) -> Router {
         .route(
             "/api/sessions/{name}/windows/{index}/info",
             get(handlers::window::window_info_handler),
+        )
+        // Pane API (split & per-pane operations)
+        .route(
+            "/api/sessions/{name}/windows/{index}/split",
+            post(handlers::window::split_pane_handler),
+        )
+        .route(
+            "/api/sessions/{name}/windows/{index}/panes",
+            get(handlers::window::list_panes_handler),
+        )
+        .route(
+            "/api/sessions/{name}/windows/{index}/panes/{pane}",
+            delete(handlers::window::kill_pane_handler),
+        )
+        .route(
+            "/api/sessions/{name}/windows/{index}/panes/{pane}/input",
+            post(handlers::window::pane_input_handler),
+        )
+        .route(
+            "/api/sessions/{name}/windows/{index}/panes/{pane}/capture",
+            get(handlers::window::pane_capture_handler),
+        )
+        .route(
+            "/api/sessions/{name}/windows/{index}/panes/{pane}/info",
+            get(handlers::window::pane_info_handler),
         )
         .route("/ws/mux", get(ws::mux::ws_mux_handler))
         .route(

@@ -14,6 +14,7 @@ import {
   IconTrash,
   IconExternalLink,
 } from '../../lib/icons'
+import { loadJSON, saveJSON } from '../../lib/storage'
 import {
   getFileTree,
   getGitStatus,
@@ -86,15 +87,9 @@ function getExpandedStorageKey(workspace?: WorkspaceContext): string {
 }
 
 function loadPersistedExpanded(workspace?: WorkspaceContext): Set<string> | null {
-  try {
-    const raw = localStorage.getItem(getExpandedStorageKey(workspace))
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as unknown
-    if (!Array.isArray(parsed)) return null
-    return new Set(parsed.filter((value): value is string => typeof value === 'string'))
-  } catch {
-    return null
-  }
+  const parsed = loadJSON<unknown>(getExpandedStorageKey(workspace))
+  if (!Array.isArray(parsed)) return null
+  return new Set(parsed.filter((value): value is string => typeof value === 'string'))
 }
 
 /** Detect Ctrl (Windows/Linux) or Cmd (macOS) */
@@ -404,11 +399,7 @@ export function FileExplorer({ onFileOpen, workspace }: FileExplorerProps) {
   const visibleNodes = useMemo(() => flattenVisible(roots, expanded), [roots, expanded])
 
   useEffect(() => {
-    try {
-      localStorage.setItem(getExpandedStorageKey(workspace), JSON.stringify([...expanded]))
-    } catch {
-      // Ignore storage errors
-    }
+    saveJSON(getExpandedStorageKey(workspace), [...expanded])
   }, [workspace?.session, workspace?.window, expanded])
 
   // Load root tree on mount

@@ -66,8 +66,8 @@ export function WindowItem({
         onClick={handleDeleteClick}
         onMouseDown={(e) => e.stopPropagation()}
         className="
-          shrink-0 w-5 h-5 flex items-center justify-center transition-all text-[10px]
-          opacity-0 group-hover:opacity-100 text-[var(--color-fg-muted)] hover:text-[var(--color-danger)]
+          shrink-0 w-5 h-5 flex items-center justify-center transition-colors
+          text-[var(--color-border-light)] hover:text-[var(--color-danger)]
         "
         title="Delete window"
       >

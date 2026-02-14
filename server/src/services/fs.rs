@@ -7,34 +7,62 @@ const MAX_FILE_SIZE: u64 = 5 * 1024 * 1024;
 
 // ── Path Validation (T-1.1) ──────────────────────────────────────────
 
-/// Validate and resolve a user-supplied path against the project root.
-///
-/// Three-step validation:
-/// 1. Reject absolute paths and `..` components
-/// 2. Canonicalize both root and the joined path
-/// 3. Verify the resolved path starts with the canonical root
-pub fn validate_path(root: &Path, user_path: &str) -> Result<PathBuf, AppError> {
-    // Step 1: reject obvious traversal attempts
-    if user_path.starts_with('/') || user_path.starts_with('\\') {
-        return Err(AppError::Forbidden("Absolute paths not allowed".into()));
-    }
-    for component in Path::new(user_path).components() {
+/// Core path normalization: convert absolute paths to relative within root,
+/// reject `..` traversal components.
+fn normalize_user_path(canonical_root: &Path, user_path: &str) -> Result<String, AppError> {
+    let effective_path = if user_path.starts_with('/') || user_path.starts_with('\\') {
+        let abs = Path::new(user_path);
+        // Try canonicalize first (for existing paths)
+        if let Ok(canonical_abs) = abs.canonicalize() {
+            if let Ok(rel) = canonical_abs.strip_prefix(canonical_root) {
+                rel.to_string_lossy().to_string()
+            } else {
+                return Err(AppError::Forbidden("Path escapes project root".into()));
+            }
+        } else if let Ok(rel) = abs.strip_prefix(canonical_root) {
+            // Path doesn't exist yet; try stripping root prefix from the raw path
+            rel.to_string_lossy().to_string()
+        } else {
+            return Err(AppError::Forbidden("Path escapes project root".into()));
+        }
+    } else {
+        user_path.to_string()
+    };
+
+    // Reject traversal
+    for component in Path::new(&effective_path).components() {
         if let std::path::Component::ParentDir = component {
             return Err(AppError::Forbidden("Path traversal not allowed".into()));
         }
     }
 
-    let joined = root.join(user_path);
+    Ok(effective_path)
+}
 
-    // Step 2: canonicalize (resolves symlinks)
-    let canonical_root = root
-        .canonicalize()
-        .map_err(|e| AppError::Internal(format!("Cannot resolve root: {e}")))?;
+/// Canonicalize the root path (shared helper to avoid repeating the error mapping).
+fn canonicalize_root(root: &Path) -> Result<PathBuf, AppError> {
+    root.canonicalize()
+        .map_err(|e| AppError::Internal(format!("Cannot resolve root: {e}")))
+}
+
+/// Validate and resolve a user-supplied path against the project root.
+///
+/// Three-step validation:
+/// 1. If absolute, check if within root and convert to relative; reject `..` components
+/// 2. Canonicalize both root and the joined path
+/// 3. Verify the resolved path starts with the canonical root
+pub fn validate_path(root: &Path, user_path: &str) -> Result<PathBuf, AppError> {
+    let canonical_root = canonicalize_root(root)?;
+    let effective_path = normalize_user_path(&canonical_root, user_path)?;
+
+    let joined = root.join(&effective_path);
+
+    // Canonicalize (resolves symlinks)
     let canonical_path = joined
         .canonicalize()
         .map_err(|_| AppError::NotFound(format!("Path not found: {user_path}")))?;
 
-    // Step 3: prefix check
+    // Prefix check
     if !canonical_path.starts_with(&canonical_root) {
         return Err(AppError::Forbidden("Path escapes project root".into()));
     }
@@ -42,9 +70,38 @@ pub fn validate_path(root: &Path, user_path: &str) -> Result<PathBuf, AppError> 
     Ok(canonical_path)
 }
 
-/// Resolve a workspace-relative path to an absolute canonical path.
-pub fn resolve_absolute_path(root: &Path, rel_path: &str) -> Result<PathBuf, AppError> {
-    validate_path(root, rel_path)
+/// Fuzzy resolve: try the direct path first; if not found, try prepending
+/// each top-level subdirectory as a prefix (one level deep).
+/// Returns the resolved relative path (from root) on success.
+pub fn fuzzy_resolve_path(root: &Path, user_path: &str) -> Result<String, AppError> {
+    let canonical_root = canonicalize_root(root)?;
+    let effective_path = normalize_user_path(&canonical_root, user_path)?;
+
+    // 1. Try direct path
+    if root.join(&effective_path).is_file() {
+        return Ok(effective_path);
+    }
+
+    // 2. Try prepending each top-level subdirectory
+    if let Ok(entries) = std::fs::read_dir(root) {
+        for entry in entries.flatten() {
+            if !entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                continue;
+            }
+            if let Some(dir_name) = entry.file_name().to_str() {
+                // Skip hidden dirs
+                if dir_name.starts_with('.') {
+                    continue;
+                }
+                let candidate = format!("{}/{}", dir_name, effective_path);
+                if root.join(&candidate).is_file() {
+                    return Ok(candidate);
+                }
+            }
+        }
+    }
+
+    Err(AppError::NotFound(format!("Path not found: {user_path}")))
 }
 
 // ── Language Detection ───────────────────────────────────────────────
@@ -95,9 +152,9 @@ pub fn detect_language(path: &Path) -> String {
 
 /// List directory contents (depth=1, lazy loading).
 pub fn list_directory(root: &Path, rel_path: &str) -> Result<Vec<FileNode>, AppError> {
+    let canonical_root = canonicalize_root(root)?;
     let dir = if rel_path.is_empty() || rel_path == "." {
-        root.canonicalize()
-            .map_err(|e| AppError::Internal(format!("Cannot resolve root: {e}")))?
+        canonical_root.clone()
     } else {
         validate_path(root, rel_path)?
     };
@@ -105,10 +162,6 @@ pub fn list_directory(root: &Path, rel_path: &str) -> Result<Vec<FileNode>, AppE
     if !dir.is_dir() {
         return Err(AppError::BadRequest(format!("Not a directory: {rel_path}")));
     }
-
-    let canonical_root = root
-        .canonicalize()
-        .map_err(|e| AppError::Internal(format!("Cannot resolve root: {e}")))?;
 
     let mut entries: Vec<FileNode> = Vec::new();
     let read_dir = std::fs::read_dir(&dir)
@@ -219,19 +272,9 @@ pub fn read_file(root: &Path, rel_path: &str) -> Result<FileContent, AppError> {
 
 /// Validate a path where the target may not yet exist (validates parent).
 fn validate_parent_path(root: &Path, rel_path: &str) -> Result<PathBuf, AppError> {
-    if rel_path.starts_with('/') || rel_path.starts_with('\\') {
-        return Err(AppError::Forbidden("Absolute paths not allowed".into()));
-    }
-    for component in Path::new(rel_path).components() {
-        if let std::path::Component::ParentDir = component {
-            return Err(AppError::Forbidden("Path traversal not allowed".into()));
-        }
-    }
-
-    let target = root.join(rel_path);
-    let canonical_root = root
-        .canonicalize()
-        .map_err(|e| AppError::Internal(format!("Cannot resolve root: {e}")))?;
+    let canonical_root = canonicalize_root(root)?;
+    let effective_path = normalize_user_path(&canonical_root, rel_path)?;
+    let target = root.join(&effective_path);
 
     if let Some(parent) = target.parent() {
         if parent.exists() {
@@ -402,20 +445,9 @@ pub fn reveal_in_file_manager(root: &Path, rel_path: &str) -> Result<(), AppErro
 
 /// Write content to a file.
 pub fn write_file(root: &Path, rel_path: &str, content: &str) -> Result<(), AppError> {
-    // Validate path - but file may not exist yet, so validate parent
-    if rel_path.starts_with('/') || rel_path.starts_with('\\') {
-        return Err(AppError::Forbidden("Absolute paths not allowed".into()));
-    }
-    for component in Path::new(rel_path).components() {
-        if let std::path::Component::ParentDir = component {
-            return Err(AppError::Forbidden("Path traversal not allowed".into()));
-        }
-    }
-
-    let target = root.join(rel_path);
-    let canonical_root = root
-        .canonicalize()
-        .map_err(|e| AppError::Internal(format!("Cannot resolve root: {e}")))?;
+    let canonical_root = canonicalize_root(root)?;
+    let effective_path = normalize_user_path(&canonical_root, rel_path)?;
+    let target = root.join(&effective_path);
 
     // For existing files, canonicalize and check
     if target.exists() {

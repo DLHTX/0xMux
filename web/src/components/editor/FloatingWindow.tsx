@@ -23,7 +23,7 @@ export interface FloatingWindowProps {
   children: React.ReactNode
 }
 
-const TITLE_BAR_HEIGHT = 32
+const TITLE_BAR_HEIGHT = 24
 const MIN_WINDOW_HEIGHT = 260
 const MIN_WINDOW_WIDTH = 320
 
@@ -126,13 +126,8 @@ export default function FloatingWindow({
           }}
           onDoubleClick={handleTitleDoubleClick}
         >
-          {/* Left: filename */}
-          <span
-            className="text-xs font-mono truncate mr-2"
-            style={{ color: 'var(--color-fg)' }}
-          >
-            {title}
-          </span>
+          {/* Left: drag handle spacer */}
+          <div className="flex-1" />
 
           {/* Right: opacity slider + minimize + close */}
           <div className="flex items-center gap-1 shrink-0">

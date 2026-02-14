@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { searchFiles } from '../lib/api'
 import type { SearchResponse, SearchOptions, WorkspaceContext } from '../lib/types'
+import { getErrorMessage } from '../lib/error'
 
 export function useSearch(workspace?: WorkspaceContext) {
   const [options, setOptions] = useState<SearchOptions>({
@@ -35,8 +36,7 @@ export function useSearch(workspace?: WorkspaceContext) {
         }, workspace)
         setResults(res)
       } catch (e: unknown) {
-        const msg = e && typeof e === 'object' && 'message' in e ? (e as { message: string }).message : 'Search failed'
-        setError(msg)
+        setError(getErrorMessage(e, 'Search failed'))
         setResults(null)
       } finally {
         setLoading(false)

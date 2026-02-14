@@ -2,7 +2,7 @@ use axum::{Json, extract::{Path, Query}, http::StatusCode, response::IntoRespons
 
 use crate::error::AppError;
 use crate::models::window::{
-    CaptureQuery, CaptureResponse, CreateWindowRequest, SendInputRequest,
+    CaptureQuery, CaptureResponse, CreateWindowRequest, SendInputRequest, SplitPaneRequest,
 };
 use crate::services::tmux;
 
@@ -53,5 +53,53 @@ pub async fn window_info_handler(
     Path((name, index)): Path<(String, u32)>,
 ) -> Result<impl IntoResponse, AppError> {
     let info = tmux::window_info(&name, index)?;
+    Ok(Json(info))
+}
+
+// ── Pane-level handlers ───────────────────────────────────────────────
+
+pub async fn split_pane_handler(
+    Path((name, index)): Path<(String, u32)>,
+    Json(body): Json<SplitPaneRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let horizontal = body.direction == "horizontal";
+    let pane = tmux::split_window(&name, index, horizontal)?;
+    Ok((StatusCode::CREATED, Json(pane)))
+}
+
+pub async fn list_panes_handler(
+    Path((name, index)): Path<(String, u32)>,
+) -> Result<impl IntoResponse, AppError> {
+    let panes = tmux::list_panes(&name, index)?;
+    Ok(Json(panes))
+}
+
+pub async fn kill_pane_handler(
+    Path((name, index, pane)): Path<(String, u32, u32)>,
+) -> Result<impl IntoResponse, AppError> {
+    tmux::kill_pane(&name, index, pane)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn pane_input_handler(
+    Path((name, index, pane)): Path<(String, u32, u32)>,
+    Json(body): Json<SendInputRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    tmux::send_keys_to_pane(&name, index, pane, &body.data)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn pane_capture_handler(
+    Path((name, index, pane)): Path<(String, u32, u32)>,
+    Query(query): Query<CaptureQuery>,
+) -> Result<impl IntoResponse, AppError> {
+    let output = tmux::capture_pane_target(&name, index, pane, query.lines)?;
+    Ok(Json(CaptureResponse { output }))
+}
+
+pub async fn pane_info_handler(
+    Path((name, index, pane)): Path<(String, u32, u32)>,
+) -> Result<impl IntoResponse, AppError> {
+    let info = tmux::pane_info(&name, index, pane)?;
     Ok(Json(info))
 }

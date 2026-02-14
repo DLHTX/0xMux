@@ -12,6 +12,7 @@ interface ActivityBarProps {
   activeView: ActivityView | null
   onViewChange: (view: ActivityView) => void
   unreadCount?: number
+  gitChangeCount?: number
 }
 
 const items: { view: ActivityView; icon: typeof IconTerminal; label: string }[] = [
@@ -22,16 +23,17 @@ const items: { view: ActivityView; icon: typeof IconTerminal; label: string }[] 
   { view: 'notifications', icon: IconBell, label: 'Notifications' },
 ]
 
-export function ActivityBar({ activeView, onViewChange, unreadCount = 0 }: ActivityBarProps) {
+export function ActivityBar({ activeView, onViewChange, unreadCount = 0, gitChangeCount = 0 }: ActivityBarProps) {
   return (
     <aside
-      className="flex flex-col items-center shrink-0 bg-[var(--color-bg)] border-r-[length:var(--border-w)] border-[var(--color-border)]"
+      className="flex flex-col items-center shrink-0 bg-[var(--color-bg)] border-r border-r-[var(--color-border-light)]/10"
       style={{ width: 48 }}
     >
       <nav className="flex flex-col w-full flex-1">
         {items.map(({ view, icon, label }) => {
           const isActive = activeView === view
-          const showBadge = view === 'notifications' && unreadCount > 0
+          const showBadge = (view === 'notifications' && unreadCount > 0) || (view === 'git' && gitChangeCount > 0)
+          const badgeCount = view === 'git' ? gitChangeCount : unreadCount
           return (
             <button
               key={view}
@@ -54,13 +56,13 @@ export function ActivityBar({ activeView, onViewChange, unreadCount = 0 }: Activ
                 />
               )}
               <Icon icon={icon} width={20} height={20} />
-              {/* Square unread badge */}
+              {/* Badge */}
               {showBadge && (
                 <span
                   className="absolute top-1.5 right-1.5 min-w-[14px] h-[14px] flex items-center justify-center
                     bg-[var(--color-primary)] text-[var(--color-primary-fg)] text-[9px] font-black leading-none px-0.5"
                 >
-                  {unreadCount > 99 ? '99+' : unreadCount}
+                  {badgeCount > 99 ? '99+' : badgeCount}
                 </span>
               )}
             </button>
