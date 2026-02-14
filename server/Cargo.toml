@@ -1,6 +1,6 @@
 [package]
 name = "oxmux-server"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 description = "0xMux - Hacker-grade tmux session manager with web UI"
 license = "MIT"
