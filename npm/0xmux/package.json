@@ -1,6 +1,6 @@
 {
   "name": "0xmux",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Hacker-grade tmux session manager with web UI",
   "license": "MIT",
   "bin": {
@@ -11,7 +11,12 @@
     "@0xmux/darwin-x64": "0.1.0",
     "@0xmux/linux-x64": "0.1.0"
   },
-  "keywords": ["tmux", "terminal", "session-manager", "web-ui"],
+  "keywords": [
+    "tmux",
+    "terminal",
+    "session-manager",
+    "web-ui"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/DLHTX/0xMux"

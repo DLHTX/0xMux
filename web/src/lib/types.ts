@@ -112,6 +112,17 @@ export interface ConfigResponse {
   local_ips: string[]
 }
 
+export interface CheckUpdateResponse {
+  current: string
+  latest: string | null
+  has_update: boolean
+}
+
+export interface DoUpdateResponse {
+  status: 'ok' | 'error'
+  message: string
+}
+
 export interface AiProviderStatus {
   installed: boolean
   command: string
@@ -241,6 +252,8 @@ export interface TerminalInstance {
 }
 
 export type SplitDirection = 'horizontal' | 'vertical'
+export type MarkdownRenderMode = 'code' | 'wysiwyg' | 'ir' | 'sv'
+export type EditorSkin = 'classic' | 'ocean' | 'forest' | 'sunset'
 
 export interface SplitLayoutLeaf {
   id: string
@@ -264,6 +277,12 @@ export interface UserSettings {
   defaultSplitDirection: SplitDirection
   sidebarCollapsed: boolean
   sidebarWidth: number
+  /** Enable @ trigger in terminal to open quick file search (default: true) */
+  quickFileTrigger: boolean
+  /** Editor color preset for Monaco + Markdown */
+  editorSkin: EditorSkin
+  /** Markdown editing mode in floating editor (fixed to wysiwyg) */
+  markdownRenderMode: 'wysiwyg'
 }
 
 export interface CreateWindowRequest {
@@ -316,4 +335,125 @@ export interface LayoutState {
 export interface LayoutStore {
   layouts: Record<string, LayoutState>
   primarySession: string | null
+}
+
+// ── Spec 3: Floating Editor + Git Panel ──
+
+export type ActivityView = 'sessions' | 'files' | 'search' | 'git'
+
+export interface FileTreeNode {
+  name: string
+  path: string
+  type: 'file' | 'directory'
+  size?: number
+  modified?: string
+  children?: FileTreeNode[]
+}
+
+export interface WorkspaceContext {
+  session: string
+  window: number
+}
+
+export interface EditorTab {
+  id: string
+  filePath: string
+  language: string
+  content: string
+  originalContent: string
+  isDirty: boolean
+  mode: 'edit' | 'diff'
+  diffOriginal?: string
+  scrollLine?: number
+  workspace?: WorkspaceContext
+}
+
+export interface FloatingWindowState {
+  isOpen: boolean
+  x: number
+  y: number
+  width: number
+  height: number
+  opacity: number
+  zIndex: number
+  minimized: boolean
+  tabs: EditorTab[]
+  activeTabId: string | null
+}
+
+export interface SearchOptions {
+  query: string
+  isRegex: boolean
+  caseSensitive: boolean
+  fileGlob?: string
+}
+
+export interface SearchMatch {
+  file_path: string
+  line_number: number
+  line_content: string
+  match_start: number
+  match_end: number
+}
+
+export interface SearchResultGroup {
+  file_path: string
+  matches: SearchMatch[]
+}
+
+export interface SearchResponse {
+  results: SearchResultGroup[]
+  total_files: number
+  total_matches: number
+  truncated: boolean
+}
+
+export type GitFileStatus = 'modified' | 'added' | 'deleted' | 'renamed' | 'copied' | 'untracked'
+
+export interface GitChangedFile {
+  path: string
+  status: GitFileStatus
+  staged: boolean
+  old_path?: string
+}
+
+export interface GitStatus {
+  branch: string
+  upstream?: string
+  ahead: number
+  behind: number
+  files: GitChangedFile[]
+}
+
+export interface GitCommit {
+  hash: string
+  short_hash: string
+  message: string
+  author: string
+  email: string
+  date: string
+  refs?: string
+}
+
+export interface GitBranch {
+  name: string
+  short_hash: string
+  upstream?: string
+  is_current: boolean
+  is_remote: boolean
+}
+
+export interface GitDiffContent {
+  file_path: string
+  original: string
+  modified: string
+  language: string
+}
+
+export interface FileContent {
+  path: string
+  content: string
+  language: string
+  size: number
+  encoding: string
 }

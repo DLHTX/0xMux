@@ -9,6 +9,8 @@ use serde_json::json;
 pub enum AppError {
     NotFound(String),
     BadRequest(String),
+    Forbidden(String),
+    PayloadTooLarge(String),
     Conflict(String),
     ServiceUnavailable(String),
     LastWindow(String),
@@ -20,6 +22,10 @@ impl IntoResponse for AppError {
         let (status, error_code, message) = match self {
             AppError::NotFound(msg) => (StatusCode::NOT_FOUND, "not_found", msg),
             AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, "bad_request", msg),
+            AppError::Forbidden(msg) => (StatusCode::FORBIDDEN, "forbidden", msg),
+            AppError::PayloadTooLarge(msg) => {
+                (StatusCode::PAYLOAD_TOO_LARGE, "payload_too_large", msg)
+            }
             AppError::Conflict(msg) => (StatusCode::CONFLICT, "already_exists", msg),
             AppError::ServiceUnavailable(msg) => {
                 (StatusCode::SERVICE_UNAVAILABLE, "service_unavailable", msg)

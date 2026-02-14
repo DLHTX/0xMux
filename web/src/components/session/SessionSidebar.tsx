@@ -3,8 +3,6 @@ import { Icon } from '@iconify/react'
 import {
   IconPlus,
   IconSearch,
-  IconPanelLeftClose,
-  IconPanelLeftOpen,
 } from '../../lib/icons'
 import { SessionFolder } from './SessionFolder'
 import type { TmuxSession, TmuxWindow } from '../../lib/types'
@@ -23,7 +21,6 @@ interface SessionSidebarProps {
   isWindowInUse?: (sessionName: string, windowIndex: number) => boolean
   isInSplitGroup?: (sessionName: string, windowIndex: number) => boolean
   collapsed: boolean
-  onToggleCollapse: () => void
 }
 
 export function SessionSidebar({
@@ -40,7 +37,6 @@ export function SessionSidebar({
   isWindowInUse,
   isInSplitGroup,
   collapsed,
-  onToggleCollapse,
 }: SessionSidebarProps) {
   const [search, setSearch] = useState('')
   const [expandedSessions, setExpandedSessions] = useState<Set<string>>(
@@ -67,7 +63,7 @@ export function SessionSidebar({
     <aside
       className="flex flex-col border-r-[length:var(--border-w)] border-[var(--color-border)] bg-[var(--color-bg)] shrink-0 overflow-hidden"
       style={{
-        width: collapsed ? 48 : 260,
+        width: collapsed ? 48 : '100%',
         transition: 'width 200ms ease',
       }}
     >
@@ -168,22 +164,6 @@ export function SessionSidebar({
         </div>
       )}
 
-      {/* Bottom: collapse toggle */}
-      <div className="border-t-[length:var(--border-w)] border-[var(--color-border-light)] p-1.5 flex justify-center">
-        <button
-          onClick={onToggleCollapse}
-          className="w-7 h-7 flex items-center justify-center text-[var(--color-fg-muted)]
-            hover:text-[var(--color-fg)] transition-colors cursor-pointer rounded-[var(--radius)]
-            hover:bg-[var(--color-bg-alt)]"
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          <Icon
-            icon={collapsed ? IconPanelLeftOpen : IconPanelLeftClose}
-            width={16}
-            height={16}
-          />
-        </button>
-      </div>
     </aside>
   )
 }

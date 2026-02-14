@@ -112,3 +112,54 @@ export {
 export {
   default as IconPuzzle,
 } from '@iconify-icons/lucide/puzzle'
+export {
+  default as IconInfo,
+} from '@iconify-icons/lucide/info'
+export {
+  default as IconFile,
+} from '@iconify-icons/lucide/file'
+export {
+  default as IconFileText,
+} from '@iconify-icons/lucide/file-text'
+export {
+  default as IconGitBranch,
+} from '@iconify-icons/lucide/git-branch'
+export {
+  default as IconGitCommit,
+} from '@iconify-icons/lucide/git-commit'
+export {
+  default as IconCode,
+} from '@iconify-icons/lucide/code'
+export {
+  default as IconMinus,
+} from '@iconify-icons/lucide/minus'
+export {
+  default as IconMaximize,
+} from '@iconify-icons/lucide/maximize-2'
+export {
+  default as IconMinimize,
+} from '@iconify-icons/lucide/minimize-2'
+export {
+  default as IconCopy,
+} from '@iconify-icons/lucide/copy'
+export {
+  default as IconSave,
+} from '@iconify-icons/lucide/save'
+export {
+  default as IconCaseSensitive,
+} from '@iconify-icons/lucide/case-sensitive'
+export {
+  default as IconRegex,
+} from '@iconify-icons/lucide/regex'
+export {
+  default as IconFolderTree,
+} from '@iconify-icons/lucide/folder-tree'
+export {
+  default as IconChevronsRight,
+} from '@iconify-icons/lucide/chevrons-right'
+export {
+  default as IconChevronsDown,
+} from '@iconify-icons/lucide/chevrons-down'
+export {
+  default as IconChevronsUp,
+} from '@iconify-icons/lucide/chevrons-up'

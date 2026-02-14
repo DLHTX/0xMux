@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { SplitLayout, SplitDirection, PaneWindow, LayoutStore } from '../lib/types'
 import { createWindow, getLayouts, saveLayouts } from '../lib/api'
+import { markWindowPending } from '../lib/init-commands'
 
 const MAX_PANES = 128
 
@@ -244,6 +245,7 @@ export function useSplitLayout() {
         let newWindow: { index: number } | null = null
         if (currentWindow) {
           newWindow = await createWindow(currentWindow.sessionName)
+          markWindowPending(currentWindow.sessionName, newWindow.index)
         }
 
         // Pre-compute split result outside the state updater to avoid

@@ -126,28 +126,29 @@ export function useTerminal(options: UseTerminalOptions = {}) {
         return true
       }
 
-      const requestRemoteScroll = (deltaLines: number, source: 'wheel' | 'touch') => {
+      const requestRemoteScroll = (deltaLines: number, source: 'wheel' | 'touch'): true | false | 'throttled' => {
         if (!options.onScrollRequest || deltaLines === 0) return false
 
         const absLines = Math.abs(Math.trunc(deltaLines))
         if (absLines <= 0) return false
 
-        // Throttle both wheel and touch: at most one remote scroll every 32ms.
-        // Prevents flooding the server with tmux scroll commands on mobile.
+        // Throttle: at most one remote scroll every 32ms.
+        // Returns 'throttled' so callers can decide whether to consume accumulated delta.
         const now = Date.now()
-        if (now - lastRemoteScrollAt < 32) return true
+        if (now - lastRemoteScrollAt < 32) return 'throttled'
         lastRemoteScrollAt = now
 
-        const maxStep = source === 'wheel' ? 15 : 12
+        const maxStep = source === 'wheel' ? 45 : 36
         const step = Math.max(1, Math.min(maxStep, absLines))
         options.onScrollRequest((deltaLines < 0 ? -1 : 1) * step)
         return true
       }
 
       const onWheel = (event: WheelEvent) => {
-        const rawLines = event.deltaMode === 1 ? event.deltaY : event.deltaY / 36
+        const rawLines = event.deltaMode === 1 ? event.deltaY : event.deltaY / 12
         if (Math.abs(rawLines) < 0.2) return
-        const lines = (rawLines < 0 ? -1 : 1) * Math.max(1, Math.min(15, Math.round(Math.abs(rawLines))))
+        const lines = (rawLines < 0 ? -1 : 1) * Math.max(1, Math.min(45, Math.round(Math.abs(rawLines))))
+        // For wheel, 'throttled' is truthy — still prevents native scroll bounce
         if (scrollByDelta(lines) || requestRemoteScroll(lines, 'wheel')) {
           event.preventDefault()
         }
@@ -165,16 +166,29 @@ export function useTerminal(options: UseTerminalOptions = {}) {
         const deltaPx = touchY - nextY
         touchY = nextY
 
-        // Keep swipe sensitivity balanced: direct enough without jumping too far.
-        touchLineRemainder += deltaPx / 14
+        // ~5 px per line → roughly 3× default sensitivity for snappy mobile scroll.
+        touchLineRemainder += deltaPx / 5
         const lines =
           touchLineRemainder > 0 ? Math.floor(touchLineRemainder) : Math.ceil(touchLineRemainder)
         if (lines === 0) return
+
         const localConsumed = scrollByDelta(lines)
-        const remoteConsumed = !localConsumed && requestRemoteScroll(lines, 'touch')
-        if (!(localConsumed || remoteConsumed)) return
-        touchLineRemainder -= lines
+        if (localConsumed) {
+          touchLineRemainder -= lines
+          event.preventDefault()
+          return
+        }
+
+        const remoteResult = requestRemoteScroll(lines, 'touch')
+        if (remoteResult === false) return
+        // Always prevent native bounce when we're handling scroll
         event.preventDefault()
+        // Only consume remainder when the command was actually sent.
+        // When throttled, let the delta accumulate so the next sent command
+        // carries the full scroll distance — prevents "swallowed" scroll.
+        if (remoteResult === true) {
+          touchLineRemainder -= lines
+        }
       }
 
       const onTouchEnd = () => {

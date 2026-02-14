@@ -50,6 +50,14 @@ pub fn build(state: AppState) -> Router {
         .route("/api/health", get(handlers::health::health_handler))
         .route("/api/config", get(handlers::health::config_handler))
         .route(
+            "/api/check-update",
+            post(handlers::health::check_update_handler),
+        )
+        .route(
+            "/api/do-update",
+            post(handlers::health::do_update_handler),
+        )
+        .route(
             "/api/sessions",
             get(handlers::session::list_sessions_handler)
                 .post(handlers::session::create_session_handler),
@@ -92,6 +100,20 @@ pub fn build(state: AppState) -> Router {
             "/api/layouts",
             get(handlers::layout::get_layouts).put(handlers::layout::save_layouts),
         )
+        // File system API
+        .route("/api/files/tree", get(handlers::files::tree_handler))
+        .route(
+            "/api/files/absolute",
+            get(handlers::files::absolute_path_handler),
+        )
+        .route("/api/files/read", get(handlers::files::read_handler))
+        .route("/api/files/write", put(handlers::files::write_handler))
+        .route("/api/files/search", get(handlers::files::search_handler))
+        // Git API
+        .route("/api/git/status", get(handlers::git::status_handler))
+        .route("/api/git/diff", get(handlers::git::diff_handler))
+        .route("/api/git/log", get(handlers::git::log_handler))
+        .route("/api/git/branches", get(handlers::git::branches_handler))
         .route(
             "/api/sessions/{name}/windows",
             get(handlers::window::list_windows_handler)

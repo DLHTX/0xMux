@@ -2241,6 +2241,8 @@ fn app_error_message(err: &AppError) -> String {
     match err {
         AppError::NotFound(msg)
         | AppError::BadRequest(msg)
+        | AppError::Forbidden(msg)
+        | AppError::PayloadTooLarge(msg)
         | AppError::Conflict(msg)
         | AppError::ServiceUnavailable(msg)
         | AppError::LastWindow(msg)

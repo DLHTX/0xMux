@@ -4,6 +4,9 @@ import { useMux } from '../../contexts/MuxContext'
 import { useMobile } from '../../hooks/useMobile'
 import { useI18n } from '../../hooks/useI18n'
 import { consumePendingInit } from '../../lib/init-commands'
+import { resolveAbsoluteFilePath } from '../../lib/api'
+import { getTerminalFileDragData, isTerminalFileDrag } from '../../lib/terminalFileDrag'
+import type { WorkspaceContext } from '../../lib/types'
 import type { MuxChannelHandle } from '../../hooks/useMuxSocket'
 
 interface TerminalPaneProps {
@@ -15,6 +18,10 @@ interface TerminalPaneProps {
   terminalRef?: React.RefObject<import('@xterm/xterm').Terminal | null>
   /** Extra bottom space to reserve on mobile (e.g. for a fixed VirtualKeybar) */
   mobileBottomOffset?: number
+  /** Called when '@' is typed in the terminal (for quick file search) */
+  onAtTrigger?: () => void
+  /** Whether the @ trigger is enabled (default: true) */
+  atTriggerEnabled?: boolean
 }
 
 export function TerminalPane({
@@ -25,6 +32,8 @@ export function TerminalPane({
   onFocus,
   terminalRef: externalTerminalRef,
   mobileBottomOffset = 0,
+  onAtTrigger,
+  atTriggerEnabled = true,
 }: TerminalPaneProps) {
   const mux = useMux()
   const { t } = useI18n()
@@ -41,11 +50,27 @@ export function TerminalPane({
   })
   const [tmuxScrollState, setTmuxScrollState] = useState<{ history: number; position: number } | null>(null)
   const [tmuxScrollProgress, setTmuxScrollProgress] = useState(1)
+  const [isFileDropOver, setIsFileDropOver] = useState(false)
   const isMobile = useMobile()
   const wrapperRef = useRef<HTMLDivElement>(null)
   const scrollTrackRef = useRef<HTMLDivElement>(null)
   const dragOffsetPxRef = useRef(0)
   const hasTmuxScrollState = (tmuxScrollState?.history ?? 0) > 0
+  // Ref mirror: lets syncBottomForMobileInput read the latest scroll state
+  // without re-creating the callback (which would re-trigger the viewport effect).
+  const tmuxScrollStateRef = useRef(tmuxScrollState)
+  tmuxScrollStateRef.current = tmuxScrollState
+
+  // Ref mirrors for @ trigger (captured in the onData closure at init time)
+  const onAtTriggerRef = useRef(onAtTrigger)
+  onAtTriggerRef.current = onAtTrigger
+  const atTriggerEnabledRef = useRef(atTriggerEnabled)
+  atTriggerEnabledRef.current = atTriggerEnabled
+
+  const quoteShellPath = useCallback((path: string): string => {
+    return `'${path.replace(/'/g, "'\\''")}'`
+  }, [])
+
   const updateTmuxProgress = useCallback((deltaLines: number) => {
     setTmuxScrollProgress((prev) => Math.max(0, Math.min(1, prev + deltaLines * 0.0025)))
   }, [])
@@ -76,7 +101,13 @@ export function TerminalPane({
     fontSize,
     // Keep local history so wheel/touch scroll works inside terminal.
     scrollback: isMobile ? 3000 : 5000,
-    onData: (data) => chRef.current?.send(data),
+    onData: (data) => {
+      if (data === '@' && atTriggerEnabledRef.current && onAtTriggerRef.current) {
+        onAtTriggerRef.current()
+        return
+      }
+      chRef.current?.send(data)
+    },
     onResize: (cols, rows) => chRef.current?.resize(cols, rows),
     onScrollRequest: requestChannelScroll,
   })
@@ -87,11 +118,68 @@ export function TerminalPane({
     if (!wrapper || !active || !wrapper.contains(active)) return
 
     terminal.current?.scrollToBottom()
-    if ((tmuxScrollState?.position ?? 0) > 0) {
+    if ((tmuxScrollStateRef.current?.position ?? 0) > 0) {
       requestChannelScroll(200_000, false)
     }
     setTmuxScrollProgress(1)
-  }, [isMobile, requestChannelScroll, terminal, tmuxScrollState?.position])
+  }, [isMobile, requestChannelScroll, terminal])
+
+  const handleFileDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    const hasTerminalFilePayload = isTerminalFileDrag(event.dataTransfer)
+    const hasNativeFiles = Array.from(event.dataTransfer.types).includes('Files')
+    if (!hasTerminalFilePayload && !hasNativeFiles) return
+
+    event.preventDefault()
+    event.stopPropagation()
+    event.dataTransfer.dropEffect = hasTerminalFilePayload ? 'copy' : 'none'
+
+    if (hasTerminalFilePayload) {
+      setIsFileDropOver(true)
+    }
+  }, [])
+
+  const handleFileDragLeave = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    const hasTerminalFilePayload = isTerminalFileDrag(event.dataTransfer)
+    const hasNativeFiles = Array.from(event.dataTransfer.types).includes('Files')
+    if (!hasTerminalFilePayload && !hasNativeFiles) return
+    const nextTarget = event.relatedTarget as Node | null
+    if (nextTarget && event.currentTarget.contains(nextTarget)) return
+
+    event.preventDefault()
+    event.stopPropagation()
+    setIsFileDropOver(false)
+  }, [])
+
+  const handleFileDrop = useCallback(async (event: React.DragEvent<HTMLDivElement>) => {
+    const payload = getTerminalFileDragData(event.dataTransfer)
+    const hasNativeFiles = Array.from(event.dataTransfer.types).includes('Files')
+    if (!payload && !hasNativeFiles) return
+
+    event.preventDefault()
+    event.stopPropagation()
+    setIsFileDropOver(false)
+    if (!payload) return
+
+    const fallbackWorkspace: WorkspaceContext = {
+      session: sessionName,
+      window: windowIndex ?? 0,
+    }
+    let absolutePath = payload.path
+
+    if (!absolutePath.startsWith('/')) {
+      try {
+        const resolved = await resolveAbsoluteFilePath(payload.path, payload.workspace ?? fallbackWorkspace)
+        absolutePath = resolved.path
+      } catch (error) {
+        console.error('Failed to resolve dropped file path', error)
+      }
+    }
+
+    if (!absolutePath) return
+    chRef.current?.send(`${quoteShellPath(absolutePath)} `)
+    onFocus?.()
+    focus()
+  }, [focus, onFocus, quoteShellPath, sessionName, windowIndex])
 
   // Open a mux channel when the pane mounts (or session/window changes)
   useEffect(() => {
@@ -382,6 +470,9 @@ export function TerminalPane({
       ref={wrapperRef}
       className={`relative w-full h-full min-h-0 overflow-hidden transition-opacity duration-150 ${isMobile ? 'mobile-terminal-pane' : ''} ${mounted ? 'opacity-100' : 'opacity-0'}`}
       style={{ height: '100%', background: '#0a0a0a' }}
+      onDragOver={handleFileDragOver}
+      onDragLeave={handleFileDragLeave}
+      onDrop={handleFileDrop}
       onClick={() => {
         onFocus?.()
         // Don't re-focus when user just finished a text selection (would clear it)
@@ -392,12 +483,22 @@ export function TerminalPane({
           requestAnimationFrame(() => syncBottomForMobileInput())
         }
       }}
-    >
-      <div
-        ref={containerRef}
-        className="w-full h-full overflow-hidden"
-        style={{ background: '#0a0a0a' }}
-      />
+      >
+        <div
+          ref={containerRef}
+          className="w-full h-full overflow-hidden"
+          style={{ background: '#0a0a0a' }}
+        />
+
+      {isFileDropOver && (
+        <div className="absolute inset-0 z-[8] pointer-events-none bg-[var(--color-success)]/10 border-2 border-dashed border-[var(--color-success)]/70">
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="px-2 py-1 text-[10px] font-mono text-[var(--color-success)] bg-[#0a0a0a]/90 border border-[var(--color-success)]/50">
+              Drop file to paste absolute path
+            </span>
+          </div>
+        </div>
+      )}
 
       {activeIndicator.visible && (
         <div
@@ -408,8 +509,9 @@ export function TerminalPane({
         >
           <div
             data-scroll-thumb="true"
-            className="absolute left-0 right-0 bg-[#00ff41]"
+            className="absolute left-0 right-0"
             style={{
+              background: 'var(--color-scrollbar-accent)',
               top: `${activeIndicator.top}%`,
               height: `${activeIndicator.height}%`,
               opacity: isMobile ? 0.9 : 1,

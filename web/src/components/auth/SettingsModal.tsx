@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react'
 import { Icon } from '@iconify/react'
-import { IconX, IconShield, IconLogOut, IconGlobe, IconEye, IconEyeOff } from '../../lib/icons'
+import { IconX, IconShield, IconLogOut, IconGlobe, IconInfo, IconEye, IconEyeOff, IconCode } from '../../lib/icons'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { Tabs } from '../ui/Tabs'
 import { useTheme } from '../../hooks/useTheme'
 import { useI18n } from '../../hooks/useI18n'
-import { getConfig } from '../../lib/api'
+import { useSettings } from '../../hooks/useSettings'
+import { getConfig, checkUpdate, doUpdate } from '../../lib/api'
 import {
   PRESETS,
   FONT_OPTIONS,
@@ -14,7 +15,12 @@ import {
   type ThemeTokens,
 } from '../../lib/theme'
 import { LOCALES, type Locale, type MessageKey } from '../../lib/i18n'
-import type { ChangePasswordRequest } from '../../lib/types'
+import { EDITOR_SKINS, EDITOR_SKIN_KEYS, getEditorSkinPalette } from '../../lib/editor-skins'
+import type {
+  ChangePasswordRequest,
+  EditorSkin,
+  UserSettings,
+} from '../../lib/types'
 
 const PRESET_KEYS = Object.keys(PRESETS) as PresetName[]
 
@@ -39,6 +45,7 @@ interface SettingsModalProps {
 export function SettingsModal({ open, onClose, onChangePassword, onLogout }: SettingsModalProps) {
   const { tokens, preset, mode, setToken, setPreset, toggleMode, resetOverrides } = useTheme()
   const { t, locale, setLocale } = useI18n()
+  const { settings, updateSettings } = useSettings()
 
   if (!open) return null
 
@@ -87,6 +94,11 @@ export function SettingsModal({ open, onClose, onChangePassword, onLogout }: Set
                 />,
               },
               {
+                id: 'editor',
+                label: '编辑器',
+                content: <EditorTab settings={settings} updateSettings={updateSettings} />,
+              },
+              {
                 id: 'security',
                 label: '安全',
                 content: <SecurityTab onChangePassword={onChangePassword} onLogout={onLogout} />,
@@ -95,6 +107,11 @@ export function SettingsModal({ open, onClose, onChangePassword, onLogout }: Set
                 id: 'external',
                 label: '网络',
                 content: <ExternalAccessTab />,
+              },
+              {
+                id: 'about',
+                label: '关于',
+                content: <AboutTab />,
               },
             ]}
             defaultTab="appearance"
@@ -300,6 +317,72 @@ function AppearanceTab({
       >
         {t('theme.reset')}
       </button>
+    </div>
+  )
+}
+
+// ── 编辑器 Tab ──
+
+function EditorTab({ settings, updateSettings }: {
+  settings: UserSettings
+  updateSettings: (partial: Partial<UserSettings>) => void
+}) {
+  return (
+    <div className="flex flex-col gap-5">
+      <div>
+        <h3 className="text-sm font-bold mb-3 flex items-center gap-2">
+          <Icon icon={IconCode} width={16} />
+          编辑器设置
+        </h3>
+      </div>
+
+      {/* @ Trigger Toggle */}
+      <div className="flex items-center justify-between py-2">
+        <div className="flex-1 min-w-0 mr-4">
+          <div className="text-xs font-bold">@ 快速打开文件</div>
+          <div className="text-[10px] text-[var(--color-fg-muted)] mt-0.5">
+            在终端中输入 @ 时弹出快速文件搜索（Ctrl+P 始终可用）
+          </div>
+        </div>
+        <button
+          onClick={() => updateSettings({ quickFileTrigger: !settings.quickFileTrigger })}
+          className={`shrink-0 w-10 h-5 rounded-full transition-colors relative ${
+            settings.quickFileTrigger
+              ? 'bg-[var(--color-primary)]'
+              : 'bg-[var(--color-border-light)]'
+          }`}
+        >
+          <span
+            className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+              settings.quickFileTrigger ? 'translate-x-5' : 'translate-x-0.5'
+            }`}
+          />
+        </button>
+      </div>
+
+      <div className="pt-4 border-t-[length:var(--border-w)] border-[var(--color-border-light)]">
+        <div className="text-xs font-bold mb-2">编辑器皮肤</div>
+        <div className="text-[10px] text-[var(--color-fg-muted)] mb-3">
+          Monaco 与 Markdown 共用同一套皮肤，自动跟随亮/暗模式切换
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {EDITOR_SKIN_KEYS.map((skin) => (
+            <EditorSkinCard
+              key={skin}
+              skin={skin}
+              selected={settings.editorSkin === skin}
+              onSelect={(value) => updateSettings({ editorSkin: value })}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="pt-4 border-t-[length:var(--border-w)] border-[var(--color-border-light)]">
+        <div className="text-xs font-bold mb-2">Markdown 编辑体验</div>
+        <div className="text-[10px] text-[var(--color-fg-muted)] mb-3">
+          Markdown 固定为「所见即所得」并隐藏顶部工具栏，只保留渲染编辑区
+        </div>
+      </div>
     </div>
   )
 }
@@ -534,11 +617,140 @@ function ExternalAccessTab() {
                 <code className="font-mono">{serverInfo.local_ips.join(', ')}</code>
               </div>
             )}
-            <div className="flex items-center justify-between">
-              <span className="text-[var(--color-fg-muted)]">版本</span>
-              <code className="font-mono">{serverInfo.version}</code>
-            </div>
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── 关于 Tab ──
+
+type UpdateState =
+  | { phase: 'idle' }
+  | { phase: 'checking' }
+  | { phase: 'up_to_date'; current: string }
+  | { phase: 'available'; current: string; latest: string }
+  | { phase: 'updating' }
+  | { phase: 'updated' }
+  | { phase: 'error'; message: string }
+
+function AboutTab() {
+  const [version, setVersion] = useState<string | null>(null)
+  const [updateState, setUpdateState] = useState<UpdateState>({ phase: 'idle' })
+
+  useEffect(() => {
+    getConfig()
+      .then((data) => setVersion(data.version))
+      .catch(() => {})
+  }, [])
+
+  const handleCheckUpdate = async () => {
+    setUpdateState({ phase: 'checking' })
+    try {
+      const res = await checkUpdate()
+      if (res.has_update && res.latest) {
+        setUpdateState({ phase: 'available', current: res.current, latest: res.latest })
+      } else {
+        setUpdateState({ phase: 'up_to_date', current: res.current })
+      }
+    } catch {
+      setUpdateState({ phase: 'error', message: '检查更新失败' })
+    }
+  }
+
+  const handleDoUpdate = async () => {
+    setUpdateState({ phase: 'updating' })
+    try {
+      const res = await doUpdate()
+      if (res.status === 'ok') {
+        setUpdateState({ phase: 'updated' })
+      } else {
+        setUpdateState({ phase: 'error', message: res.message })
+      }
+    } catch {
+      setUpdateState({ phase: 'error', message: '更新失败' })
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <h3 className="text-sm font-bold flex items-center gap-2 mb-1">
+          <Icon icon={IconInfo} width={16} />
+          0xMux
+        </h3>
+        <p className="text-xs text-[var(--color-fg-muted)]">
+          基于 Web 的 tmux 终端管理器
+        </p>
+      </div>
+
+      {/* Version & Update */}
+      <div className="flex flex-col gap-1.5 text-xs">
+        <div className="flex items-center justify-between">
+          <span className="text-[var(--color-fg-muted)]">当前版本</span>
+          <div className="flex items-center gap-2">
+            <code className="font-mono">v{version ?? '...'}</code>
+            {updateState.phase === 'idle' && (
+              <button
+                onClick={handleCheckUpdate}
+                className="px-2 py-0.5 text-[10px] font-bold border-[length:var(--border-w)] border-[var(--color-border-light)] rounded-[var(--radius)]
+                  hover:border-[var(--color-primary)] hover:text-[var(--color-primary)] transition-colors cursor-pointer"
+              >
+                检查更新
+              </button>
+            )}
+            {updateState.phase === 'checking' && (
+              <span className="text-[var(--color-fg-muted)] text-[10px]">检查中...</span>
+            )}
+            {updateState.phase === 'up_to_date' && (
+              <span className="text-[var(--color-success)] text-[10px] font-bold">已是最新版本</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Update available */}
+      {updateState.phase === 'available' && (
+        <div className="px-3 py-2 bg-[var(--color-primary)]/10 border-[length:var(--border-w)] border-[var(--color-primary)] rounded-[var(--radius)] flex items-center justify-between">
+          <span className="text-xs font-bold">
+            v{updateState.current} → v{updateState.latest}
+          </span>
+          <button
+            onClick={handleDoUpdate}
+            className="px-3 py-1 text-[10px] font-bold bg-[var(--color-primary)] text-[var(--color-primary-fg)] border-[length:var(--border-w)] border-[var(--color-primary)] rounded-[var(--radius)]
+              hover:opacity-90 transition-opacity cursor-pointer"
+          >
+            立即更新
+          </button>
+        </div>
+      )}
+
+      {/* Updating */}
+      {updateState.phase === 'updating' && (
+        <div className="px-3 py-2 bg-[var(--color-bg-alt)] border-[length:var(--border-w)] border-[var(--color-border-light)] rounded-[var(--radius)] text-xs text-[var(--color-fg-muted)]">
+          更新中，请稍候...
+        </div>
+      )}
+
+      {/* Updated */}
+      {updateState.phase === 'updated' && (
+        <div className="px-3 py-2 bg-[var(--color-success)]/10 border-[length:var(--border-w)] border-[var(--color-success)] rounded-[var(--radius)] text-xs text-[var(--color-success)] font-bold">
+          更新完成，服务正在重启...
+        </div>
+      )}
+
+      {/* Error */}
+      {updateState.phase === 'error' && (
+        <div className="px-3 py-2 bg-[var(--color-danger)]/10 border-[length:var(--border-w)] border-[var(--color-danger)] rounded-[var(--radius)] flex items-center justify-between">
+          <span className="text-xs text-[var(--color-danger)]">{updateState.message}</span>
+          <button
+            onClick={handleCheckUpdate}
+            className="px-2 py-0.5 text-[10px] font-bold border-[length:var(--border-w)] border-[var(--color-danger)] text-[var(--color-danger)] rounded-[var(--radius)]
+              hover:opacity-80 transition-opacity cursor-pointer"
+          >
+            重试
+          </button>
         </div>
       )}
     </div>
@@ -627,6 +839,50 @@ function SliderRow({
       />
       <span className="text-xs font-bold w-10 text-right">{display}</span>
     </div>
+  )
+}
+
+function EditorSkinCard({
+  skin,
+  selected,
+  onSelect,
+}: {
+  skin: EditorSkin
+  selected: boolean
+  onSelect: (skin: EditorSkin) => void
+}) {
+  const option = EDITOR_SKINS[skin]
+  const light = getEditorSkinPalette(skin, 'light')
+  const dark = getEditorSkinPalette(skin, 'dark')
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(skin)}
+      className={`text-left p-2 border-[length:var(--border-w)] rounded-[var(--radius)] transition-colors ${
+        selected
+          ? 'border-[var(--color-primary)] bg-[var(--color-bg-alt)]'
+          : 'border-[var(--color-border-light)] hover:border-[var(--color-border)]'
+      }`}
+    >
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-xs font-bold">{option.label}</span>
+        {selected && <span className="text-[10px] text-[var(--color-primary)] font-bold">ACTIVE</span>}
+      </div>
+      <div className="text-[10px] text-[var(--color-fg-muted)] mb-2">{option.description}</div>
+      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 text-[10px] text-[var(--color-fg-muted)]">
+          <span>L</span>
+          <span className="w-3 h-3 border border-[var(--color-border-light)]" style={{ backgroundColor: light.textColor }} />
+          <span className="w-3 h-3 border border-[var(--color-border-light)]" style={{ backgroundColor: light.accentColor }} />
+        </div>
+        <div className="flex items-center gap-1.5 text-[10px] text-[var(--color-fg-muted)]">
+          <span>D</span>
+          <span className="w-3 h-3 border border-[var(--color-border-light)]" style={{ backgroundColor: dark.textColor }} />
+          <span className="w-3 h-3 border border-[var(--color-border-light)]" style={{ backgroundColor: dark.accentColor }} />
+        </div>
+      </div>
+    </button>
   )
 }
 

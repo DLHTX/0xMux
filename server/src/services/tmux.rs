@@ -363,24 +363,36 @@ pub fn list_all_windows() -> Result<HashMap<String, Vec<TmuxWindow>>, AppError> 
     Ok(result)
 }
 
-fn get_session_current_path(session: &str) -> Option<String> {
+pub fn get_target_current_path(session: &str, window: Option<u32>) -> Result<String, AppError> {
+    let target = match window {
+        Some(index) => format!("{session}:{index}"),
+        None => session.to_string(),
+    };
+
     let output = tmux_cmd()
         .args([
             "display-message",
             "-p",
             "-t",
-            session,
+            &target,
             "#{pane_current_path}",
         ])
         .output()
-        .ok()?;
+        .map_err(|e| AppError::Internal(format!("Failed to get pane path: {e}")))?;
 
     if !output.status.success() {
-        return None;
+        return Err(AppError::BadRequest(format!(
+            "Cannot resolve current path for target '{target}'"
+        )));
     }
 
     let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if path.is_empty() { None } else { Some(path) }
+    if path.is_empty() {
+        return Err(AppError::BadRequest(format!(
+            "Target '{target}' has empty current path"
+        )));
+    }
+    Ok(path)
 }
 
 pub fn new_window(session: &str, name: Option<&str>) -> Result<TmuxWindow, AppError> {
@@ -403,7 +415,7 @@ pub fn new_window(session: &str, name: Option<&str>) -> Result<TmuxWindow, AppEr
     ];
 
     // Keep new windows in the same working directory as the session's current pane.
-    if let Some(path) = get_session_current_path(session) {
+    if let Ok(path) = get_target_current_path(session, None) {
         args.push("-c".to_string());
         args.push(path);
     }

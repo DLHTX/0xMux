@@ -1,7 +1,11 @@
 pub mod ai_sync;
 pub mod auth_service;
 pub mod config_store;
+pub mod fs;
+pub mod git;
 pub mod install;
+pub mod search;
 pub mod system;
 pub mod tmux;
 pub mod updater;
+pub mod workspace;

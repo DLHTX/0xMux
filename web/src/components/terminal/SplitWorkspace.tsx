@@ -96,6 +96,10 @@ interface SplitWorkspaceProps {
   /** Returns all window keys tracked by any pane or saved layout.
    *  Used to decide which pool containers to keep alive across session switches. */
   getAllTrackedWindowKeys?: () => Set<string>
+  /** Called when '@' is typed in any terminal pane */
+  onAtTrigger?: () => void
+  /** Whether the @ trigger is enabled */
+  atTriggerEnabled?: boolean
 }
 
 function ResizeHandle({ direction }: { direction: 'horizontal' | 'vertical' }) {
@@ -560,10 +564,27 @@ export function SplitWorkspace(props: SplitWorkspaceProps) {
 
   useEffect(() => {
     let dragCount = 0
-    const onDragEnter = () => { dragCount++; setIsDragging(true) }
-    const onDragLeave = () => { dragCount--; if (dragCount <= 0) { dragCount = 0; setIsDragging(false) } }
+    const isWindowDrag = (event: DragEvent) =>
+      Array.from(event.dataTransfer?.types ?? []).includes('text/window-key')
+    const onDragEnter = (event: DragEvent) => {
+      if (!isWindowDrag(event)) return
+      dragCount++
+      setIsDragging(true)
+    }
+    const onDragLeave = (event: DragEvent) => {
+      if (!isWindowDrag(event)) return
+      dragCount--
+      if (dragCount <= 0) {
+        dragCount = 0
+        setIsDragging(false)
+      }
+    }
     const onDragEnd = () => { dragCount = 0; setIsDragging(false) }
-    const onDrop = () => { dragCount = 0; setIsDragging(false) }
+    const onDrop = (event: DragEvent) => {
+      if (!isWindowDrag(event)) return
+      dragCount = 0
+      setIsDragging(false)
+    }
 
     window.addEventListener('dragenter', onDragEnter)
     window.addEventListener('dragleave', onDragLeave)
@@ -662,6 +683,8 @@ export function SplitWorkspace(props: SplitWorkspaceProps) {
               })
               if (paneId) props.onPaneFocus(paneId)
             }}
+            onAtTrigger={props.onAtTrigger}
+            atTriggerEnabled={props.atTriggerEnabled}
           />,
           container
         )

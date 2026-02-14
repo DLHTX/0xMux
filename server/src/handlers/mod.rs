@@ -1,5 +1,7 @@
 pub mod ai;
 pub mod auth;
+pub mod files;
+pub mod git;
 pub mod health;
 pub mod layout;
 pub mod session;

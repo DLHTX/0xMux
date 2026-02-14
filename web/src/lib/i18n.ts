@@ -87,6 +87,47 @@ const en = {
   'theme.fontScale': 'Scale',
   'theme.reset': 'Reset to Preset Default',
   'theme.language': 'Language',
+
+  // Activity Bar
+  'activity.sessions': 'Sessions',
+  'activity.files': 'Files',
+  'activity.search': 'Search',
+  'activity.git': 'Git',
+
+  // File Explorer
+  'files.title': 'Explorer',
+  'files.expandAll': 'Expand All',
+  'files.collapseAll': 'Collapse All',
+  'files.empty': 'No files',
+
+  // Search Panel
+  'search.title': 'Search',
+  'search.placeholder': 'Search...',
+  'search.regex': 'Regex',
+  'search.caseSensitive': 'Case Sensitive',
+  'search.fileFilter': 'File filter (e.g. *.rs)',
+  'search.noResults': 'No results',
+  'search.results': '{files} files, {matches} matches',
+  'search.truncated': 'Results truncated (max {max})',
+
+  // Git Panel
+  'git.title': 'Source Control',
+  'git.branch': 'Branch',
+  'git.noRepo': 'Not a git repository',
+  'git.staged': 'Staged Changes',
+  'git.unstaged': 'Changes',
+  'git.untracked': 'Untracked',
+  'git.commits': 'Recent Commits',
+  'git.branches': 'Branches',
+  'git.refresh': 'Refresh',
+  'git.ahead': '{n} ahead',
+  'git.behind': '{n} behind',
+
+  // Editor
+  'editor.unsaved': 'Unsaved changes',
+  'editor.save': 'Save (Ctrl+S)',
+  'editor.close': 'Close',
+  'editor.closeOthers': 'Close Others',
 } as const
 
 const zh: { [K in keyof typeof en]: string } = {
@@ -161,6 +202,42 @@ const zh: { [K in keyof typeof en]: string } = {
   'theme.fontScale': '缩放',
   'theme.reset': '恢复预设默认',
   'theme.language': '语言',
+
+  'activity.sessions': '终端',
+  'activity.files': '文件',
+  'activity.search': '搜索',
+  'activity.git': 'Git',
+
+  'files.title': '资源管理器',
+  'files.expandAll': '展开全部',
+  'files.collapseAll': '折叠全部',
+  'files.empty': '无文件',
+
+  'search.title': '搜索',
+  'search.placeholder': '搜索...',
+  'search.regex': '正则',
+  'search.caseSensitive': '区分大小写',
+  'search.fileFilter': '文件过滤 (如 *.rs)',
+  'search.noResults': '无结果',
+  'search.results': '{files} 个文件，{matches} 个匹配',
+  'search.truncated': '结果已截断 (最多 {max})',
+
+  'git.title': '源代码管理',
+  'git.branch': '分支',
+  'git.noRepo': '非 Git 仓库',
+  'git.staged': '暂存的更改',
+  'git.unstaged': '更改',
+  'git.untracked': '未跟踪',
+  'git.commits': '最近提交',
+  'git.branches': '分支',
+  'git.refresh': '刷新',
+  'git.ahead': '领先 {n}',
+  'git.behind': '落后 {n}',
+
+  'editor.unsaved': '未保存更改',
+  'editor.save': '保存 (Ctrl+S)',
+  'editor.close': '关闭',
+  'editor.closeOthers': '关闭其他',
 }
 
 export type MessageKey = keyof typeof en

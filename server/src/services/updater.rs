@@ -1,19 +1,9 @@
 use std::process::Command;
-use std::sync::Mutex;
-use std::time::Duration;
 
 const GITHUB_REPO: &str = "DLHTX/0xMux";
-const CHECK_INTERVAL: Duration = Duration::from_secs(6 * 3600); // 6 hours
-const STARTUP_DELAY: Duration = Duration::from_secs(30);
-
-static LATEST_VERSION: Mutex<Option<String>> = Mutex::new(None);
 
 pub fn current_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
-}
-
-pub fn latest_version() -> Option<String> {
-    LATEST_VERSION.lock().ok()?.clone()
 }
 
 fn current_platform() -> &'static str {
@@ -53,7 +43,7 @@ fn is_newer(latest: &str, current: &str) -> bool {
 
 /// Check GitHub releases API for the latest version.
 /// Returns (version, download_url) if a release with matching platform asset exists.
-fn check_latest_release() -> Option<(String, String)> {
+pub fn check_latest_release() -> Option<(String, String)> {
     let url = format!("https://api.github.com/repos/{GITHUB_REPO}/releases/latest");
     let output = Command::new("curl")
         .args([
@@ -93,7 +83,7 @@ fn check_latest_release() -> Option<(String, String)> {
 }
 
 /// Download tarball, extract binary, replace current exe.
-fn perform_update(download_url: &str) -> Result<(), String> {
+pub fn perform_update(download_url: &str) -> Result<(), String> {
     let current_exe =
         std::env::current_exe().map_err(|e| format!("Cannot determine current exe: {e}"))?;
 
@@ -165,70 +155,25 @@ fn perform_update(download_url: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Single check-and-update cycle. Returns `true` if binary was updated.
-fn check_and_update() -> bool {
-    let current = current_version();
+/// Manual check: returns version comparison info for the handler.
+pub fn check_update() -> serde_json::Value {
+    let current = current_version().to_string();
 
-    let (latest, download_url) = match check_latest_release() {
-        Some(v) => v,
-        None => return false,
-    };
-
-    // Store latest version for status API
-    if let Ok(mut lock) = LATEST_VERSION.lock() {
-        *lock = Some(latest.clone());
-    }
-
-    if !is_newer(&latest, current) {
-        tracing::debug!("Already up to date (v{current})");
-        return false;
-    }
-
-    tracing::info!("New version available: v{current} → v{latest}");
-
-    match perform_update(&download_url) {
-        Ok(()) => {
-            tracing::info!("Binary updated to v{latest}, triggering restart...");
-            true
+    match check_latest_release() {
+        Some((latest, _download_url)) => {
+            let has_update = is_newer(&latest, &current);
+            serde_json::json!({
+                "current": current,
+                "latest": latest,
+                "has_update": has_update,
+            })
         }
-        Err(e) => {
-            tracing::error!("Auto-update failed: {e}");
-            false
+        None => {
+            serde_json::json!({
+                "current": current,
+                "latest": null,
+                "has_update": false,
+            })
         }
     }
-}
-
-/// Spawn background update checker. Only active in release builds.
-pub fn spawn_update_checker() {
-    if cfg!(debug_assertions) {
-        tracing::debug!("Auto-updater disabled in debug builds");
-        return;
-    }
-
-    if current_platform() == "unknown" {
-        tracing::warn!("Auto-updater: unsupported platform, skipping");
-        return;
-    }
-
-    tokio::spawn(async {
-        tokio::time::sleep(STARTUP_DELAY).await;
-
-        loop {
-            match tokio::task::spawn_blocking(check_and_update).await {
-                Ok(true) => {
-                    // Binary replaced, exit with code 42 → Node wrapper restarts
-                    tracing::info!("Restarting with updated binary...");
-                    // Brief delay so log flushes
-                    tokio::time::sleep(Duration::from_millis(500)).await;
-                    std::process::exit(42);
-                }
-                Ok(false) => {}
-                Err(e) => {
-                    tracing::warn!("Update check task failed: {e}");
-                }
-            }
-
-            tokio::time::sleep(CHECK_INTERVAL).await;
-        }
-    });
 }

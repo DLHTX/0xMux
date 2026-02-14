@@ -7,6 +7,16 @@ import { SetupWizard } from './components/setup'
 import { SetupPasswordModal, LoginModal, SettingsModal } from './components/auth'
 import { PluginModal } from './components/plugins'
 import { ToastContainer } from './components/ui/Toast'
+import { ActivityBar } from './components/sidebar/ActivityBar'
+import { SidebarContainer } from './components/sidebar/SidebarContainer'
+import { FileExplorer } from './components/sidebar/FileExplorer'
+import { SearchPanel } from './components/sidebar/SearchPanel'
+import { GitPanel } from './components/sidebar/GitPanel'
+import FloatingWindow from './components/editor/FloatingWindow'
+import EditorPane from './components/editor/EditorPane'
+import EditorTabs from './components/editor/EditorTabs'
+import EditorStatusBar from './components/editor/EditorStatusBar'
+import { QuickFileSearch } from './components/editor/QuickFileSearch'
 import { useSessions } from './hooks/useSessions'
 import { useDeps } from './hooks/useDeps'
 import { useSplitLayout } from './hooks/useSplitLayout'
@@ -15,15 +25,19 @@ import { useMobile, useCompact } from './hooks/useMobile'
 import { useToast } from './hooks/useToast'
 import { useAuth } from './hooks/useAuth'
 import { useImagePaste } from './hooks/useImagePaste'
+import { useFloatingEditor } from './hooks/useFloatingEditor'
 import { ThemeProvider, useTheme } from './hooks/useTheme'
 import { I18nProvider, useI18n } from './hooks/useI18n'
 import { MuxProvider, useMux } from './contexts/MuxContext'
 import { FUSION_PIXEL_FONT, SILKSCREEN_FONT } from './lib/theme'
+import { getGitDiff } from './lib/api'
 import { Icon } from '@iconify/react'
 import { IconTerminal, IconChevronLeft, IconChevronRight, IconPlus, IconTrash, IconX } from './lib/icons'
 import type { Terminal } from '@xterm/xterm'
 import type {
   TmuxWindow,
+  ActivityView,
+  WorkspaceContext,
   AiStatusResponse,
   AiCatalogResponse,
   AiSyncResponse,
@@ -33,6 +47,41 @@ import type {
 } from './lib/types'
 import { getWindows, createWindow, deleteWindow, getAiStatus, getAiCatalog, syncAi, uninstallAi } from './lib/api'
 import { setInitCommand, markWindowPending } from './lib/init-commands'
+
+const DESKTOP_ACTIVE_VIEW_STORAGE_KEY = '0xmux-desktop-active-view'
+const LAST_WINDOW_STORAGE_PREFIX = '0xmux-last-window'
+
+function loadPersistedActiveView(): ActivityView | null {
+  try {
+    const raw = localStorage.getItem(DESKTOP_ACTIVE_VIEW_STORAGE_KEY)
+    if (raw === 'sessions' || raw === 'files' || raw === 'search' || raw === 'git') {
+      return raw
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+function getLastWindowStorageKey(isMobile: boolean): string {
+  return `${LAST_WINDOW_STORAGE_PREFIX}:${isMobile ? 'mobile' : 'desktop'}`
+}
+
+function loadPersistedWindow(isMobile: boolean): { sessionName: string; windowIndex: number } | null {
+  try {
+    const raw = localStorage.getItem(getLastWindowStorageKey(isMobile))
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    if (typeof parsed.sessionName !== 'string') return null
+    if (typeof parsed.windowIndex !== 'number') return null
+    return {
+      sessionName: parsed.sessionName,
+      windowIndex: parsed.windowIndex,
+    }
+  } catch {
+    return null
+  }
+}
 
 /** Auto-switch font when locale changes (zh -> Fusion Pixel, en -> Silkscreen) */
 function LocaleFontBridge() {
@@ -70,7 +119,7 @@ function AppContent() {
   const mux = useMux()
   const { deps, loading: depsLoading, allReady, installPackage } = useDeps()
 
-  const { settings } = useSettings()
+  const { settings, updateSettings } = useSettings()
   const {
     layout,
     splitPane,
@@ -95,11 +144,16 @@ function AppContent() {
   const isCompact = useCompact()
   const { toasts, addToast, removeToast } = useToast()
 
+  const floatingEditor = useFloatingEditor({ enabled: !isMobile })
+
   const [showCreate, setShowCreate] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showPluginCenter, setShowPluginCenter] = useState(false)
+  const [showQuickFile, setShowQuickFile] = useState(false)
   const [selectedWindow, setSelectedWindow] = useState<{ sessionName: string; windowIndex: number } | null>(null)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(isCompact)
+  const [activeView, setActiveView] = useState<ActivityView | null>(
+    () => loadPersistedActiveView() ?? 'sessions'
+  )
   const [mobileView, setMobileView] = useState<MobileView>('sessions')
   const [windows, setWindows] = useState<Map<string, TmuxWindow[]>>(new Map())
   const [aiStatus, setAiStatus] = useState<AiStatusResponse | null>(null)
@@ -110,6 +164,74 @@ function AppContent() {
   const [aiSyncing, setAiSyncing] = useState(false)
   const mobileTerminalRef = useRef<Terminal | null>(null)
   const activeTerminalRef = useRef<Terminal | null>(null)
+  const pendingWindowRestoreRef = useRef(loadPersistedWindow(isMobile))
+  const windowRestoreDoneRef = useRef(false)
+
+  useEffect(() => {
+    if (isMobile) return
+    try {
+      if (activeView) {
+        localStorage.setItem(DESKTOP_ACTIVE_VIEW_STORAGE_KEY, activeView)
+      } else {
+        localStorage.removeItem(DESKTOP_ACTIVE_VIEW_STORAGE_KEY)
+      }
+    } catch {
+      // Ignore storage errors
+    }
+  }, [activeView, isMobile])
+
+  useEffect(() => {
+    try {
+      const key = getLastWindowStorageKey(isMobile)
+      if (selectedWindow) {
+        localStorage.setItem(key, JSON.stringify(selectedWindow))
+      } else {
+        localStorage.removeItem(key)
+      }
+    } catch {
+      // Ignore storage errors
+    }
+  }, [selectedWindow, isMobile])
+
+  // Restore last opened window after session/window lists are available.
+  useEffect(() => {
+    if (windowRestoreDoneRef.current) return
+    const target = pendingWindowRestoreRef.current
+    if (!target) {
+      windowRestoreDoneRef.current = true
+      return
+    }
+    if (sessions.length === 0) return
+
+    const allWindowsLoaded = sessions.every((s) => windows.has(s.name))
+    const hasSession = sessions.some((s) => s.name === target.sessionName)
+    if (!hasSession) {
+      if (allWindowsLoaded) windowRestoreDoneRef.current = true
+      return
+    }
+
+    const sessionWindows = windows.get(target.sessionName)
+    if (!sessionWindows) return
+
+    const hasWindow = sessionWindows.some((w) => w.index === target.windowIndex)
+    if (!hasWindow) {
+      windowRestoreDoneRef.current = true
+      return
+    }
+
+    if (isMobile) {
+      setSelectedWindow(target)
+      if (activePaneId) {
+        assignWindow(activePaneId, target.sessionName, target.windowIndex)
+      }
+      setMobileView('terminal')
+    } else {
+      switchSession(target.sessionName, target.windowIndex)
+      setSelectedWindow(target)
+    }
+
+    windowRestoreDoneRef.current = true
+  }, [sessions, windows, isMobile, activePaneId, assignWindow, switchSession])
 
   const refreshAiData = useCallback(async () => {
     setAiLoading(true)
@@ -223,7 +345,7 @@ function AppContent() {
 
   // Auto-collapse sidebar on compact screens (foldables / small tablets)
   useEffect(() => {
-    setSidebarCollapsed(isCompact)
+    if (isCompact) setActiveView(null)
   }, [isCompact])
 
   useEffect(() => {
@@ -373,8 +495,38 @@ function AppContent() {
       // Ctrl+B — toggle sidebar
       if (e.ctrlKey && e.key === 'b') {
         e.preventDefault()
-        setSidebarCollapsed((prev) => !prev)
+        setActiveView(prev => prev ? null : 'sessions')
         return
+      }
+
+      // Ctrl+E — toggle file explorer
+      if (e.ctrlKey && e.key === 'e') {
+        e.preventDefault()
+        setActiveView(prev => prev === 'files' ? null : 'files')
+        return
+      }
+
+      // Ctrl+Shift+F — toggle search panel
+      if (e.ctrlKey && e.shiftKey && e.key === 'F') {
+        e.preventDefault()
+        setActiveView(prev => prev === 'search' ? null : 'search')
+        return
+      }
+
+      // Ctrl+P — quick file search
+      if (e.ctrlKey && e.key === 'p') {
+        e.preventDefault()
+        setShowQuickFile(prev => !prev)
+        return
+      }
+
+      // Ctrl+S — save file in editor
+      if (e.ctrlKey && e.key === 's') {
+        if (floatingEditor.state.isOpen && floatingEditor.state.activeTabId) {
+          e.preventDefault()
+          floatingEditor.saveCurrentFile()
+          return
+        }
       }
     }
 
@@ -384,6 +536,9 @@ function AppContent() {
 
   // Sync selectedWindow with activePaneId
   useEffect(() => {
+    // Mobile keeps its own selected window state; syncing from split panes
+    // causes tap flicker and selection rollback in the session list.
+    if (isMobile) return
     if (!activePaneId) return
     const pw = paneWindowMap[activePaneId]
     if (
@@ -393,7 +548,7 @@ function AppContent() {
     ) {
       setSelectedWindow({ sessionName: pw.sessionName, windowIndex: pw.windowIndex })
     }
-  }, [activePaneId, paneWindowMap, selectedWindow])
+  }, [isMobile, activePaneId, paneWindowMap, selectedWindow])
 
   const handleCreate = async (name: string, startDirectory?: string, initCommand?: string) => {
     try {
@@ -527,8 +682,11 @@ function AppContent() {
   const handleSelectWindow = useCallback((sessionName: string, windowIndex: number) => {
     setSelectedWindow({ sessionName, windowIndex })
 
-    // Mobile: simple view switch
+    // Mobile: update pane state so the sync effect doesn't revert selectedWindow
     if (isMobile) {
+      if (activePaneId) {
+        assignWindow(activePaneId, sessionName, windowIndex)
+      }
       setMobileView('terminal')
       return
     }
@@ -541,7 +699,7 @@ function AppContent() {
 
     // Same-session click
     selectWindow(sessionName, windowIndex)
-  }, [isMobile, selectWindow, switchSession, primarySession])
+  }, [isMobile, activePaneId, assignWindow, selectWindow, switchSession, primarySession])
 
   /** Handle drag-and-drop of a window onto the CENTER of a pane (replace). */
   const handleDropWindow = useCallback(
@@ -570,6 +728,43 @@ function AppContent() {
   const handleMobileBack = useCallback(() => {
     setMobileView('sessions')
   }, [])
+
+  // Activity Bar view change: click same = collapse, click different = switch
+  const handleViewChange = useCallback((view: ActivityView) => {
+    setActiveView(prev => prev === view ? null : view)
+  }, [])
+
+  const activeWorkspace: WorkspaceContext | undefined = selectedWindow
+    ? {
+        session: selectedWindow.sessionName,
+        window: selectedWindow.windowIndex,
+      }
+    : undefined
+
+  // Open file in floating editor from file explorer / search results
+  const handleOpenFile = useCallback((path: string, line?: number) => {
+    floatingEditor.openFile(path, line, 'edit', undefined, activeWorkspace)
+  }, [floatingEditor, activeWorkspace])
+
+  // @ trigger in terminal opens quick file search
+  const handleAtTrigger = useCallback(() => {
+    setShowQuickFile(true)
+  }, [])
+
+  // Open diff in floating editor from git panel
+  const handleOpenDiff = useCallback(async (path: string, staged: boolean) => {
+    try {
+      const diff = await getGitDiff(path, staged, activeWorkspace)
+      floatingEditor.openFile(path, undefined, 'diff', diff.original, activeWorkspace)
+    } catch {
+      // fallback: open as normal file
+      floatingEditor.openFile(path, undefined, 'edit', undefined, activeWorkspace)
+    }
+  }, [floatingEditor, activeWorkspace])
+
+  const handleSidebarWidthChange = useCallback((nextWidth: number) => {
+    updateSettings({ sidebarWidth: nextWidth })
+  }, [updateSettings])
 
   // Auth loading
   if (authLoading || depsLoading) {
@@ -822,6 +1017,8 @@ function AppContent() {
                     focused
                     terminalRef={mobileTerminalRef}
                     mobileBottomOffset={VIRTUAL_KEYBAR_HEIGHT}
+                    onAtTrigger={handleAtTrigger}
+                    atTriggerEnabled={settings.quickFileTrigger}
                   />
                 </div>
               )}
@@ -832,24 +1029,40 @@ function AppContent() {
           )}
         </div>
       ) : (
-        /* Desktop layout: sidebar + workspace */
-        <div className="flex-1 flex overflow-hidden">
-          <SessionSidebar
-            sessions={sessions}
-            windows={windows}
-            selectedWindow={selectedWindow}
-            selectedSession={primarySession}
-            onSelectSession={handleSelectSession}
-            onSelectWindow={handleSelectWindow}
-            onCreateSession={() => setShowCreate(true)}
-            onCreateWindow={handleCreateWindow}
-            onDeleteWindow={handleDeleteWindow}
-            onDeleteSession={handleDeleteSession}
-            isWindowInUse={isWindowInUse}
-            isInSplitGroup={isInSplitGroup}
-            collapsed={sidebarCollapsed}
-            onToggleCollapse={() => setSidebarCollapsed((prev) => !prev)}
-          />
+        /* Desktop layout: ActivityBar + SidebarContainer + workspace */
+        <div className="flex-1 flex overflow-hidden relative">
+          {/* Activity Bar (always visible, 48px) */}
+          <ActivityBar activeView={activeView} onViewChange={handleViewChange} />
+
+          {/* Sidebar panels */}
+          <SidebarContainer
+            activeView={activeView}
+            width={settings.sidebarWidth}
+            onWidthChange={handleSidebarWidthChange}
+          >
+            {{
+              sessions: (
+                <SessionSidebar
+                  sessions={sessions}
+                  windows={windows}
+                  selectedWindow={selectedWindow}
+                  selectedSession={primarySession}
+                  onSelectSession={handleSelectSession}
+                  onSelectWindow={handleSelectWindow}
+                  onCreateSession={() => setShowCreate(true)}
+                  onCreateWindow={handleCreateWindow}
+                  onDeleteWindow={handleDeleteWindow}
+                  onDeleteSession={handleDeleteSession}
+                  isWindowInUse={isWindowInUse}
+                  isInSplitGroup={isInSplitGroup}
+                  collapsed={false}
+                />
+              ),
+              files: <FileExplorer onFileOpen={handleOpenFile} workspace={activeWorkspace} />,
+              search: <SearchPanel onOpenFile={handleOpenFile} workspace={activeWorkspace} />,
+              git: <GitPanel onOpenDiff={handleOpenDiff} workspace={activeWorkspace} />,
+            }}
+          </SidebarContainer>
 
           {/* Workspace */}
           <main className="flex-1 flex flex-col min-h-0 min-w-0 bg-[var(--color-bg)]">
@@ -870,6 +1083,8 @@ function AppContent() {
                     isWindowInUse={isWindowInUse}
                     activeTerminalRef={activeTerminalRef}
                     getAllTrackedWindowKeys={getAllTrackedWindowKeys}
+                    onAtTrigger={handleAtTrigger}
+                    atTriggerEnabled={settings.quickFileTrigger}
                   />
               </div>
             ) : (
@@ -879,6 +1094,72 @@ function AppContent() {
                   <p className="text-sm font-bold">Select a session to start</p>
                 </div>
               </div>
+            )}
+
+            {/* Floating Editor Window */}
+            {floatingEditor.state.isOpen && (
+              <FloatingWindow
+                isOpen={floatingEditor.state.isOpen}
+                minimized={floatingEditor.state.minimized}
+                x={floatingEditor.state.x}
+                y={floatingEditor.state.y}
+                width={floatingEditor.state.width}
+                height={floatingEditor.state.height}
+                opacity={floatingEditor.state.opacity}
+                title={
+                  floatingEditor.state.tabs.find(t => t.id === floatingEditor.state.activeTabId)?.filePath.split('/').pop() ?? 'Editor'
+                }
+                onClose={floatingEditor.closeEditor}
+                onMinimize={floatingEditor.minimizeEditor}
+                onRestore={floatingEditor.restoreEditor}
+                onPositionChange={floatingEditor.updatePosition}
+                onSizeChange={floatingEditor.updateSize}
+                onOpacityChange={floatingEditor.updateOpacity}
+              >
+                {/* Editor Tabs */}
+                <EditorTabs
+                  tabs={floatingEditor.state.tabs}
+                  activeTabId={floatingEditor.state.activeTabId}
+                  onSelectTab={floatingEditor.setActiveTab}
+                  onCloseTab={floatingEditor.closeTab}
+                  onCloseAllTabs={floatingEditor.closeAllTabs}
+                  onCloseOtherTabs={floatingEditor.closeOtherTabs}
+                  onCloseTabsToLeft={floatingEditor.closeTabsToLeft}
+                  onCloseTabsToRight={floatingEditor.closeTabsToRight}
+                />
+
+                {/* Editor Content */}
+                {(() => {
+                  const activeTab = floatingEditor.state.tabs.find(
+                    t => t.id === floatingEditor.state.activeTabId
+                  )
+                  if (!activeTab) return null
+                  return (
+                    <div className="flex-1 min-h-0 flex flex-col">
+                      <div className="flex-1 min-h-0">
+                        <EditorPane
+                          filePath={activeTab.filePath}
+                          language={activeTab.language}
+                          content={activeTab.content}
+                          mode={activeTab.mode}
+                          editorSettings={settings}
+                          diffOriginal={activeTab.diffOriginal}
+                          onChange={(value: string) => {
+                            floatingEditor.updateTabContent(activeTab.id, value)
+                          }}
+                        />
+                      </div>
+                      <EditorStatusBar
+                        language={activeTab.language}
+                        line={1}
+                        col={1}
+                        fileSize={activeTab.content.length}
+                        encoding="utf-8"
+                      />
+                    </div>
+                  )
+                })()}
+              </FloatingWindow>
             )}
           </main>
         </div>
@@ -928,6 +1209,14 @@ function AppContent() {
           logout()
           setShowSettings(false)
         }}
+      />
+
+      {/* Quick file search popup (@ trigger from terminal) */}
+      <QuickFileSearch
+        isOpen={showQuickFile}
+        onClose={() => setShowQuickFile(false)}
+        onSelectFile={handleOpenFile}
+        workspace={activeWorkspace}
       />
 
       {/* Toast notifications */}

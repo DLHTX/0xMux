@@ -107,9 +107,6 @@ async fn main() {
     banner::print_banner(&banner_host, banner_port);
     tracing::info!("0xMux server listening on {addr}");
 
-    // Auto-updater (release builds only)
-    services::updater::spawn_update_checker();
-
     if let Err(err) = axum::serve(
         listener,
         app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
