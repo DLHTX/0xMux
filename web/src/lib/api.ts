@@ -27,6 +27,7 @@ import type {
   AiUninstallRequest,
   AiUninstallResponse,
   WorkspaceContext,
+  NotificationListResponse,
 } from './types'
 
 const API_BASE = '/api'
@@ -267,6 +268,31 @@ function withWorkspaceParams(params: URLSearchParams, workspace?: WorkspaceConte
   params.set('session', workspace.session)
   params.set('window', String(workspace.window))
   return params
+}
+
+// ── Notification API ──
+
+export async function getNotifications(limit?: number): Promise<NotificationListResponse> {
+  const params = limit ? `?limit=${limit}` : ''
+  return request<NotificationListResponse>(`/notifications${params}`)
+}
+
+export async function deleteNotification(id: string): Promise<void> {
+  return request<void>(`/notifications/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function markNotificationRead(id: string): Promise<void> {
+  return request<void>(`/notifications/${encodeURIComponent(id)}/read`, {
+    method: 'PUT',
+  })
+}
+
+export async function markAllNotificationsRead(): Promise<void> {
+  return request<void>('/notifications/read-all', {
+    method: 'PUT',
+  })
 }
 
 // ── File System API ──

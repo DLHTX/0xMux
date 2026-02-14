@@ -4,6 +4,7 @@ pub mod files;
 pub mod git;
 pub mod health;
 pub mod layout;
+pub mod notification;
 pub mod session;
 pub mod system;
 pub mod upload;

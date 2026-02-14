@@ -201,6 +201,20 @@ input[type="range"].floating-opacity-slider:hover::-moz-range-thumb {
   background: transparent !important;
   color: var(--editor-text-color) !important;
 }
+.floating-markdown-vditor .vditor {
+  height: 100% !important;
+  min-height: 0 !important;
+}
+.floating-markdown-vditor .vditor-content,
+.floating-markdown-vditor .vditor-wysiwyg,
+.floating-markdown-vditor .vditor-wysiwyg pre.vditor-reset {
+  height: 100% !important;
+  min-height: 0 !important;
+}
+.floating-markdown-vditor .vditor-wysiwyg pre.vditor-reset {
+  overflow: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
 .floating-markdown-vditor .vditor-toolbar {
   display: none !important;
 }

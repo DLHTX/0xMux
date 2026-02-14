@@ -3,3 +3,9 @@ id = "playwright"
 name = "Playwright"
 command = "npx"
 args = ["@playwright/mcp@latest"]
+
+[[mcp]]
+id = "codriver"
+name = "CoDriver Desktop"
+command = "npx"
+args = ["-y", "codriver-mcp"]

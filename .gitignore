@@ -26,3 +26,12 @@ npm/@0xmux/
 *.tgz
 .claude/
 .playwright-mcp
+
+# Dev logs
+server-dev.log
+
+# Test screenshots
+playwright-*.png
+test-*.png
+image.png
+mcp-*.png

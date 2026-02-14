@@ -40,7 +40,7 @@ pub fn spawn_session_watcher(tx: broadcast::Sender<String>) {
 pub fn spawn_group_gc() {
     tokio::spawn(async {
         loop {
-            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            tokio::time::sleep(std::time::Duration::from_secs(30)).await;
             let active = mux::active_group_names();
             tmux::gc_orphaned_groups(&active);
         }

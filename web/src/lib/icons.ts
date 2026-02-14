@@ -163,3 +163,15 @@ export {
 export {
   default as IconChevronsUp,
 } from '@iconify-icons/lucide/chevrons-up'
+export {
+  default as IconBell,
+} from '@iconify-icons/lucide/bell'
+export {
+  default as IconImage,
+} from '@iconify-icons/lucide/image'
+export {
+  default as IconZoomIn,
+} from '@iconify-icons/lucide/zoom-in'
+export {
+  default as IconZoomOut,
+} from '@iconify-icons/lucide/zoom-out'

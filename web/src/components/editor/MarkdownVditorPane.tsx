@@ -3,6 +3,20 @@ import type { CSSProperties } from 'react'
 import type { ThemeMode } from '../../lib/theme.ts'
 
 type VditorInstance = import('vditor').default
+type VditorUiTheme = 'dark' | 'classic'
+type VditorContentTheme = 'dark' | 'light'
+
+function getVditorTheme(mode: ThemeMode): {
+  ui: VditorUiTheme
+  content: VditorContentTheme
+  code: string
+} {
+  return {
+    ui: mode === 'dark' ? 'dark' : 'classic',
+    content: mode === 'dark' ? 'dark' : 'light',
+    code: mode === 'dark' ? 'github-dark' : 'github',
+  }
+}
 
 export interface MarkdownVditorPaneProps {
   content: string
@@ -25,6 +39,24 @@ export default function MarkdownVditorPane({
   const editorRef = useRef<VditorInstance | null>(null)
   const syncingRef = useRef(false)
   const readyRef = useRef(false)
+  const onChangeRef = useRef(onChange)
+  const themeRef = useRef(themeMode)
+  const contentRef = useRef(content)
+
+  useEffect(() => {
+    onChangeRef.current = onChange
+  }, [onChange])
+
+  useEffect(() => {
+    contentRef.current = content
+  }, [content])
+
+  useEffect(() => {
+    themeRef.current = themeMode
+    if (!editorRef.current) return
+    const nextTheme = getVditorTheme(themeMode)
+    editorRef.current.setTheme(nextTheme.ui, nextTheme.content, nextTheme.code)
+  }, [themeMode])
   const styleVars = useMemo<CSSProperties>(
     () => ({
       '--editor-text-color': textColor,
@@ -41,12 +73,14 @@ export default function MarkdownVditorPane({
       const { default: Vditor } = await import('vditor')
       if (disposed || !rootRef.current) return
 
+      const initTheme = getVditorTheme(themeRef.current)
       const instance = new Vditor(rootRef.current, {
         mode: 'wysiwyg',
-        theme: themeMode === 'dark' ? 'dark' : 'classic',
+        theme: initTheme.ui,
         cache: { enable: false },
-        value: content,
-        minHeight: 80,
+        value: contentRef.current,
+        height: '100%',
+        minHeight: 0,
         toolbarConfig: {
           hide: true,
           pin: false,
@@ -54,13 +88,19 @@ export default function MarkdownVditorPane({
         toolbar: [],
         preview: {
           delay: 0,
+          hljs: {
+            style: initTheme.code,
+          },
+          theme: {
+            current: initTheme.content,
+          },
           markdown: {
             toc: true,
           },
         },
         input: (value: string) => {
           if (syncingRef.current) return
-          onChange?.(value)
+          onChangeRef.current?.(value)
         },
         after: () => {
           readyRef.current = true
@@ -84,7 +124,7 @@ export default function MarkdownVditorPane({
         editorRef.current = null
       }
     }
-  }, [themeMode, onChange])
+  }, [])
 
   useEffect(() => {
     if (!editorRef.current || !readyRef.current) return

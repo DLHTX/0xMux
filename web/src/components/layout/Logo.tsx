@@ -1,12 +1,13 @@
 interface LogoProps {
   onClick?: () => void
+  className?: string
 }
 
-export function Logo({ onClick }: LogoProps) {
+export function Logo({ onClick, className }: LogoProps) {
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-0 cursor-pointer bg-transparent border-none p-0 select-none"
+      className={`flex items-center gap-0 cursor-pointer bg-transparent border-none p-0 select-none ${className ?? ''}`}
       aria-label="0xMux Home"
     >
       <img

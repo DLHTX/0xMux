@@ -96,6 +96,29 @@ pub fn build(state: AppState) -> Router {
             "/api/upload/image",
             post(handlers::upload::upload_image_handler),
         )
+        // Notification API
+        .route(
+            "/api/notifications",
+            get(handlers::notification::list_notifications_handler)
+                .post(handlers::notification::create_notification_handler),
+        )
+        .route(
+            "/api/notifications/read-all",
+            put(handlers::notification::mark_all_read_handler),
+        )
+        .route(
+            "/api/notifications/{id}",
+            delete(handlers::notification::delete_notification_handler),
+        )
+        .route(
+            "/api/notifications/{id}/read",
+            put(handlers::notification::mark_read_handler),
+        )
+        // Image serving
+        .route(
+            "/api/images/{filename}",
+            get(handlers::notification::serve_image_handler),
+        )
         .route(
             "/api/layouts",
             get(handlers::layout::get_layouts).put(handlers::layout::save_layouts),

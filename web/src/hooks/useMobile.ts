@@ -40,3 +40,24 @@ export function useCompact() {
 
   return isCompact
 }
+
+/**
+ * Detect very narrow mobile viewports (e.g. foldables when folded).
+ * Used to slightly shrink dense UI like terminal font size.
+ */
+export function useNarrowMobile(breakpoint = 390) {
+  const [isNarrowMobile, setIsNarrowMobile] = useState(
+    () => window.innerWidth < breakpoint
+  )
+
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${breakpoint - 1}px)`)
+    const handler = (e: MediaQueryListEvent) => setIsNarrowMobile(e.matches)
+    mq.addEventListener('change', handler)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setIsNarrowMobile(mq.matches)
+    return () => mq.removeEventListener('change', handler)
+  }, [breakpoint])
+
+  return isNarrowMobile
+}

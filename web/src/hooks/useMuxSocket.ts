@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ConnectionStatus, TmuxSession, TmuxWindow } from '../lib/types'
+import type { ConnectionStatus, Notification, TmuxSession, TmuxWindow } from '../lib/types'
 import { getAuthToken } from '../lib/api'
 
 // ── Public types ──
@@ -38,6 +38,8 @@ export interface UseMuxSocketReturn {
   onSessionsUpdate(cb: (sessions: TmuxSession[]) => void): () => void
   /** Subscribe to per-session window list updates. Returns unsubscribe function. */
   onWindowsUpdate(cb: (windows: Record<string, TmuxWindow[]>) => void): () => void
+  /** Subscribe to notification pushes. Returns unsubscribe function. */
+  onNotification(cb: (notification: Notification) => void): () => void
 }
 
 // ── Internal types ──
@@ -65,6 +67,7 @@ export function useMuxSocket(): UseMuxSocketReturn {
   const nextChRef = useRef(1)
   const sessionListenersRef = useRef(new Set<(sessions: TmuxSession[]) => void>())
   const windowListenersRef = useRef(new Set<(windows: Record<string, TmuxWindow[]>) => void>())
+  const notificationListenersRef = useRef(new Set<(notification: Notification) => void>())
   const latestSessionsRef = useRef<TmuxSession[] | null>(null)
   const latestWindowsRef = useRef<Record<string, TmuxWindow[]> | null>(null)
 
@@ -264,6 +267,15 @@ export function useMuxSocket(): UseMuxSocketReturn {
           }
           break
         }
+        case 'notification': {
+          const notification = msg.data as Notification | undefined
+          if (notification) {
+            for (const cb of notificationListenersRef.current) {
+              cb(notification)
+            }
+          }
+          break
+        }
         case 'pong':
           break // heartbeat reply, nothing to do
         case 'scroll_state': {
@@ -388,5 +400,15 @@ export function useMuxSocket(): UseMuxSocketReturn {
     []
   )
 
-  return { status, openChannel, onSessionsUpdate, onWindowsUpdate }
+  const onNotification = useCallback(
+    (cb: (notification: Notification) => void): (() => void) => {
+      notificationListenersRef.current.add(cb)
+      return () => {
+        notificationListenersRef.current.delete(cb)
+      }
+    },
+    []
+  )
+
+  return { status, openChannel, onSessionsUpdate, onWindowsUpdate, onNotification }
 }

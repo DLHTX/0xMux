@@ -5,6 +5,7 @@ use uuid::Uuid;
 #[derive(Serialize)]
 pub struct UploadResponse {
     pub path: String,
+    pub url: String,
 }
 
 pub async fn upload_image_handler(
@@ -44,5 +45,6 @@ pub async fn upload_image_handler(
 
     Ok(Json(UploadResponse {
         path: path.display().to_string(),
+        url: format!("/api/images/{}", filename),
     }))
 }

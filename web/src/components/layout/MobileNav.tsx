@@ -1,17 +1,19 @@
 import { Icon } from '@iconify/react'
-import { IconLayoutGrid, IconTerminal } from '../../lib/icons'
+import { IconLayoutGrid, IconTerminal, IconBell } from '../../lib/icons'
 
-export type MobileView = 'sessions' | 'terminal'
+export type MobileView = 'sessions' | 'terminal' | 'notifications'
 
 interface MobileNavProps {
   activeView: MobileView
   onViewChange: (view: MobileView) => void
+  unreadCount?: number
 }
 
-export function MobileNav({ activeView, onViewChange }: MobileNavProps) {
+export function MobileNav({ activeView, onViewChange, unreadCount = 0 }: MobileNavProps) {
   const items: { view: MobileView; icon: typeof IconLayoutGrid; label: string }[] = [
     { view: 'sessions', icon: IconLayoutGrid, label: 'Sessions' },
     { view: 'terminal', icon: IconTerminal, label: 'Terminal' },
+    { view: 'notifications', icon: IconBell, label: 'Alerts' },
   ]
 
   return (
@@ -20,7 +22,7 @@ export function MobileNav({ activeView, onViewChange }: MobileNavProps) {
         <button
           key={item.view}
           onClick={() => onViewChange(item.view)}
-          className={`flex flex-col items-center gap-0.5 px-4 py-1 transition-colors ${
+          className={`relative flex flex-col items-center gap-0.5 px-4 py-1 transition-colors ${
             activeView === item.view
               ? 'text-[var(--color-success)]'
               : 'text-[var(--color-fg-muted)]'
@@ -28,6 +30,15 @@ export function MobileNav({ activeView, onViewChange }: MobileNavProps) {
         >
           <Icon icon={item.icon} width={20} />
           <span className="text-[10px] font-bold">{item.label}</span>
+          {/* Square unread badge */}
+          {item.view === 'notifications' && unreadCount > 0 && (
+            <span
+              className="absolute -top-0.5 right-1 min-w-[14px] h-[14px] flex items-center justify-center
+                bg-[var(--color-primary)] text-[var(--color-primary-fg)] text-[9px] font-black leading-none px-0.5"
+            >
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
         </button>
       ))}
     </nav>

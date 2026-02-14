@@ -4,12 +4,14 @@ import {
   IconFolder,
   IconSearch,
   IconGitBranch,
+  IconBell,
 } from '../../lib/icons'
 import type { ActivityView } from '../../lib/types'
 
 interface ActivityBarProps {
   activeView: ActivityView | null
   onViewChange: (view: ActivityView) => void
+  unreadCount?: number
 }
 
 const items: { view: ActivityView; icon: typeof IconTerminal; label: string }[] = [
@@ -17,9 +19,10 @@ const items: { view: ActivityView; icon: typeof IconTerminal; label: string }[] 
   { view: 'files', icon: IconFolder, label: 'Files' },
   { view: 'search', icon: IconSearch, label: 'Search' },
   { view: 'git', icon: IconGitBranch, label: 'Git' },
+  { view: 'notifications', icon: IconBell, label: 'Notifications' },
 ]
 
-export function ActivityBar({ activeView, onViewChange }: ActivityBarProps) {
+export function ActivityBar({ activeView, onViewChange, unreadCount = 0 }: ActivityBarProps) {
   return (
     <aside
       className="flex flex-col items-center shrink-0 bg-[var(--color-bg)] border-r-[length:var(--border-w)] border-[var(--color-border)]"
@@ -28,6 +31,7 @@ export function ActivityBar({ activeView, onViewChange }: ActivityBarProps) {
       <nav className="flex flex-col w-full flex-1">
         {items.map(({ view, icon, label }) => {
           const isActive = activeView === view
+          const showBadge = view === 'notifications' && unreadCount > 0
           return (
             <button
               key={view}
@@ -50,6 +54,15 @@ export function ActivityBar({ activeView, onViewChange }: ActivityBarProps) {
                 />
               )}
               <Icon icon={icon} width={20} height={20} />
+              {/* Square unread badge */}
+              {showBadge && (
+                <span
+                  className="absolute top-1.5 right-1.5 min-w-[14px] h-[14px] flex items-center justify-center
+                    bg-[var(--color-primary)] text-[var(--color-primary-fg)] text-[9px] font-black leading-none px-0.5"
+                >
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
             </button>
           )
         })}

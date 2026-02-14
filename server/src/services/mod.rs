@@ -4,6 +4,7 @@ pub mod config_store;
 pub mod fs;
 pub mod git;
 pub mod install;
+pub mod notification;
 pub mod search;
 pub mod system;
 pub mod tmux;

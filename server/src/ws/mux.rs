@@ -12,6 +12,7 @@ use std::collections::{HashMap, HashSet};
 use std::io::Read;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
+use std::time::Instant;
 use tokio::sync::{Notify, Semaphore, mpsc};
 
 use crate::services::tmux;
@@ -24,21 +25,47 @@ static PTY_SETUP_SEMAPHORE: LazyLock<Semaphore> = LazyLock::new(|| Semaphore::ne
 // ── Global registry of active `_0xmux_*` grouped sessions ──
 // Tracked so the periodic GC and shutdown handler know which sessions are
 // legitimately in use vs orphaned.
+//
+// Values: None = actively in use, Some(Instant) = deregistered at this time.
+// GC only reaps sessions that have been deregistered for > GRACE_PERIOD,
+// preventing races between cleanup and reconnecting clients.
 
-static ACTIVE_GROUPS: LazyLock<Mutex<HashSet<String>>> =
-    LazyLock::new(|| Mutex::new(HashSet::new()));
+/// Grace period after deregistration before GC may kill the session.
+const DEREGISTER_GRACE_SECS: u64 = 60;
+
+static ACTIVE_GROUPS: LazyLock<Mutex<HashMap<String, Option<Instant>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 fn register_group(name: &str) {
-    ACTIVE_GROUPS.lock().unwrap().insert(name.to_string());
+    ACTIVE_GROUPS
+        .lock()
+        .unwrap()
+        .insert(name.to_string(), None);
 }
 
 fn deregister_group(name: &str) {
-    ACTIVE_GROUPS.lock().unwrap().remove(name);
+    let mut map = ACTIVE_GROUPS.lock().unwrap();
+    // Mark as deregistered with timestamp instead of removing immediately.
+    // GC will clean it up after the grace period expires.
+    if let Some(entry) = map.get_mut(name) {
+        *entry = Some(Instant::now());
+    }
 }
 
-/// Return a snapshot of all currently-active group session names.
+/// Return a snapshot of group session names that are considered "active"
+/// (either in-use or within the grace period after deregistration).
 pub fn active_group_names() -> HashSet<String> {
-    ACTIVE_GROUPS.lock().unwrap().clone()
+    let mut map = ACTIVE_GROUPS.lock().unwrap();
+    let grace = std::time::Duration::from_secs(DEREGISTER_GRACE_SECS);
+    let now = Instant::now();
+
+    // Purge entries whose grace period has expired
+    map.retain(|_, v| match v {
+        None => true,                                 // still active
+        Some(t) => now.duration_since(*t) < grace,    // within grace period
+    });
+
+    map.keys().cloned().collect()
 }
 
 // ── Wire protocol types ──
@@ -116,6 +143,9 @@ async fn handle_mux_socket(socket: WebSocket, state: AppState) {
 
     // Subscribe to session watcher broadcasts
     let mut session_rx = state.session_tx.subscribe();
+
+    // Subscribe to notification broadcasts
+    let mut notification_rx = state.notification_tx.subscribe();
 
     // Active channels
     let mut channels: HashMap<u16, PtyChannel> = HashMap::new();
@@ -207,6 +237,11 @@ async fn handle_mux_socket(socket: WebSocket, state: AppState) {
 
             // Session watcher broadcasts (forward as-is, already JSON)
             Ok(msg) = session_rx.recv() => {
+                let _ = out_tx.send(Message::Text(msg.into()));
+            }
+
+            // Notification broadcasts (forward as-is, already JSON)
+            Ok(msg) = notification_rx.recv() => {
                 let _ = out_tx.send(Message::Text(msg.into()));
             }
 
@@ -520,6 +555,9 @@ fn setup_pty_blocking(
             .map_err(|e| format!("Failed to create grouped session: {e}"))?;
 
         if status.success() {
+            // Register IMMEDIATELY so GC won't kill this session before
+            // the rest of setup_pty_blocking completes.
+            register_group(&group_session);
             last_status = None;
             break;
         }
@@ -531,9 +569,6 @@ fn setup_pty_blocking(
             "PTY_EXHAUSTED: tmux 创建分组会话失败(exit {status})，可能是系统PTY耗尽，请清理僵尸进程"
         ));
     }
-
-    // Register in the global active set so GC won't kill it
-    register_group(&group_session);
 
     // 3b. Hide tmux status bar — the web UI renders its own chrome
     let _ = tmux::tmux_cmd()

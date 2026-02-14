@@ -59,7 +59,7 @@ export function Header({
       >
         {/* Left: Logo + PTY count */}
         <div className="flex items-center gap-2">
-          <Logo onClick={onLogoClick} />
+          <Logo onClick={onLogoClick} className="hidden md:block" />
           {ptyCount != null && (
             <span
               className="text-[10px] font-bold px-1.5 py-0.5 rounded-[var(--radius)] border-[length:var(--border-w)] border-[var(--color-border)] text-[var(--color-fg-muted)]"

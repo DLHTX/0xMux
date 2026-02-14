@@ -7,11 +7,13 @@ import { SetupWizard } from './components/setup'
 import { SetupPasswordModal, LoginModal, SettingsModal } from './components/auth'
 import { PluginModal } from './components/plugins'
 import { ToastContainer } from './components/ui/Toast'
+import { ImageViewer } from './components/ui/ImageViewer'
 import { ActivityBar } from './components/sidebar/ActivityBar'
 import { SidebarContainer } from './components/sidebar/SidebarContainer'
 import { FileExplorer } from './components/sidebar/FileExplorer'
 import { SearchPanel } from './components/sidebar/SearchPanel'
 import { GitPanel } from './components/sidebar/GitPanel'
+import { NotificationPanel } from './components/sidebar/NotificationPanel'
 import FloatingWindow from './components/editor/FloatingWindow'
 import EditorPane from './components/editor/EditorPane'
 import EditorTabs from './components/editor/EditorTabs'
@@ -21,11 +23,12 @@ import { useSessions } from './hooks/useSessions'
 import { useDeps } from './hooks/useDeps'
 import { useSplitLayout } from './hooks/useSplitLayout'
 import { useSettings } from './hooks/useSettings'
-import { useMobile, useCompact } from './hooks/useMobile'
+import { useMobile, useCompact, useNarrowMobile } from './hooks/useMobile'
 import { useToast } from './hooks/useToast'
 import { useAuth } from './hooks/useAuth'
 import { useImagePaste } from './hooks/useImagePaste'
 import { useFloatingEditor } from './hooks/useFloatingEditor'
+import { useNotifications } from './hooks/useNotifications'
 import { ThemeProvider, useTheme } from './hooks/useTheme'
 import { I18nProvider, useI18n } from './hooks/useI18n'
 import { MuxProvider, useMux } from './contexts/MuxContext'
@@ -54,7 +57,7 @@ const LAST_WINDOW_STORAGE_PREFIX = '0xmux-last-window'
 function loadPersistedActiveView(): ActivityView | null {
   try {
     const raw = localStorage.getItem(DESKTOP_ACTIVE_VIEW_STORAGE_KEY)
-    if (raw === 'sessions' || raw === 'files' || raw === 'search' || raw === 'git') {
+    if (raw === 'sessions' || raw === 'files' || raw === 'search' || raw === 'git' || raw === 'notifications') {
       return raw
     }
     return null
@@ -142,9 +145,12 @@ function AppContent() {
   } = useSplitLayout()
   const isMobile = useMobile()
   const isCompact = useCompact()
+  const isNarrowMobile = useNarrowMobile()
   const { toasts, addToast, removeToast } = useToast()
 
   const floatingEditor = useFloatingEditor({ enabled: !isMobile })
+  const { notifications, unreadCount, pushNotification, dismiss: dismissNotification, markRead: markNotificationRead, markAllRead: markAllNotificationsRead } = useNotifications()
+  const [imageViewerSrc, setImageViewerSrc] = useState<string | null>(null)
 
   const [showCreate, setShowCreate] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
@@ -415,6 +421,19 @@ function AppContent() {
       setWindows(newWindows)
     })
   }, [mux])
+
+  // Subscribe to notification pushes via WebSocket
+  useEffect(() => {
+    return mux.onNotification((notification) => {
+      pushNotification(notification)
+      addToast(notification.title, 'info', {
+        imageUrl: notification.image_url,
+        onClick: notification.image_url
+          ? () => setImageViewerSrc(notification.image_url!)
+          : undefined,
+      })
+    })
+  }, [mux, pushNotification, addToast])
 
   // Fallback polling (initial fetch + slow interval for resilience)
   useEffect(() => {
@@ -811,6 +830,9 @@ function AppContent() {
   }
 
   const hasSessions = !loading && sessions.length > 0
+  const mobileTerminalFontSize = isNarrowMobile
+    ? Math.min(settings.fontSize, 9)
+    : Math.min(settings.fontSize, 10)
 
   return (
     <div className="h-screen flex flex-col overflow-hidden" style={{ height: '100dvh' }}>
@@ -933,7 +955,21 @@ function AppContent() {
               </div>
 
               {/* Bottom nav - sessions view */}
-              <MobileNav activeView={mobileView} onViewChange={setMobileView} />
+              <MobileNav activeView={mobileView} onViewChange={setMobileView} unreadCount={unreadCount} />
+            </div>
+          ) : mobileView === 'notifications' ? (
+            /* ── Mobile notifications view ── */
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <div className="flex-1 overflow-y-auto pb-14">
+                <NotificationPanel
+                  notifications={notifications}
+                  onMarkAllRead={markAllNotificationsRead}
+                  onMarkRead={markNotificationRead}
+                  onDismiss={dismissNotification}
+                  onImageClick={(url) => setImageViewerSrc(url)}
+                />
+              </div>
+              <MobileNav activeView={mobileView} onViewChange={setMobileView} unreadCount={unreadCount} />
             </div>
           ) : (
             /* ── Terminal view ── */
@@ -1013,7 +1049,7 @@ function AppContent() {
                   <TerminalPane
                     sessionName={selectedWindow.sessionName}
                     windowIndex={selectedWindow.windowIndex}
-                    fontSize={Math.min(settings.fontSize, 10)}
+                    fontSize={mobileTerminalFontSize}
                     focused
                     terminalRef={mobileTerminalRef}
                     mobileBottomOffset={VIRTUAL_KEYBAR_HEIGHT}
@@ -1032,7 +1068,7 @@ function AppContent() {
         /* Desktop layout: ActivityBar + SidebarContainer + workspace */
         <div className="flex-1 flex overflow-hidden relative">
           {/* Activity Bar (always visible, 48px) */}
-          <ActivityBar activeView={activeView} onViewChange={handleViewChange} />
+          <ActivityBar activeView={activeView} onViewChange={handleViewChange} unreadCount={unreadCount} />
 
           {/* Sidebar panels */}
           <SidebarContainer
@@ -1061,6 +1097,15 @@ function AppContent() {
               files: <FileExplorer onFileOpen={handleOpenFile} workspace={activeWorkspace} />,
               search: <SearchPanel onOpenFile={handleOpenFile} workspace={activeWorkspace} />,
               git: <GitPanel onOpenDiff={handleOpenDiff} workspace={activeWorkspace} />,
+              notifications: (
+                <NotificationPanel
+                  notifications={notifications}
+                  onMarkAllRead={markAllNotificationsRead}
+                  onMarkRead={markNotificationRead}
+                  onDismiss={dismissNotification}
+                  onImageClick={(url) => setImageViewerSrc(url)}
+                />
+              ),
             }}
           </SidebarContainer>
 
@@ -1220,7 +1265,16 @@ function AppContent() {
       />
 
       {/* Toast notifications */}
+      {/* Toast notifications */}
       <ToastContainer toasts={toasts} onDismiss={removeToast} />
+
+      {/* Full-screen image viewer */}
+      {imageViewerSrc && (
+        <ImageViewer
+          src={imageViewerSrc}
+          onClose={() => setImageViewerSrc(null)}
+        />
+      )}
     </div>
   )
 }

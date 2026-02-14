@@ -21,6 +21,7 @@ use config::ServerConfig;
 use services::auth_service::AuthService;
 use services::config_store::PersistentConfig;
 use services::install::InstallManager;
+use services::notification::NotificationService;
 use state::AppState;
 use ws::sessions::{spawn_group_gc, spawn_session_watcher};
 
@@ -47,8 +48,12 @@ async fn main() {
     }
 
     let (session_tx, _) = broadcast::channel::<String>(64);
+    let (notification_tx, _) = broadcast::channel::<String>(64);
     spawn_session_watcher(session_tx.clone());
     spawn_group_gc();
+
+    // 初始化通知服务
+    let notification_service = Arc::new(NotificationService::new());
 
     // 初始化认证服务
     let auth_service = Arc::new(AuthService::new());
@@ -65,10 +70,12 @@ async fn main() {
 
     let state = AppState {
         session_tx,
+        notification_tx,
         config: Arc::new(config),
         install_manager: InstallManager::new(),
         pty_sessions: Arc::new(RwLock::new(HashMap::new())),
         auth_service,
+        notification_service,
     };
 
     let app = router::build(state);

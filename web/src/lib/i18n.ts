@@ -93,6 +93,12 @@ const en = {
   'activity.files': 'Files',
   'activity.search': 'Search',
   'activity.git': 'Git',
+  'activity.notifications': 'Notifications',
+
+  // Notifications
+  'notification.markAllRead': 'Mark all read',
+  'notification.empty': 'No notifications',
+  'notification.screenshot': 'Screenshot',
 
   // File Explorer
   'files.title': 'Explorer',
@@ -207,6 +213,11 @@ const zh: { [K in keyof typeof en]: string } = {
   'activity.files': '文件',
   'activity.search': '搜索',
   'activity.git': 'Git',
+  'activity.notifications': '通知',
+
+  'notification.markAllRead': '全部已读',
+  'notification.empty': '暂无通知',
+  'notification.screenshot': '截图',
 
   'files.title': '资源管理器',
   'files.expandAll': '展开全部',

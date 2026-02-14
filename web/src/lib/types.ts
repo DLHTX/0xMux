@@ -339,7 +339,26 @@ export interface LayoutStore {
 
 // ── Spec 3: Floating Editor + Git Panel ──
 
-export type ActivityView = 'sessions' | 'files' | 'search' | 'git'
+export type ActivityView = 'sessions' | 'files' | 'search' | 'git' | 'notifications'
+
+// ── Notifications ──
+
+export type NotificationCategory = 'screenshot' | 'system' | 'info'
+
+export interface Notification {
+  id: string
+  title: string
+  message: string
+  image_url?: string
+  category: string
+  read: boolean
+  timestamp: string
+}
+
+export interface NotificationListResponse {
+  notifications: Notification[]
+  unread_count: number
+}
 
 export interface FileTreeNode {
   name: string
