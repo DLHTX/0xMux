@@ -86,8 +86,8 @@ struct ControlFrame {
 enum MuxEvent {
     /// PTY produced output for a channel
     PtyOutput(u16, Vec<u8>),
-    /// PTY process exited / reader hit EOF
-    PtyClosed(u16),
+    /// PTY process exited / reader hit EOF (ch_id, group_session)
+    PtyClosed(u16, String),
     /// A new channel was successfully created
     ChannelReady(u16, PtyChannel),
     /// Channel creation failed
@@ -203,16 +203,31 @@ async fn handle_mux_socket(socket: WebSocket, state: AppState) {
                         frame.extend_from_slice(&data);
                         let _ = out_tx.send(Message::Binary(frame.into()));
                     }
-                    MuxEvent::PtyClosed(ch) => {
-                        if let Some(mut channel) = channels.remove(&ch) {
-                            cleanup_channel(&mut channel);
-                            let msg = serde_json::json!({"type":"closed","ch":ch,"code":0});
-                            let _ = out_tx.send(Message::Text(msg.to_string().into()));
+                    MuxEvent::PtyClosed(ch, ref group) => {
+                        // Only cleanup if the group_session matches the current
+                        // channel entry.  A stale PtyClosed from a replaced
+                        // channel must NOT kill the active one.
+                        let is_current = channels
+                            .get(&ch)
+                            .map_or(false, |c| c.group_session == *group);
+                        if is_current {
+                            if let Some(mut channel) = channels.remove(&ch) {
+                                cleanup_channel(&mut channel);
+                                let msg = serde_json::json!({"type":"closed","ch":ch,"code":0});
+                                let _ = out_tx.send(Message::Text(msg.to_string().into()));
+                            }
                         }
                     }
                     MuxEvent::ChannelReady(ch, channel) => {
                         let group_session = channel.group_session.clone();
-                        channels.insert(ch, channel);
+                        // If a previous channel with the same ID exists (rapid
+                        // re-open before ChannelReady was processed), clean it
+                        // up so its grouped session and PTY are released.
+                        if let Some(mut old) = channels.insert(ch, channel) {
+                            tokio::task::spawn_blocking(move || {
+                                cleanup_channel(&mut old);
+                            });
+                        }
                         let msg = serde_json::json!({"type":"opened","ch":ch});
                         let _ = out_tx.send(Message::Text(msg.to_string().into()));
                         let out_tx = out_tx.clone();
@@ -464,9 +479,10 @@ async fn open_channel(
 
     // Spawn PTY reader thread: reads stdout -> sends MuxEvent::PtyOutput
     let reader = parts.reader;
+    let reader_group = parts.group_session.clone();
     let event_tx_reader = event_tx.clone();
     tokio::task::spawn_blocking(move || {
-        pty_reader_loop(ch_id, reader, event_tx_reader);
+        pty_reader_loop(ch_id, reader_group, reader, event_tx_reader);
     });
 
     // Spawn PTY writer thread: receives input_rx -> writes to stdin
@@ -675,6 +691,7 @@ fn setup_pty_blocking(
 /// Blocking loop: read PTY stdout and send to the event channel.
 fn pty_reader_loop(
     ch_id: u16,
+    group_session: String,
     mut reader: Box<dyn Read + Send>,
     event_tx: mpsc::UnboundedSender<MuxEvent>,
 ) {
@@ -682,7 +699,7 @@ fn pty_reader_loop(
     loop {
         match reader.read(&mut buf) {
             Ok(0) => {
-                let _ = event_tx.send(MuxEvent::PtyClosed(ch_id));
+                let _ = event_tx.send(MuxEvent::PtyClosed(ch_id, group_session));
                 break;
             }
             Ok(n) => {
@@ -694,7 +711,7 @@ fn pty_reader_loop(
                 }
             }
             Err(_) => {
-                let _ = event_tx.send(MuxEvent::PtyClosed(ch_id));
+                let _ = event_tx.send(MuxEvent::PtyClosed(ch_id, group_session));
                 break;
             }
         }
