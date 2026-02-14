@@ -100,6 +100,8 @@ interface SplitWorkspaceProps {
   onAtTrigger?: () => void
   /** Whether the @ trigger is enabled */
   atTriggerEnabled?: boolean
+  /** Called when a file path link is clicked in terminal output */
+  onFileClick?: (path: string, line?: number, workspace?: import('../../lib/types').WorkspaceContext) => void
 }
 
 function ResizeHandle({ direction }: { direction: 'horizontal' | 'vertical' }) {
@@ -168,7 +170,7 @@ function EmptyPaneSlot({
         ${isDropOver ? 'bg-[var(--color-primary)]/10 border-2 border-dashed border-[var(--color-primary)]/50' : ''}
       `}
       style={{
-        border: isActive ? '1px solid color-mix(in srgb, var(--color-primary) 50%, transparent)' : '1px solid var(--color-border-light)',
+        border: isActive ? '1px solid color-mix(in srgb, var(--color-primary) 40%, transparent)' : '1px solid color-mix(in srgb, var(--color-border-light) 20%, transparent)',
         transition: 'border 0.2s ease',
       }}
       onClick={() => onPaneFocus(nodeId)}
@@ -363,10 +365,10 @@ function PaneSlot({
       className="group/pane flex flex-col h-full w-full"
       style={{
         border: inSplit
-          ? `2px solid ${SPLIT_GROUP_COLOR}${isActive ? '' : '55'}`
+          ? `1px solid ${isActive ? SPLIT_GROUP_COLOR + '60' : SPLIT_GROUP_COLOR + '25'}`
           : isActive
-            ? '2px solid var(--color-primary)'
-            : '1px solid var(--color-border-light)',
+            ? '1px solid color-mix(in srgb, var(--color-primary) 50%, transparent)'
+            : '1px solid color-mix(in srgb, var(--color-border-light) 20%, transparent)',
         transition: 'border 0.2s ease',
       }}
       onClick={() => onPaneFocus(nodeId)}
@@ -685,6 +687,7 @@ export function SplitWorkspace(props: SplitWorkspaceProps) {
             }}
             onAtTrigger={props.onAtTrigger}
             atTriggerEnabled={props.atTriggerEnabled}
+            onFileClick={props.onFileClick}
           />,
           container
         )

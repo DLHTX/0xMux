@@ -807,6 +807,11 @@ function AppContent() {
     setShowQuickFile(true)
   }, [])
 
+  // File path link clicked in terminal — open in floating editor
+  const handleTerminalFileClick = useCallback((path: string, line?: number, workspace?: WorkspaceContext) => {
+    floatingEditor.openFile(path, line, 'edit', undefined, workspace)
+  }, [floatingEditor])
+
   // Open diff in floating editor from git panel
   const handleOpenDiff = useCallback(async (path: string, staged: boolean) => {
     try {
@@ -1149,6 +1154,7 @@ function AppContent() {
                     mobileBottomOffset={VIRTUAL_KEYBAR_HEIGHT}
                     onAtTrigger={handleAtTrigger}
                     atTriggerEnabled={settings.quickFileTrigger}
+                    onFileClick={handleTerminalFileClick}
                   />
                 </div>
               )}
@@ -1190,7 +1196,7 @@ function AppContent() {
               ),
               files: <FileExplorer onFileOpen={handleOpenFile} workspace={activeWorkspace} />,
               search: <SearchPanel onOpenFile={handleOpenFile} workspace={activeWorkspace} />,
-              git: <GitPanel onOpenDiff={handleOpenDiff} workspace={activeWorkspace} />,
+              git: <GitPanel onOpenDiff={handleOpenDiff} workspace={activeWorkspace} addToast={addToast} />,
               notifications: (
                 <NotificationPanel
                   notifications={notifications}
@@ -1224,6 +1230,7 @@ function AppContent() {
                     getAllTrackedWindowKeys={getAllTrackedWindowKeys}
                     onAtTrigger={handleAtTrigger}
                     atTriggerEnabled={settings.quickFileTrigger}
+                    onFileClick={handleTerminalFileClick}
                   />
               </div>
             ) : (

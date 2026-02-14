@@ -12,7 +12,11 @@ export interface UseTerminalOptions {
   onData?: (data: string) => void
   onResize?: (cols: number, rows: number) => void
   onScrollRequest?: (lines: number) => void
+  onFileClick?: (path: string, line?: number, col?: number) => void
 }
+
+// Regex: matches paths with at least one `/` segment and a file extension, plus optional :line:col
+const FILE_PATH_RE = /(?:\.{0,2}\/)?(?:[\w@.\-]+\/)+[\w.\-]+\.\w{1,10}(?::(\d+)(?::(\d+))?)?/g
 
 export function useTerminal(options: UseTerminalOptions = {}) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -20,6 +24,8 @@ export function useTerminal(options: UseTerminalOptions = {}) {
   const fitAddonRef = useRef<FitAddon | null>(null)
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
   const detachScrollBridgeRef = useRef<(() => void) | null>(null)
+  const onFileClickRef = useRef(options.onFileClick)
+  onFileClickRef.current = options.onFileClick
 
   const initTerminal = useCallback(() => {
     if (!containerRef.current || terminalRef.current) return
@@ -56,6 +62,47 @@ export function useTerminal(options: UseTerminalOptions = {}) {
       })
 
     terminal.open(containerRef.current)
+
+    // Register custom file path link provider
+    terminal.registerLinkProvider({
+      provideLinks(bufferLineNumber, callback) {
+        const line = terminal.buffer.active.getLine(bufferLineNumber - 1)
+        if (!line) { callback(undefined); return }
+
+        const text = line.translateToString(true)
+        const links: { range: { start: { x: number; y: number }; end: { x: number; y: number } }; text: string; activate: () => void; decorations: { pointerCursor: boolean; underline: boolean } }[] = []
+
+        FILE_PATH_RE.lastIndex = 0
+        let m: RegExpExecArray | null
+        while ((m = FILE_PATH_RE.exec(text)) !== null) {
+          const matchStart = m.index
+          const matchEnd = matchStart + m[0].length
+
+          // Skip if this match is part of a URL (preceded by ://)
+          if (matchStart >= 3 && text.substring(matchStart - 3, matchStart).includes('://')) continue
+
+          // Extract path (strip :line:col suffix)
+          let filePath = m[0]
+          const lineNum = m[1] ? parseInt(m[1], 10) : undefined
+          const colNum = m[2] ? parseInt(m[2], 10) : undefined
+          if (lineNum !== undefined) {
+            filePath = filePath.replace(/:(\d+)(?::(\d+))?$/, '')
+          }
+
+          links.push({
+            range: {
+              start: { x: matchStart + 1, y: bufferLineNumber },
+              end: { x: matchEnd + 1, y: bufferLineNumber },
+            },
+            text: m[0],
+            decorations: { pointerCursor: true, underline: true },
+            activate: () => { onFileClickRef.current?.(filePath, lineNum, colNum) },
+          })
+        }
+
+        callback(links.length > 0 ? links : undefined)
+      },
+    })
 
     const fallbackCopyText = (text: string) => {
       const textarea = document.createElement('textarea')

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Icon } from '@iconify/react'
 import { IconGitBranch, IconRefreshCw, IconChevronDown, IconChevronRight, IconCheck, IconArrowUp, IconPlus, IconMinus } from '../../lib/icons'
+import type { ToastItem } from '../../hooks/useToast'
 import { useGitStatus } from '../../hooks/useGitStatus'
 import { gitCommit, gitPush, gitStage, gitUnstage, gitStageAll, gitUnstageAll } from '../../lib/api'
 import type { GitChangedFile, WorkspaceContext } from '../../lib/types'
@@ -9,6 +10,7 @@ import { getGitStatusBadge, getGitStatusColor } from '../../lib/gitDecorations'
 interface GitPanelProps {
   onOpenDiff: (path: string, staged: boolean) => void
   workspace?: WorkspaceContext
+  addToast: (message: string, type: ToastItem['type']) => void
 }
 
 function FileItem({ file, onOpen, action, actionIcon, actionTitle }: {
@@ -70,7 +72,7 @@ function SectionHeader({ title, count, open, onToggle, actions }: {
   )
 }
 
-export function GitPanel({ onOpenDiff, workspace }: GitPanelProps) {
+export function GitPanel({ onOpenDiff, workspace, addToast }: GitPanelProps) {
   const { status, commits, branches, loading, error, refresh } = useGitStatus(workspace)
   const [showCommits, setShowCommits] = useState(false)
   const [showBranches, setShowBranches] = useState(false)
@@ -85,31 +87,30 @@ export function GitPanel({ onOpenDiff, workspace }: GitPanelProps) {
   const hasStagedChanges = status ? status.files.some(f => f.staged) : false
   const hasUnpushedCommits = status ? status.ahead > 0 : false
 
-  function catchErr(e: unknown) {
-    const msg = e && typeof e === 'object' && 'message' in e
+  function errMsg(e: unknown): string {
+    return e && typeof e === 'object' && 'message' in e
       ? (e as { message: string }).message
       : 'Operation failed'
-    setActionError(msg)
   }
 
   async function handleStage(paths: string[]) {
     setActionError(null)
-    try { await gitStage(paths, workspace); refresh() } catch (e) { catchErr(e) }
+    try { await gitStage(paths, workspace); refresh() } catch (e) { setActionError(errMsg(e)) }
   }
 
   async function handleUnstage(paths: string[]) {
     setActionError(null)
-    try { await gitUnstage(paths, workspace); refresh() } catch (e) { catchErr(e) }
+    try { await gitUnstage(paths, workspace); refresh() } catch (e) { setActionError(errMsg(e)) }
   }
 
   async function handleStageAll() {
     setActionError(null)
-    try { await gitStageAll(workspace); refresh() } catch (e) { catchErr(e) }
+    try { await gitStageAll(workspace); refresh() } catch (e) { setActionError(errMsg(e)) }
   }
 
   async function handleUnstageAll() {
     setActionError(null)
-    try { await gitUnstageAll(workspace); refresh() } catch (e) { catchErr(e) }
+    try { await gitUnstageAll(workspace); refresh() } catch (e) { setActionError(errMsg(e)) }
   }
 
   async function handleCommit() {
@@ -117,10 +118,15 @@ export function GitPanel({ onOpenDiff, workspace }: GitPanelProps) {
     setCommitting(true)
     setActionError(null)
     try {
-      await gitCommit(commitMsg.trim(), workspace)
+      const result = await gitCommit(commitMsg.trim(), workspace)
       setCommitMsg('')
+      addToast(`Committed ${result.short_hash}`, 'success')
       refresh()
-    } catch (e) { catchErr(e) } finally { setCommitting(false) }
+    } catch (e) {
+      const msg = errMsg(e)
+      setActionError(msg)
+      addToast(`Commit failed: ${msg}`, 'error')
+    } finally { setCommitting(false) }
   }
 
   async function handlePush() {
@@ -128,8 +134,13 @@ export function GitPanel({ onOpenDiff, workspace }: GitPanelProps) {
     setActionError(null)
     try {
       await gitPush(workspace)
+      addToast('Push completed', 'success')
       refresh()
-    } catch (e) { catchErr(e) } finally { setPushing(false) }
+    } catch (e) {
+      const msg = errMsg(e)
+      setActionError(msg)
+      addToast(`Push failed: ${msg}`, 'error')
+    } finally { setPushing(false) }
   }
 
   useEffect(() => {
@@ -205,8 +216,11 @@ export function GitPanel({ onOpenDiff, workspace }: GitPanelProps) {
             className="flex-1 h-6 flex items-center justify-center gap-1 text-xs font-bold bg-[var(--color-primary)] text-[var(--color-bg)] border-[length:var(--border-w)] border-[var(--color-border)] hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
             title={!hasStagedChanges ? 'No staged changes' : 'Commit (Enter)'}
           >
-            <Icon icon={IconCheck} width={12} />
-            <span>Commit</span>
+            {committing
+              ? <Icon icon={IconRefreshCw} width={12} className="animate-spin" />
+              : <Icon icon={IconCheck} width={12} />
+            }
+            <span>{committing ? 'Committing...' : 'Commit'}</span>
           </button>
           {hasUnpushedCommits && (
             <button
@@ -215,8 +229,11 @@ export function GitPanel({ onOpenDiff, workspace }: GitPanelProps) {
               className="flex-1 h-6 flex items-center justify-center gap-1 text-xs font-bold bg-[var(--color-bg-alt)] text-[var(--color-fg)] border-[length:var(--border-w)] border-[var(--color-border)] hover:bg-[var(--color-primary)] hover:text-[var(--color-bg)] transition-all disabled:opacity-40"
               title={`Push ${status.ahead} commit(s) to remote`}
             >
-              <Icon icon={IconArrowUp} width={12} />
-              <span>Push {status.ahead}</span>
+              {pushing
+                ? <Icon icon={IconRefreshCw} width={12} className="animate-spin" />
+                : <Icon icon={IconArrowUp} width={12} />
+              }
+              <span>{pushing ? 'Pushing...' : `Push ${status.ahead}`}</span>
             </button>
           )}
         </div>

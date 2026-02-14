@@ -22,6 +22,8 @@ interface TerminalPaneProps {
   onAtTrigger?: () => void
   /** Whether the @ trigger is enabled (default: true) */
   atTriggerEnabled?: boolean
+  /** Called when a file path link is clicked in terminal output */
+  onFileClick?: (path: string, line?: number, workspace?: WorkspaceContext) => void
 }
 
 export function TerminalPane({
@@ -34,6 +36,7 @@ export function TerminalPane({
   mobileBottomOffset = 0,
   onAtTrigger,
   atTriggerEnabled = true,
+  onFileClick,
 }: TerminalPaneProps) {
   const mux = useMux()
   const { t } = useI18n()
@@ -66,6 +69,35 @@ export function TerminalPane({
   onAtTriggerRef.current = onAtTrigger
   const atTriggerEnabledRef = useRef(atTriggerEnabled)
   atTriggerEnabledRef.current = atTriggerEnabled
+
+  // Ref mirror for file click callback (captured in initTerminal closure)
+  const onFileClickRef = useRef(onFileClick)
+  onFileClickRef.current = onFileClick
+
+  const handleFileLinkClick = useCallback(async (rawPath: string, line?: number) => {
+    const cb = onFileClickRef.current
+    if (!cb) return
+
+    const workspace: WorkspaceContext = {
+      session: sessionName,
+      window: windowIndex ?? 0,
+    }
+
+    let absolutePath = rawPath
+    if (!rawPath.startsWith('/')) {
+      try {
+        const resolved = await resolveAbsoluteFilePath(rawPath, workspace)
+        absolutePath = resolved.path
+      } catch {
+        // Use raw path as fallback
+      }
+    }
+
+    cb(absolutePath, line, workspace)
+  }, [sessionName, windowIndex])
+
+  const handleFileLinkClickRef = useRef(handleFileLinkClick)
+  handleFileLinkClickRef.current = handleFileLinkClick
 
   const quoteShellPath = useCallback((path: string): string => {
     return `'${path.replace(/'/g, "'\\''")}'`
@@ -101,6 +133,9 @@ export function TerminalPane({
     fontSize,
     // Keep local history so wheel/touch scroll works inside terminal.
     scrollback: isMobile ? 3000 : 5000,
+    onFileClick: (path, line, _col) => {
+      handleFileLinkClickRef.current(path, line)
+    },
     onData: (data) => {
       if (data === '@' && atTriggerEnabledRef.current && onAtTriggerRef.current) {
         onAtTriggerRef.current()
@@ -202,22 +237,48 @@ export function TerminalPane({
   // Open a mux channel when the pane mounts (or session/window changes)
   useEffect(() => {
     const winIdx = windowIndex ?? 0
+    // Pending init command: consumed on open, sent when shell output settles
+    let pendingInitCmd: string | null = null
+    let initOutputTimer: ReturnType<typeof setTimeout> | null = null
+    let initFallbackTimer: ReturnType<typeof setTimeout> | null = null
+    let initSent = false
+
+    const trySendInit = () => {
+      if (initSent || !pendingInitCmd) return
+      initSent = true
+      if (initOutputTimer) clearTimeout(initOutputTimer)
+      if (initFallbackTimer) clearTimeout(initFallbackTimer)
+      handle.send(pendingInitCmd + '\n')
+      pendingInitCmd = null
+    }
+
     const handle = mux.openChannel({
       session: sessionName,
       window: winIdx,
       cols: terminal.current?.cols ?? 80,
       rows: terminal.current?.rows ?? 24,
-      onOutput: (data: Uint8Array) => write(data),
+      onOutput: (data: Uint8Array) => {
+        write(data)
+        // If we have a pending init command, wait for output to settle
+        // (shell prompt is ready when output stops for 200ms)
+        if (pendingInitCmd && !initSent) {
+          if (initOutputTimer) clearTimeout(initOutputTimer)
+          initOutputTimer = setTimeout(trySendInit, 200)
+        }
+      },
       onOpen: () => {
         setChannelOpen(true)
         setChannelError(null)
         setTmuxScrollState(null)
         setTmuxScrollProgress(1)
-        // If this window was freshly created with an init command, send it
+        // Scroll to bottom after history replay finishes
+        setTimeout(() => terminal.current?.scrollToBottom(), 150)
+        // If this window was freshly created with an init command, consume it
         const cmd = consumePendingInit(sessionName, winIdx)
         if (cmd) {
-          // Small delay so the shell prompt is ready
-          setTimeout(() => handle.send(cmd + '\n'), 600)
+          pendingInitCmd = cmd
+          // Fallback: send after 3s even if no output detected (e.g. blank shell)
+          initFallbackTimer = setTimeout(trySendInit, 3000)
         }
       },
       onClose: (code: number) => setExitCode(code),
@@ -239,6 +300,9 @@ export function TerminalPane({
     setChannelError(null)
 
     return () => {
+      // Clean up init timers
+      if (initOutputTimer) clearTimeout(initOutputTimer)
+      if (initFallbackTimer) clearTimeout(initFallbackTimer)
       // Close the channel when this TerminalPane unmounts
       handle.close()
       chRef.current = null
