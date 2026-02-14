@@ -9,3 +9,4 @@ id = "codriver"
 name = "CoDriver Desktop"
 command = "npx"
 args = ["-y", "codriver-mcp"]
+recommended = true

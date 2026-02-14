@@ -82,9 +82,14 @@ function TreeNode({
   const isExpanded = expanded.has(node.path)
   const isLoading = loading.has(node.path)
   const isDot = isDotfile(node.name)
+  const isIgnored = node.ignored === true
   const fileIcon = getFileIcon(node.name)
   const fileStatus = isDir ? undefined : gitStatusByPath.get(node.path)
-  const nameColor = fileStatus ? getGitStatusColor(fileStatus) : 'var(--color-fg)'
+  const nameColor = isIgnored
+    ? 'var(--color-fg-muted)'
+    : fileStatus
+      ? getGitStatusColor(fileStatus)
+      : 'var(--color-fg)'
 
   const handleClick = () => {
     if (isDir) {
@@ -111,7 +116,7 @@ function TreeNode({
           flex items-center gap-1 h-7 cursor-pointer select-none
           text-xs transition-colors
           hover:bg-[var(--color-bg-alt)]
-          ${isDot ? 'opacity-50' : ''}
+          ${isIgnored ? 'opacity-60' : isDot ? 'opacity-65' : ''}
         `}
         style={{ paddingLeft: depth * 16 + 8 }}
         onClick={handleClick}

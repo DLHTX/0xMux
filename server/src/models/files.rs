@@ -13,6 +13,8 @@ pub struct FileNode {
     pub modified: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub children: Option<Vec<FileNode>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ignored: Option<bool>,
 }
 
 #[derive(Serialize)]

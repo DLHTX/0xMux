@@ -1189,6 +1189,7 @@ function AppContent() {
                           mode={activeTab.mode}
                           editorSettings={settings}
                           diffOriginal={activeTab.diffOriginal}
+                          imageUrl={activeTab.imageUrl}
                           onChange={(value: string) => {
                             floatingEditor.updateTabContent(activeTab.id, value)
                           }}

@@ -33,9 +33,16 @@ async fn main() {
         )
         .init();
 
-    // Clean up ALL orphaned grouped sessions from previous server crashes.
-    // Uses the generic "_0xmux_" prefix to catch sessions from any instance.
-    services::tmux::cleanup_orphaned_groups("_0xmux_");
+    // Clean up orphaned grouped sessions from previous crashes — but only if
+    // no other oxmux-server process is running.  When multiple instances share
+    // the same tmux socket (e.g. dev on :1235 + production on :1234), a global
+    // wipe would kill the other instance's active grouped sessions.
+    if !services::tmux::is_another_instance_running() {
+        tracing::info!("No other oxmux-server instance detected, cleaning up all orphaned groups");
+        services::tmux::cleanup_orphaned_groups("_0xmux_");
+    } else {
+        tracing::info!("Another oxmux-server instance is running, skipping global group cleanup");
+    }
 
     let config = ServerConfig::parse();
     let addr = config.addr();

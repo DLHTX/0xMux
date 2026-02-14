@@ -1,4 +1,4 @@
-import React, { Suspense, useCallback, useMemo, useRef } from 'react'
+import React, { Suspense, useCallback, useMemo, useRef, useState } from 'react'
 import { loader } from '@monaco-editor/react'
 import type { Monaco } from '@monaco-editor/react'
 import type { editor } from 'monaco-editor'
@@ -80,6 +80,7 @@ export interface EditorPaneProps {
     | 'editorSkin'
   >
   diffOriginal?: string
+  imageUrl?: string
   onChange?: (value: string) => void
   onCursorChange?: (line: number, col: number) => void
 }
@@ -113,6 +114,133 @@ function LoadingFallback() {
   )
 }
 
+const MIN_SCALE = 0.1
+const MAX_SCALE = 10
+
+function ImagePreviewPane({ src, fileName }: { src: string; fileName: string }) {
+  const [scale, setScale] = useState(1)
+  const [translate, setTranslate] = useState({ x: 0, y: 0 })
+  const [imgSize, setImgSize] = useState({ w: 0, h: 0 })
+  const [isPanning, setIsPanning] = useState(false)
+  const panRef = useRef({ startX: 0, startY: 0, startTx: 0, startTy: 0 })
+
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault()
+    const delta = e.deltaY > 0 ? 0.9 : 1.1
+    setScale((s) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, s * delta)))
+  }, [])
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0) return
+    panRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      startTx: translate.x,
+      startTy: translate.y,
+    }
+    setIsPanning(true)
+  }, [translate])
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!isPanning) return
+    const dx = e.clientX - panRef.current.startX
+    const dy = e.clientY - panRef.current.startY
+    setTranslate({
+      x: panRef.current.startTx + dx,
+      y: panRef.current.startTy + dy,
+    })
+  }, [isPanning])
+
+  const handleMouseUp = useCallback(() => {
+    setIsPanning(false)
+  }, [])
+
+  const handleDoubleClick = useCallback(() => {
+    if (scale > 1.1) {
+      setScale(1)
+      setTranslate({ x: 0, y: 0 })
+    } else {
+      setScale(2.5)
+      setTranslate({ x: 0, y: 0 })
+    }
+  }, [scale])
+
+  return (
+    <div className="h-full w-full flex flex-col select-none">
+      {/* Toolbar */}
+      <div
+        className="shrink-0 flex items-center gap-3 px-3 py-1 border-b"
+        style={{ borderColor: 'var(--color-border-light)' }}
+      >
+        <button
+          onClick={() => setScale((s) => Math.max(MIN_SCALE, s / 1.3))}
+          className="px-1.5 py-0.5 text-xs font-mono hover:opacity-70"
+          style={{ color: 'var(--color-fg-muted)' }}
+        >
+          -
+        </button>
+        <span
+          className="text-xs font-mono min-w-[48px] text-center tabular-nums"
+          style={{ color: 'var(--color-fg-muted)' }}
+        >
+          {Math.round(scale * 100)}%
+        </span>
+        <button
+          onClick={() => setScale((s) => Math.min(MAX_SCALE, s * 1.3))}
+          className="px-1.5 py-0.5 text-xs font-mono hover:opacity-70"
+          style={{ color: 'var(--color-fg-muted)' }}
+        >
+          +
+        </button>
+        <button
+          onClick={() => { setScale(1); setTranslate({ x: 0, y: 0 }) }}
+          className="px-1.5 py-0.5 text-xs font-mono hover:opacity-70"
+          style={{ color: 'var(--color-fg-muted)' }}
+        >
+          1:1
+        </button>
+        {imgSize.w > 0 && (
+          <span
+            className="ml-auto text-xs font-mono"
+            style={{ color: 'var(--color-fg-muted)' }}
+          >
+            {imgSize.w} x {imgSize.h}
+          </span>
+        )}
+      </div>
+
+      {/* Image area */}
+      <div
+        className="flex-1 min-h-0 overflow-hidden flex items-center justify-center cursor-grab active:cursor-grabbing"
+        style={{
+          background: 'repeating-conic-gradient(var(--color-border-light) 0% 25%, transparent 0% 50%) 50% / 16px 16px',
+        }}
+        onWheel={handleWheel}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+        onDoubleClick={handleDoubleClick}
+      >
+        <img
+          src={src}
+          alt={fileName}
+          className="max-w-none pointer-events-none"
+          style={{
+            transform: `translate(${translate.x}px, ${translate.y}px) scale(${scale})`,
+            transition: isPanning ? 'none' : 'transform 0.15s ease-out',
+          }}
+          draggable={false}
+          onLoad={(e) => {
+            const img = e.currentTarget
+            setImgSize({ w: img.naturalWidth, h: img.naturalHeight })
+          }}
+        />
+      </div>
+    </div>
+  )
+}
+
 export default function EditorPane({
   filePath,
   language,
@@ -120,11 +248,13 @@ export default function EditorPane({
   mode,
   editorSettings,
   diffOriginal,
+  imageUrl,
   onChange,
   onCursorChange,
 }: EditorPaneProps) {
   const { mode: themeMode } = useTheme()
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null)
+  const isImage = language === 'image' && imageUrl
   const isMarkdown = language === 'markdown' || filePath.toLowerCase().endsWith('.md')
   const useVditor = mode === 'edit' && isMarkdown
 
@@ -166,6 +296,15 @@ export default function EditorPane({
     },
     [onChange],
   )
+
+  if (isImage) {
+    const fileName = filePath.split('/').pop() ?? filePath
+    return (
+      <div className="h-full w-full min-h-0">
+        <ImagePreviewPane src={imageUrl} fileName={fileName} />
+      </div>
+    )
+  }
 
   return (
     <div className="h-full w-full min-h-0">

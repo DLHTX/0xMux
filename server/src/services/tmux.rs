@@ -77,11 +77,31 @@ fn validate_name(name: &str) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Check if another oxmux-server process is already running (besides this one).
+/// Used to skip global cleanup when multiple instances share the same tmux socket.
+pub fn is_another_instance_running() -> bool {
+    let my_pid = std::process::id().to_string();
+    let output = std::process::Command::new("pgrep")
+        .args(["-f", "oxmux-server"])
+        .output();
+
+    if let Ok(out) = output {
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        let other_count = stdout
+            .lines()
+            .filter(|line| line.trim() != my_pid && !line.trim().is_empty())
+            .count();
+        other_count > 0
+    } else {
+        false // pgrep not available — assume we're alone
+    }
+}
+
 /// Kill orphaned `_0xmux_` grouped sessions left over from a previous server
-/// crash or unclean shutdown.  Only kills sessions matching THIS instance's
-/// prefix so it won't interfere with other running servers.
+/// crash or unclean shutdown.  Called with the generic `_0xmux_` prefix when
+/// this is the only running instance, safe to clean everything.
 ///
-/// `prefix` is this instance's `INSTANCE_PREFIX` (e.g. `_0xmux_a1b2c3d4_`).
+/// `prefix` is either `_0xmux_` (global) or an instance prefix like `_0xmux_a1b2c3d4_`.
 pub fn cleanup_orphaned_groups(prefix: &str) {
     let output = tmux_cmd()
         .args(["list-sessions", "-F", "#{session_name}"])
@@ -354,6 +374,10 @@ pub fn list_all_windows() -> Result<HashMap<String, Vec<TmuxWindow>>, AppError> 
         let parts: Vec<&str> = line.split('|').collect();
         if parts.len() == 5 {
             let session_name = parts[0].to_string();
+            // Hide internal grouped sessions (same filter as list_sessions)
+            if session_name.starts_with("_0xmux_") {
+                continue;
+            }
             let window = TmuxWindow {
                 index: parts[1].parse().unwrap_or(0),
                 name: parts[2].to_string(),

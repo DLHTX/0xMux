@@ -42,6 +42,7 @@ struct McpSource {
     id: String,
     name: String,
     command: McpCommand,
+    recommended: bool,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -60,6 +61,8 @@ struct McpRegistryEntry {
     args: Vec<String>,
     #[serde(default)]
     env: BTreeMap<String, String>,
+    #[serde(default)]
+    recommended: bool,
 }
 
 pub fn get_status() -> Result<AiStatusResponse, AppError> {
@@ -966,6 +969,7 @@ fn build_mcp_catalog(mux_home: &Path, codex_home: &Path) -> Result<Vec<McpCatalo
             codex_existing.is_some()
         };
 
+        let recommended = in_registry.map_or(false, |r| r.recommended);
         list.push(McpCatalogItem {
             id,
             name,
@@ -980,8 +984,12 @@ fn build_mcp_catalog(mux_home: &Path, codex_home: &Path) -> Result<Vec<McpCatalo
                 exists: codex_existing.is_some(),
                 in_sync: codex_in_sync,
             },
+            recommended,
         });
     }
+
+    // Recommended items first, then alphabetical
+    list.sort_by(|a, b| b.recommended.cmp(&a.recommended).then(a.id.cmp(&b.id)));
 
     Ok(list)
 }
@@ -1282,6 +1290,7 @@ fn seed_global_mcp_if_empty(
             command: cmd.command.clone(),
             args: cmd.args.clone(),
             env: cmd.env.clone(),
+            recommended: false,
         });
 
         actions.push(SyncAction {
@@ -1603,6 +1612,7 @@ fn load_mcp_registry(mux_home: &Path) -> Result<(Vec<McpSource>, PathBuf), AppEr
                 args: entry.args,
                 env: entry.env,
             },
+            recommended: entry.recommended,
         });
     }
 

@@ -1,14 +1,16 @@
 use axum::{
     Json,
+    body::Body,
     extract::Query,
-    response::IntoResponse,
+    http::{HeaderValue, header},
+    response::{IntoResponse, Response},
 };
 use serde::Deserialize;
 use serde_json::json;
 
 use crate::error::AppError;
 use crate::models::files::{FileWriteRequest, SearchQuery};
-use crate::services::{fs, search, workspace};
+use crate::services::{fs, git, search, workspace};
 
 // ── GET /api/files/tree?path=&depth= ────────────────────────────────
 
@@ -25,7 +27,19 @@ pub async fn tree_handler(
 ) -> Result<impl IntoResponse, AppError> {
     let root = workspace::resolve_workspace_root(q.session.as_deref(), q.window)?;
     let path = if q.path.is_empty() { "." } else { &q.path };
-    let children = fs::list_directory(&root, path)?;
+    let mut children = fs::list_directory(&root, path)?;
+
+    // Mark gitignored files/directories
+    if let Some(repo_root) = git::resolve_repo_root(&root) {
+        let paths: Vec<String> = children.iter().map(|c| c.path.clone()).collect();
+        let ignored_set = git::check_ignored(&repo_root, &paths);
+        for child in &mut children {
+            if ignored_set.contains(&child.path) {
+                child.ignored = Some(true);
+            }
+        }
+    }
+
     Ok(Json(json!({ "children": children })))
 }
 
@@ -71,6 +85,66 @@ pub async fn write_handler(
     let root = workspace::resolve_workspace_root(body.session.as_deref(), body.window)?;
     fs::write_file(&root, &body.path, &body.content)?;
     Ok(Json(json!({ "success": true })))
+}
+
+// ── GET /api/files/raw?path= ─────────────────────────────────────────
+
+pub async fn raw_handler(
+    Query(q): Query<ReadQuery>,
+) -> Result<Response, AppError> {
+    let root = workspace::resolve_workspace_root(q.session.as_deref(), q.window)?;
+    let file_path = fs::validate_path(&root, &q.path)?;
+
+    if !file_path.is_file() {
+        return Err(AppError::NotFound(format!("Not a file: {}", q.path)));
+    }
+
+    let meta = std::fs::metadata(&file_path)
+        .map_err(|e| AppError::Internal(format!("Cannot read metadata: {e}")))?;
+
+    // 10 MB limit for raw files
+    if meta.len() > 10 * 1024 * 1024 {
+        return Err(AppError::PayloadTooLarge(format!(
+            "File too large: {} bytes",
+            meta.len()
+        )));
+    }
+
+    let bytes = std::fs::read(&file_path)
+        .map_err(|e| AppError::Internal(format!("Cannot read file: {e}")))?;
+
+    let mime = mime_from_extension(&file_path);
+
+    let mut resp = Response::new(Body::from(bytes));
+    resp.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_str(mime).unwrap_or(HeaderValue::from_static("application/octet-stream")),
+    );
+    resp.headers_mut().insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("public, max-age=60"),
+    );
+    Ok(resp)
+}
+
+fn mime_from_extension(path: &std::path::Path) -> &'static str {
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    match ext.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "bmp" => "image/bmp",
+        "ico" => "image/x-icon",
+        "avif" => "image/avif",
+        "tif" | "tiff" => "image/tiff",
+        "svg" => "image/svg+xml",
+        _ => "application/octet-stream",
+    }
 }
 
 // ── GET /api/files/search?query=&regex=&case=&glob=&max= ────────────

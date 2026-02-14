@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Icon } from '@iconify/react'
 import { IconPuzzle, IconRefreshCw, IconX } from '../../lib/icons'
+import { Tabs } from '../ui'
 import type {
   AiCatalogResponse,
   AiStatusResponse,
@@ -189,29 +190,45 @@ export function PluginModal({
           )}
           {noMatch && (
             <div className="p-3 border-[length:var(--border-w)] border-[var(--color-border-light)] rounded-[var(--radius)] text-xs text-[var(--color-fg-muted)]">
-              没有匹配 “{search.trim()}” 的结果。
+              没有匹配 "{search.trim()}" 的结果。
             </div>
           )}
 
-          <SectionTitle title={`Skills (${skills.length})`} />
-          <SkillList
-            items={skills}
-            syncing={syncing}
-            providers={activeProviders}
-            onSyncItem={onSyncItem}
-            onUninstallItem={onUninstallItem}
-            onDeleteItem={onDeleteItem}
-          />
-
-          <SectionTitle title={`MCP (${mcp.length})`} />
-          <McpList
-            items={mcp}
-            syncing={syncing}
-            providers={activeProviders}
-            onSyncItem={onSyncItem}
-            onUninstallItem={onUninstallItem}
-            onDeleteItem={onDeleteItem}
-          />
+          {!isEmpty && !noMatch && (
+            <Tabs
+              tabs={[
+                {
+                  id: 'skills',
+                  label: `Skills (${skills.length})`,
+                  content: (
+                    <SkillList
+                      items={skills}
+                      syncing={syncing}
+                      providers={activeProviders}
+                      onSyncItem={onSyncItem}
+                      onUninstallItem={onUninstallItem}
+                      onDeleteItem={onDeleteItem}
+                    />
+                  ),
+                },
+                {
+                  id: 'mcp',
+                  label: `MCP (${mcp.length})`,
+                  content: (
+                    <McpList
+                      items={mcp}
+                      syncing={syncing}
+                      providers={activeProviders}
+                      onSyncItem={onSyncItem}
+                      onUninstallItem={onUninstallItem}
+                      onDeleteItem={onDeleteItem}
+                    />
+                  ),
+                },
+              ]}
+              defaultTab="skills"
+            />
+          )}
 
           {lastResultText && (
             <div className="p-3 border-[length:var(--border-w)] border-[var(--color-border-light)] rounded-[var(--radius)] text-xs text-[var(--color-fg-muted)]">
@@ -222,10 +239,6 @@ export function PluginModal({
       </div>
     </>
   )
-}
-
-function SectionTitle({ title }: { title: string }) {
-  return <div className="text-xs font-bold text-[var(--color-fg-muted)]">{title}</div>
 }
 
 function SkillList({
@@ -303,6 +316,7 @@ function McpList({
           syncing={syncing}
           providers={providers}
           kind="mcp"
+          recommended={item.recommended}
           onSyncItem={onSyncItem}
           onUninstallItem={onUninstallItem}
           onDeleteItem={onDeleteItem}
@@ -322,6 +336,7 @@ function ItemCard({
   syncing,
   providers,
   kind,
+  recommended,
   onSyncItem,
   onUninstallItem,
   onDeleteItem,
@@ -335,15 +350,23 @@ function ItemCard({
   syncing: boolean
   providers: AiProvider[]
   kind: AiSyncType
+  recommended?: boolean
   onSyncItem: (kind: AiSyncType, id: string, providers: AiProvider[]) => void
   onUninstallItem: (kind: AiSyncType, id: string, providers: AiProvider[]) => void
   onDeleteItem: (kind: AiSyncType, id: string, providers: AiProvider[]) => void
 }) {
   return (
-    <div className="p-3 border-[length:var(--border-w)] border-[var(--color-border-light)] rounded-[var(--radius)]">
+    <div className={`p-3 border-[length:var(--border-w)] rounded-[var(--radius)] ${recommended ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5' : 'border-[var(--color-border-light)]'}`}>
       <div className="flex items-start justify-between gap-3 mb-1">
         <div className="min-w-0">
-          <div className="font-bold text-sm truncate">{name}</div>
+          <div className="font-bold text-sm truncate flex items-center gap-2">
+            {name}
+            {recommended && (
+              <span className="text-[10px] px-1.5 py-0.5 bg-[var(--color-primary)] text-white font-bold shrink-0">
+                推荐安装
+              </span>
+            )}
+          </div>
           {command ? (
             <div className="text-xs text-[var(--color-fg-muted)] font-mono truncate">{command}</div>
           ) : (

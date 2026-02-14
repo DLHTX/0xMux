@@ -154,6 +154,51 @@ fn char_to_status(c: char) -> String {
     .into()
 }
 
+/// Check which paths are ignored by .gitignore.
+/// Returns a set of paths (relative to repo root) that are ignored.
+pub fn check_ignored(repo_path: &Path, paths: &[String]) -> std::collections::HashSet<String> {
+    use std::io::Write;
+    let mut ignored = std::collections::HashSet::new();
+    if paths.is_empty() {
+        return ignored;
+    }
+
+    let mut child = match Command::new("git")
+        .current_dir(repo_path)
+        .args(["check-ignore", "--stdin"])
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+    {
+        Ok(c) => c,
+        Err(_) => return ignored,
+    };
+
+    if let Some(ref mut stdin) = child.stdin {
+        for p in paths {
+            let _ = writeln!(stdin, "{p}");
+        }
+    }
+    // Close stdin so git can finish
+    drop(child.stdin.take());
+
+    if let Ok(output) = child.wait_with_output() {
+        if output.status.success() || output.status.code() == Some(1) {
+            // exit 0 = all ignored, exit 1 = some not ignored, both are valid
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for line in stdout.lines() {
+                if !line.is_empty() {
+                    ignored.insert(line.to_string());
+                }
+            }
+        }
+    }
+
+    ignored
+}
+
 /// Get diff content for Monaco DiffEditor.
 /// Returns both HEAD and working tree versions of a file.
 pub fn get_diff(

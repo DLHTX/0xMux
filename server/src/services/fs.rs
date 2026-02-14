@@ -145,6 +145,7 @@ pub fn list_directory(root: &Path, rel_path: &str) -> Result<Vec<FileNode>, AppE
                 size: None,
                 modified,
                 children: None, // lazy-loaded
+                ignored: None,
             });
         } else if meta.is_file() {
             entries.push(FileNode {
@@ -154,6 +155,7 @@ pub fn list_directory(root: &Path, rel_path: &str) -> Result<Vec<FileNode>, AppE
                 size: Some(meta.len()),
                 modified,
                 children: None,
+                ignored: None,
             });
         }
     }

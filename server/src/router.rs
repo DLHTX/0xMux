@@ -130,6 +130,7 @@ pub fn build(state: AppState) -> Router {
             get(handlers::files::absolute_path_handler),
         )
         .route("/api/files/read", get(handlers::files::read_handler))
+        .route("/api/files/raw", get(handlers::files::raw_handler))
         .route("/api/files/write", put(handlers::files::write_handler))
         .route("/api/files/search", get(handlers::files::search_handler))
         // Git API

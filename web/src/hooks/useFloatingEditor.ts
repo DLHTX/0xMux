@@ -144,9 +144,28 @@ function persistState(state: FloatingWindowState) {
   }
 }
 
+const IMAGE_EXTENSIONS = new Set([
+  'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico', 'avif', 'tif', 'tiff',
+])
+
+/** Check if file is an image by extension */
+function isImageFile(filePath: string): boolean {
+  const ext = filePath.split('.').pop()?.toLowerCase() ?? ''
+  return IMAGE_EXTENSIONS.has(ext)
+}
+
+/** Build raw file URL for serving binary files */
+function buildRawFileUrl(path: string, workspace?: WorkspaceContext): string {
+  const params = new URLSearchParams({ path })
+  if (workspace?.session) params.set('session', workspace.session)
+  if (workspace?.window != null) params.set('window', String(workspace.window))
+  return `/api/files/raw?${params}`
+}
+
 /** Detect language from file extension */
 function detectLanguage(filePath: string): string {
   const ext = filePath.split('.').pop()?.toLowerCase() ?? ''
+  if (IMAGE_EXTENSIONS.has(ext)) return 'image'
   const map: Record<string, string> = {
     ts: 'typescript',
     tsx: 'typescript',
@@ -211,12 +230,22 @@ export function useFloatingEditor(options?: { enabled?: boolean }) {
       const restored = await Promise.all(
         persisted.tabs.map(async (tab) => {
           try {
+            // Image files don't need readFile
+            if (isImageFile(tab.filePath)) {
+              return {
+                tab,
+                language: 'image' as string,
+                content: '',
+                imageUrl: buildRawFileUrl(tab.filePath, tab.workspace),
+              }
+            }
             const file = await readFile(tab.filePath, tab.workspace)
             const language = file.language || detectLanguage(tab.filePath)
             return {
               tab,
               language,
               content: file.content,
+              imageUrl: undefined as string | undefined,
             }
           } catch {
             return null
@@ -228,7 +257,7 @@ export function useFloatingEditor(options?: { enabled?: boolean }) {
       const restoredTabs = restored.filter((item): item is NonNullable<typeof item> => item !== null)
       if (restoredTabs.length === 0) return
 
-      const tabs: EditorTab[] = restoredTabs.map(({ tab, language, content }) => ({
+      const tabs: EditorTab[] = restoredTabs.map(({ tab, language, content, imageUrl }) => ({
         id: nextTabId(),
         filePath: tab.filePath,
         language,
@@ -238,6 +267,7 @@ export function useFloatingEditor(options?: { enabled?: boolean }) {
         mode: tab.mode,
         diffOriginal: tab.diffOriginal ?? (tab.mode === 'diff' ? content : undefined),
         workspace: tab.workspace,
+        imageUrl,
       }))
 
       const activeTab =
@@ -288,6 +318,30 @@ export function useFloatingEditor(options?: { enabled?: boolean }) {
           isOpen: true,
           minimized: false,
           activeTabId: existingTab.id,
+        }))
+        return
+      }
+
+      // Image files: skip readFile, build raw URL
+      if (isImageFile(path)) {
+        const imageUrl = buildRawFileUrl(path, workspace)
+        const newTab: EditorTab = {
+          id: nextTabId(),
+          filePath: path,
+          language: 'image',
+          content: '',
+          originalContent: '',
+          isDirty: false,
+          mode: 'edit',
+          workspace,
+          imageUrl,
+        }
+        setState((prev) => ({
+          ...prev,
+          isOpen: true,
+          minimized: false,
+          tabs: [...prev.tabs, newTab],
+          activeTabId: newTab.id,
         }))
         return
       }

@@ -43,6 +43,7 @@ pub struct McpCatalogItem {
     pub source: String,
     pub claude: ProviderSyncState,
     pub codex: ProviderSyncState,
+    pub recommended: bool,
 }
 
 #[derive(Serialize, Clone, Debug)]

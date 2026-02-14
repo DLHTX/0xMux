@@ -160,6 +160,7 @@ export interface McpCatalogItem {
   source: string
   claude: ProviderSyncState
   codex: ProviderSyncState
+  recommended: boolean
 }
 
 export interface AiCatalogResponse {
@@ -367,6 +368,7 @@ export interface FileTreeNode {
   size?: number
   modified?: string
   children?: FileTreeNode[]
+  ignored?: boolean
 }
 
 export interface WorkspaceContext {
@@ -385,6 +387,7 @@ export interface EditorTab {
   diffOriginal?: string
   scrollLine?: number
   workspace?: WorkspaceContext
+  imageUrl?: string
 }
 
 export interface FloatingWindowState {
