@@ -175,3 +175,21 @@ export {
 export {
   default as IconZoomOut,
 } from '@iconify-icons/lucide/zoom-out'
+export {
+  default as IconFilePlus,
+} from '@iconify-icons/lucide/file-plus'
+export {
+  default as IconFolderPlus,
+} from '@iconify-icons/lucide/folder-plus'
+export {
+  default as IconExternalLink,
+} from '@iconify-icons/lucide/external-link'
+export {
+  default as IconClipboard,
+} from '@iconify-icons/lucide/clipboard'
+export {
+  default as IconArrowUp,
+} from '@iconify-icons/lucide/arrow-up'
+export {
+  default as IconUpload,
+} from '@iconify-icons/lucide/upload'

@@ -9,7 +9,10 @@ use serde::Deserialize;
 use serde_json::json;
 
 use crate::error::AppError;
-use crate::models::files::{FileWriteRequest, SearchQuery};
+use crate::models::files::{
+    FileCreateRequest, FileDeleteRequest, FileRevealRequest, FileRenameRequest,
+    FileWriteRequest, SearchQuery,
+};
 use crate::services::{fs, git, search, workspace};
 
 // ── GET /api/files/tree?path=&depth= ────────────────────────────────
@@ -145,6 +148,50 @@ fn mime_from_extension(path: &std::path::Path) -> &'static str {
         "svg" => "image/svg+xml",
         _ => "application/octet-stream",
     }
+}
+
+// ── DELETE /api/files/delete ───────────────────────────────────────
+
+pub async fn delete_handler(
+    Json(body): Json<FileDeleteRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let root = workspace::resolve_workspace_root(body.session.as_deref(), body.window)?;
+    fs::delete_path(&root, &body.path)?;
+    Ok(Json(json!({ "success": true })))
+}
+
+// ── POST /api/files/rename ────────────────────────────────────────
+
+pub async fn rename_handler(
+    Json(body): Json<FileRenameRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let root = workspace::resolve_workspace_root(body.session.as_deref(), body.window)?;
+    let new_path = fs::rename_path(&root, &body.old_path, &body.new_name)?;
+    Ok(Json(json!({ "success": true, "new_path": new_path })))
+}
+
+// ── POST /api/files/create ────────────────────────────────────────
+
+pub async fn create_handler(
+    Json(body): Json<FileCreateRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let root = workspace::resolve_workspace_root(body.session.as_deref(), body.window)?;
+    if body.is_directory {
+        fs::create_directory(&root, &body.path)?;
+    } else {
+        fs::create_file(&root, &body.path)?;
+    }
+    Ok(Json(json!({ "success": true })))
+}
+
+// ── POST /api/files/reveal ────────────────────────────────────────
+
+pub async fn reveal_handler(
+    Json(body): Json<FileRevealRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let root = workspace::resolve_workspace_root(body.session.as_deref(), body.window)?;
+    fs::reveal_in_file_manager(&root, &body.path)?;
+    Ok(Json(json!({ "success": true })))
 }
 
 // ── GET /api/files/search?query=&regex=&case=&glob=&max= ────────────

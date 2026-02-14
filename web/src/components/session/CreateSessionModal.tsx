@@ -191,7 +191,8 @@ export function CreateSessionModal({
 
   return (
     <div
-      className="fixed inset-0 bg-[var(--color-bg)]/80 backdrop-blur-sm flex items-center justify-center z-50"
+      className="fixed inset-0 bg-[var(--color-bg)]/80 flex items-center justify-center z-50"
+      style={{ backdropFilter: 'var(--modal-backdrop-blur)' }}
       onClick={onClose}
     >
       <div

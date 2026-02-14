@@ -33,7 +33,8 @@ import { ThemeProvider, useTheme } from './hooks/useTheme'
 import { I18nProvider, useI18n } from './hooks/useI18n'
 import { MuxProvider, useMux } from './contexts/MuxContext'
 import { FUSION_PIXEL_FONT, SILKSCREEN_FONT } from './lib/theme'
-import { getGitDiff } from './lib/api'
+import { getGitDiff, uploadFiles } from './lib/api'
+import { isTerminalFileDrag } from './lib/terminalFileDrag'
 import { Icon } from '@iconify/react'
 import { IconTerminal, IconChevronLeft, IconChevronRight, IconPlus, IconTrash, IconX } from './lib/icons'
 import type { Terminal } from '@xterm/xterm'
@@ -47,8 +48,9 @@ import type {
   AiUninstallResponse,
   AiSyncType,
   AiProvider,
+  GlobalConfigResponse,
 } from './lib/types'
-import { getWindows, createWindow, deleteWindow, getAiStatus, getAiCatalog, syncAi, uninstallAi } from './lib/api'
+import { getWindows, createWindow, deleteWindow, getAiStatus, getAiCatalog, syncAi, uninstallAi, getGlobalConfig, saveGlobalConfig as saveGlobalConfigApi, syncGlobalConfig as syncGlobalConfigApi } from './lib/api'
 import { setInitCommand, markWindowPending } from './lib/init-commands'
 
 const DESKTOP_ACTIVE_VIEW_STORAGE_KEY = '0xmux-desktop-active-view'
@@ -168,6 +170,8 @@ function AppContent() {
   const [aiUninstallResult, setAiUninstallResult] = useState<AiUninstallResponse | null>(null)
   const [aiLoading, setAiLoading] = useState(false)
   const [aiSyncing, setAiSyncing] = useState(false)
+  const [globalConfig, setGlobalConfig] = useState<GlobalConfigResponse | null>(null)
+  const [globalConfigSaving, setGlobalConfigSaving] = useState(false)
   const mobileTerminalRef = useRef<Terminal | null>(null)
   const activeTerminalRef = useRef<Terminal | null>(null)
   const pendingWindowRestoreRef = useRef(loadPersistedWindow(isMobile))
@@ -247,8 +251,15 @@ function AppContent() {
       if (status.show_plugin_button) {
         const catalog = await getAiCatalog()
         setAiCatalog(catalog)
+        try {
+          const gc = await getGlobalConfig()
+          setGlobalConfig(gc)
+        } catch {
+          // Global config endpoint may not be available yet
+        }
       } else {
         setAiCatalog(null)
+        setGlobalConfig(null)
       }
     } catch {
       // Ignore plugin data errors to avoid blocking main UI
@@ -333,6 +344,32 @@ function AppContent() {
     },
     [addToast, refreshAiData]
   )
+
+  const handleSaveGlobalConfig = useCallback(async (content: string) => {
+    setGlobalConfigSaving(true)
+    try {
+      const result = await saveGlobalConfigApi({ content })
+      setGlobalConfig(result)
+      addToast('全局配置已保存', 'success')
+    } catch {
+      addToast('保存全局配置失败', 'error')
+    } finally {
+      setGlobalConfigSaving(false)
+    }
+  }, [addToast])
+
+  const handleSyncGlobalConfig = useCallback(async () => {
+    setGlobalConfigSaving(true)
+    try {
+      const result = await syncGlobalConfigApi({})
+      setGlobalConfig(result)
+      addToast('全局配置已同步到 Provider', 'success')
+    } catch {
+      addToast('同步全局配置失败', 'error')
+    } finally {
+      setGlobalConfigSaving(false)
+    }
+  }, [addToast])
 
   // Enable image paste feature
   useImagePaste(activeTerminalRef)
@@ -785,6 +822,60 @@ function AppContent() {
     updateSettings({ sidebarWidth: nextWidth })
   }, [updateSettings])
 
+  // ── Editor Drag & Drop ──
+  const [editorDragOver, setEditorDragOver] = useState(false)
+
+  const handleEditorDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    // Ignore app-internal drags
+    if (isTerminalFileDrag(e.dataTransfer)) return
+    if (Array.from(e.dataTransfer.types).includes('text/window-key')) return
+    if (!Array.from(e.dataTransfer.types).includes('Files')) return
+
+    e.preventDefault()
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = 'copy'
+    setEditorDragOver(true)
+  }, [])
+
+  const handleEditorDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    const next = e.relatedTarget as Node | null
+    if (next && e.currentTarget.contains(next)) return
+    setEditorDragOver(false)
+  }, [])
+
+  const handleEditorDrop = useCallback(async (e: React.DragEvent<HTMLDivElement>) => {
+    setEditorDragOver(false)
+    // Ignore app-internal drags
+    if (isTerminalFileDrag(e.dataTransfer)) return
+    if (Array.from(e.dataTransfer.types).includes('text/window-key')) return
+
+    const nativeFiles = Array.from(e.dataTransfer.files)
+    if (nativeFiles.length === 0) return
+
+    e.preventDefault()
+    e.stopPropagation()
+
+    // Determine target directory from active tab's file path
+    const activeTab = floatingEditor.state.tabs.find(
+      t => t.id === floatingEditor.state.activeTabId
+    )
+    let dir: string | undefined
+    if (activeTab?.filePath) {
+      const lastSlash = activeTab.filePath.lastIndexOf('/')
+      if (lastSlash > 0) dir = activeTab.filePath.substring(0, lastSlash)
+    }
+
+    try {
+      const results = await uploadFiles(nativeFiles, dir, activeWorkspace)
+      // Open uploaded files in editor
+      for (const result of results) {
+        floatingEditor.openFile(result.path, undefined, 'edit', undefined, activeWorkspace)
+      }
+    } catch (error) {
+      console.error('Failed to upload dropped files to editor', error)
+    }
+  }, [floatingEditor, activeWorkspace])
+
   // Auth loading
   if (authLoading || depsLoading) {
     return (
@@ -855,7 +946,10 @@ function AppContent() {
           </span>
         </div>
       ) : !hasSessions ? (
-        <EmptyState onCreateClick={() => setShowCreate(true)} />
+        <EmptyState
+          onQuickCreate={() => handleCreate('main')}
+          onCustomCreate={() => setShowCreate(true)}
+        />
       ) : isMobile ? (
         /* ─── Mobile layout ─── */
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -1161,50 +1255,72 @@ function AppContent() {
                 onSizeChange={floatingEditor.updateSize}
                 onOpacityChange={floatingEditor.updateOpacity}
               >
-                {/* Editor Tabs */}
-                <EditorTabs
-                  tabs={floatingEditor.state.tabs}
-                  activeTabId={floatingEditor.state.activeTabId}
-                  onSelectTab={floatingEditor.setActiveTab}
-                  onCloseTab={floatingEditor.closeTab}
-                  onCloseAllTabs={floatingEditor.closeAllTabs}
-                  onCloseOtherTabs={floatingEditor.closeOtherTabs}
-                  onCloseTabsToLeft={floatingEditor.closeTabsToLeft}
-                  onCloseTabsToRight={floatingEditor.closeTabsToRight}
-                />
+                {/* Wrapper: whole editor panel accepts external file drops */}
+                <div
+                  className="flex-1 flex flex-col min-h-0 relative"
+                  onDragOver={handleEditorDragOver}
+                >
+                  {/* Editor Tabs */}
+                  <EditorTabs
+                    tabs={floatingEditor.state.tabs}
+                    activeTabId={floatingEditor.state.activeTabId}
+                    onSelectTab={floatingEditor.setActiveTab}
+                    onCloseTab={floatingEditor.closeTab}
+                    onCloseAllTabs={floatingEditor.closeAllTabs}
+                    onCloseOtherTabs={floatingEditor.closeOtherTabs}
+                    onCloseTabsToLeft={floatingEditor.closeTabsToLeft}
+                    onCloseTabsToRight={floatingEditor.closeTabsToRight}
+                  />
 
-                {/* Editor Content */}
-                {(() => {
-                  const activeTab = floatingEditor.state.tabs.find(
-                    t => t.id === floatingEditor.state.activeTabId
-                  )
-                  if (!activeTab) return null
-                  return (
-                    <div className="flex-1 min-h-0 flex flex-col">
-                      <div className="flex-1 min-h-0">
-                        <EditorPane
-                          filePath={activeTab.filePath}
+                  {/* Editor Content */}
+                  {(() => {
+                    const activeTab = floatingEditor.state.tabs.find(
+                      t => t.id === floatingEditor.state.activeTabId
+                    )
+                    if (!activeTab) return null
+                    return (
+                      <div className="flex-1 min-h-0 flex flex-col">
+                        <div className="flex-1 min-h-0">
+                          <EditorPane
+                            filePath={activeTab.filePath}
+                            language={activeTab.language}
+                            content={activeTab.content}
+                            mode={activeTab.mode}
+                            editorSettings={settings}
+                            diffOriginal={activeTab.diffOriginal}
+                            imageUrl={activeTab.imageUrl}
+                            onChange={(value: string) => {
+                              floatingEditor.updateTabContent(activeTab.id, value)
+                            }}
+                          />
+                        </div>
+                        <EditorStatusBar
                           language={activeTab.language}
-                          content={activeTab.content}
-                          mode={activeTab.mode}
-                          editorSettings={settings}
-                          diffOriginal={activeTab.diffOriginal}
-                          imageUrl={activeTab.imageUrl}
-                          onChange={(value: string) => {
-                            floatingEditor.updateTabContent(activeTab.id, value)
-                          }}
+                          line={1}
+                          col={1}
+                          fileSize={activeTab.content.length}
+                          encoding="utf-8"
                         />
                       </div>
-                      <EditorStatusBar
-                        language={activeTab.language}
-                        line={1}
-                        col={1}
-                        fileSize={activeTab.content.length}
-                        encoding="utf-8"
-                      />
+                    )
+                  })()}
+
+                  {/* Drop overlay — pointer-events:auto to capture drops above Monaco */}
+                  {editorDragOver && (
+                    <div
+                      className="absolute inset-0 z-[8] bg-[var(--color-accent)]/10 border-2 border-dashed border-[var(--color-accent)]/70"
+                      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }}
+                      onDragLeave={handleEditorDragLeave}
+                      onDrop={handleEditorDrop}
+                    >
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className="px-2 py-1 text-[10px] font-mono text-[var(--color-accent)] bg-[var(--color-bg)]/90 border border-[var(--color-accent)]/50">
+                          {t('editor.dropHere')}
+                        </span>
+                      </div>
                     </div>
-                  )
-                })()}
+                  )}
+                </div>
               </FloatingWindow>
             )}
           </main>
@@ -1244,6 +1360,10 @@ function AppContent() {
         onDeleteItem={(kind, id, providers) =>
           runAiUninstall({ providers, types: [kind], ids: [id], removeSource: true })
         }
+        globalConfig={globalConfig}
+        globalConfigSaving={globalConfigSaving}
+        onSaveGlobalConfig={handleSaveGlobalConfig}
+        onSyncGlobalConfig={handleSyncGlobalConfig}
       />
 
       {/* Settings modal */}

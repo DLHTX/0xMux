@@ -26,6 +26,7 @@ rust-embed = { version = "8.5", features = ["axum", "mime-guess", "include-exclu
 mime_guess = { version = "2.0", optional = true }
 infer = "0.16"
 home = "0.5"
+trash = "5"
 
 # Password hashing & auth
 argon2 = "0.5"

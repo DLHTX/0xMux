@@ -93,8 +93,21 @@ pub fn build(state: AppState) -> Router {
             post(handlers::ai::ai_uninstall_handler),
         )
         .route(
+            "/api/ai/global-config",
+            get(handlers::ai::ai_global_config_handler)
+                .put(handlers::ai::ai_save_global_config_handler),
+        )
+        .route(
+            "/api/ai/global-config/sync",
+            post(handlers::ai::ai_sync_global_config_handler),
+        )
+        .route(
             "/api/upload/image",
             post(handlers::upload::upload_image_handler),
+        )
+        .route(
+            "/api/files/upload",
+            post(handlers::upload::upload_file_handler),
         )
         // Notification API
         .route(
@@ -132,12 +145,34 @@ pub fn build(state: AppState) -> Router {
         .route("/api/files/read", get(handlers::files::read_handler))
         .route("/api/files/raw", get(handlers::files::raw_handler))
         .route("/api/files/write", put(handlers::files::write_handler))
+        .route(
+            "/api/files/delete",
+            post(handlers::files::delete_handler),
+        )
+        .route(
+            "/api/files/rename",
+            post(handlers::files::rename_handler),
+        )
+        .route(
+            "/api/files/create",
+            post(handlers::files::create_handler),
+        )
+        .route(
+            "/api/files/reveal",
+            post(handlers::files::reveal_handler),
+        )
         .route("/api/files/search", get(handlers::files::search_handler))
         // Git API
         .route("/api/git/status", get(handlers::git::status_handler))
         .route("/api/git/diff", get(handlers::git::diff_handler))
         .route("/api/git/log", get(handlers::git::log_handler))
         .route("/api/git/branches", get(handlers::git::branches_handler))
+        .route("/api/git/commit", post(handlers::git::commit_handler))
+        .route("/api/git/push", post(handlers::git::push_handler))
+        .route("/api/git/stage", post(handlers::git::stage_handler))
+        .route("/api/git/unstage", post(handlers::git::unstage_handler))
+        .route("/api/git/stage-all", post(handlers::git::stage_all_handler))
+        .route("/api/git/unstage-all", post(handlers::git::unstage_all_handler))
         .route(
             "/api/sessions/{name}/windows",
             get(handlers::window::list_windows_handler)
@@ -150,6 +185,18 @@ pub fn build(state: AppState) -> Router {
         .route(
             "/api/sessions/{name}/windows/{index}/select",
             put(handlers::window::select_window_handler),
+        )
+        .route(
+            "/api/sessions/{name}/windows/{index}/input",
+            post(handlers::window::send_input_handler),
+        )
+        .route(
+            "/api/sessions/{name}/windows/{index}/capture",
+            get(handlers::window::capture_handler),
+        )
+        .route(
+            "/api/sessions/{name}/windows/{index}/info",
+            get(handlers::window::window_info_handler),
         )
         .route("/ws/mux", get(ws::mux::ws_mux_handler))
         .route(

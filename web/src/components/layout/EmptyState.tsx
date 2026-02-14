@@ -1,11 +1,25 @@
+import { useState } from 'react'
 import { Icon } from '@iconify/react'
 import { IconPlus } from '../../lib/icons'
 
 interface EmptyStateProps {
-  onCreateClick: () => void
+  onQuickCreate: () => Promise<void>
+  onCustomCreate: () => void
 }
 
-export function EmptyState({ onCreateClick }: EmptyStateProps) {
+export function EmptyState({ onQuickCreate, onCustomCreate }: EmptyStateProps) {
+  const [creating, setCreating] = useState(false)
+
+  const handleQuickCreate = async () => {
+    if (creating) return
+    setCreating(true)
+    try {
+      await onQuickCreate()
+    } finally {
+      setCreating(false)
+    }
+  }
+
   return (
     <div className="flex-1 flex items-center justify-center">
       <div className="flex flex-col items-center gap-8 max-w-md px-4">
@@ -32,22 +46,28 @@ export function EmptyState({ onCreateClick }: EmptyStateProps) {
           </div>
         </div>
 
-        {/* Create button */}
+        {/* Quick create button */}
         <button
-          onClick={onCreateClick}
+          onClick={handleQuickCreate}
+          disabled={creating}
           className="flex items-center gap-2 px-6 py-3 border-[length:var(--border-w)] border-[var(--color-border)] rounded-[var(--radius)]
             font-bold text-sm transition-colors cursor-pointer
-            hover:bg-[var(--color-primary)] hover:text-[var(--color-primary-fg)] hover:border-[var(--color-primary)]
-            active:scale-95"
+            bg-[var(--color-primary)] text-[var(--color-primary-fg)] border-[var(--color-primary)]
+            hover:brightness-110
+            active:scale-95
+            disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Icon icon={IconPlus} width={16} height={16} />
-          New Session
+          {creating ? 'Creating...' : 'New Session'}
         </button>
 
-        {/* Hint text */}
-        <p className="text-xs text-[var(--color-fg-faint)] text-center">
-          Sessions let you organize terminal windows and persist them across connections.
-        </p>
+        {/* Custom create link */}
+        <button
+          onClick={onCustomCreate}
+          className="text-xs text-[var(--color-fg-faint)] underline cursor-pointer hover:text-[var(--color-fg-muted)] transition-colors"
+        >
+          Custom settings...
+        </button>
       </div>
 
       {/* CSS animation for cursor blink */}

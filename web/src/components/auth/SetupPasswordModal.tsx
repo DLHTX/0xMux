@@ -60,7 +60,7 @@ export function SetupPasswordModal({ onSubmit, onSkip }: SetupPasswordModalProps
   }
 
   return (
-    <div className="fixed inset-0 bg-[var(--color-bg)]/95 backdrop-blur-md flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-[var(--color-bg)]/95 flex items-center justify-center z-50" style={{ backdropFilter: 'var(--modal-backdrop-blur)' }}>
       <div className="bg-[var(--color-bg)] border-[length:var(--border-w)] border-[var(--color-border)] rounded-[var(--radius)] p-6 w-full max-w-md mx-4 shadow-[4px_4px_0_var(--color-border-light)]">
         {/* Header */}
         <div className="flex items-center gap-3 mb-4">

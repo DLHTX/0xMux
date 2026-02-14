@@ -1,8 +1,9 @@
 use crate::error::AppError;
 use crate::models::ai::{
     AiCatalogResponse, AiProvidersStatus, AiStatusResponse, AiSyncRequest, AiSyncResponse,
-    AiUninstallRequest, AiUninstallResponse, McpCatalogItem, ProviderAvailability,
-    ProviderSyncState, SkillCatalogItem, SyncAction, SyncSummary, UninstallSummary,
+    AiUninstallRequest, AiUninstallResponse, GlobalConfigResponse, McpCatalogItem,
+    ProviderAvailability, ProviderSyncState, SkillCatalogItem, SyncAction, SyncGlobalConfigRequest,
+    SyncSummary, UninstallSummary,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Map as JsonMap, Value as JsonValue};
@@ -18,14 +19,22 @@ const SYNC_TYPES: &[&str] = &["skills", "mcp"];
 struct SkillSource {
     id: String,
     name: String,
+    description: String,
+    /// For file skills: the .md file. For dir skills: the SKILL.md entry point.
     source_path: PathBuf,
     source_display: String,
+    recommended: bool,
+    official: bool,
+    /// For directory skills: the root directory to sync. None for single-file skills.
+    source_dir: Option<PathBuf>,
 }
 
 #[derive(Clone, Debug, Default)]
 struct SkillFrontmatter {
     name: Option<String>,
     description: Option<String>,
+    recommended: bool,
+    official: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -41,8 +50,10 @@ struct McpCommand {
 struct McpSource {
     id: String,
     name: String,
+    description: String,
     command: McpCommand,
     recommended: bool,
+    official: bool,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -56,6 +67,8 @@ struct McpRegistryEntry {
     id: String,
     #[serde(default)]
     name: Option<String>,
+    #[serde(default)]
+    description: Option<String>,
     command: String,
     #[serde(default)]
     args: Vec<String>,
@@ -63,6 +76,8 @@ struct McpRegistryEntry {
     env: BTreeMap<String, String>,
     #[serde(default)]
     recommended: bool,
+    #[serde(default)]
+    official: bool,
 }
 
 pub fn get_status() -> Result<AiStatusResponse, AppError> {
@@ -360,6 +375,74 @@ fn sync_skills(
                 continue;
             }
 
+            // Directory skill: copy entire directory
+            if let Some(ref source_dir) = skill.source_dir {
+                let target_dir = if provider == "claude" {
+                    claude_skill_dir_target(&claude_home, &skill.id)
+                } else {
+                    codex_skill_dir_target(codex_home, &skill.id)
+                };
+                let target_display = target_dir.display().to_string();
+
+                if dir_contents_match(source_dir, &target_dir) {
+                    actions.push(SyncAction {
+                        kind: "skills".to_string(),
+                        id: skill.id.clone(),
+                        name: skill.name.clone(),
+                        provider: provider.clone(),
+                        status: "up_to_date".to_string(),
+                        source: Some(skill.source_display.clone()),
+                        target: Some(target_display),
+                        message: None,
+                    });
+                    continue;
+                }
+
+                if dry_run {
+                    actions.push(SyncAction {
+                        kind: "skills".to_string(),
+                        id: skill.id.clone(),
+                        name: skill.name.clone(),
+                        provider: provider.clone(),
+                        status: "planned".to_string(),
+                        source: Some(skill.source_display.clone()),
+                        target: Some(target_display),
+                        message: Some("目标目录将被创建或更新".to_string()),
+                    });
+                    continue;
+                }
+
+                // Remove old target dir to avoid stale files
+                if target_dir.exists() {
+                    let _ = fs::remove_dir_all(&target_dir);
+                }
+
+                match copy_dir_recursive(source_dir, &target_dir) {
+                    Ok(_) => actions.push(SyncAction {
+                        kind: "skills".to_string(),
+                        id: skill.id.clone(),
+                        name: skill.name.clone(),
+                        provider: provider.clone(),
+                        status: "updated".to_string(),
+                        source: Some(skill.source_display.clone()),
+                        target: Some(target_display),
+                        message: None,
+                    }),
+                    Err(err) => actions.push(SyncAction {
+                        kind: "skills".to_string(),
+                        id: skill.id.clone(),
+                        name: skill.name.clone(),
+                        provider: provider.clone(),
+                        status: "failed".to_string(),
+                        source: Some(skill.source_display.clone()),
+                        target: Some(target_display),
+                        message: Some(app_error_message(&err)),
+                    }),
+                }
+                continue;
+            }
+
+            // Single-file skill: existing behavior
             let target_path = if provider == "claude" {
                 claude_skill_target(&claude_home, &skill.id)
             } else {
@@ -629,11 +712,25 @@ fn uninstall_skills(
                 continue;
             }
 
-            let primary_target = if provider == "claude" {
-                claude_skill_target(&claude_home, &skill.id)
+            // Determine the target to check/remove
+            let (primary_target, is_dir_target) = if skill.source_dir.is_some() {
+                // Directory skill
+                let dir_target = if provider == "claude" {
+                    claude_skill_dir_target(&claude_home, &skill.id)
+                } else {
+                    codex_skill_dir_target(codex_home, &skill.id)
+                };
+                (dir_target, true)
             } else {
-                codex_skill_target(codex_home, &skill.id)
+                // File skill
+                let file_target = if provider == "claude" {
+                    claude_skill_target(&claude_home, &skill.id)
+                } else {
+                    codex_skill_target(codex_home, &skill.id)
+                };
+                (file_target, false)
             };
+
             if !primary_target.exists() {
                 actions.push(SyncAction {
                     kind: "skills".to_string(),
@@ -648,7 +745,9 @@ fn uninstall_skills(
                 continue;
             }
 
-            let remove_result = if provider == "claude" {
+            let remove_result = if is_dir_target || primary_target.is_dir() {
+                fs::remove_dir_all(&primary_target)
+            } else if provider == "claude" {
                 fs::remove_file(&primary_target)
             } else {
                 fs::remove_dir_all(primary_target.parent().unwrap_or(&primary_target))
@@ -869,33 +968,57 @@ fn build_skill_catalog(
             .or_else(|| codex_skill.map(|s| s.source_display.clone()))
             .unwrap_or_else(|| id.clone());
 
-        let claude_exists = claude_skill.is_some();
-        let codex_exists = codex_skill.is_some();
+        let claude_exists = claude_skill.is_some()
+            || global.and_then(|g| g.source_dir.as_ref()).map_or(false, |_| {
+                claude_skill_dir_target(&claude_home, &id).exists()
+            });
+        let codex_exists = codex_skill.is_some()
+            || global.and_then(|g| g.source_dir.as_ref()).map_or(false, |_| {
+                codex_skill_dir_target(codex_home, &id).exists()
+            });
         let (claude_in_sync, codex_in_sync) = if let Some(global_skill) = global {
-            let claude_expected = render_claude_skill_bytes(global_skill)?;
-            let claude_match = claude_skill
-                .map(|installed| {
-                    fs::read(&installed.source_path)
-                        .map(|bytes| bytes == claude_expected)
-                        .unwrap_or(false)
-                })
-                .unwrap_or(false);
-            let codex_expected = render_codex_skill_bytes(global_skill)?;
-            let codex_match = codex_skill
-                .map(|installed| {
-                    fs::read(&installed.source_path)
-                        .map(|bytes| bytes == codex_expected)
-                        .unwrap_or(false)
-                })
-                .unwrap_or(false);
-            (claude_match, codex_match)
+            if let Some(ref source_dir) = global_skill.source_dir {
+                // Directory skill: compare all files
+                let claude_target = claude_skill_dir_target(&claude_home, &id);
+                let codex_target = codex_skill_dir_target(codex_home, &id);
+                (
+                    dir_contents_match(source_dir, &claude_target),
+                    dir_contents_match(source_dir, &codex_target),
+                )
+            } else {
+                // File skill: compare rendered bytes
+                let claude_expected = render_claude_skill_bytes(global_skill)?;
+                let claude_match = claude_skill
+                    .map(|installed| {
+                        fs::read(&installed.source_path)
+                            .map(|bytes| bytes == claude_expected)
+                            .unwrap_or(false)
+                    })
+                    .unwrap_or(false);
+                let codex_expected = render_codex_skill_bytes(global_skill)?;
+                let codex_match = codex_skill
+                    .map(|installed| {
+                        fs::read(&installed.source_path)
+                            .map(|bytes| bytes == codex_expected)
+                            .unwrap_or(false)
+                    })
+                    .unwrap_or(false);
+                (claude_match, codex_match)
+            }
         } else {
             (claude_exists, codex_exists)
         };
 
+        let recommended = global.map_or(false, |s| s.recommended);
+        let official = global.map_or(false, |s| s.official);
+        let description = global
+            .map(|s| s.description.clone())
+            .unwrap_or_default();
+
         list.push(SkillCatalogItem {
             id,
             name,
+            description,
             source,
             claude: ProviderSyncState {
                 exists: claude_exists,
@@ -905,8 +1028,18 @@ fn build_skill_catalog(
                 exists: codex_exists,
                 in_sync: codex_in_sync,
             },
+            recommended,
+            official,
         });
     }
+
+    // Official first, then recommended, then alphabetical
+    list.sort_by(|a, b| {
+        b.official
+            .cmp(&a.official)
+            .then(b.recommended.cmp(&a.recommended))
+            .then(a.id.cmp(&b.id))
+    });
 
     Ok(list)
 }
@@ -970,9 +1103,14 @@ fn build_mcp_catalog(mux_home: &Path, codex_home: &Path) -> Result<Vec<McpCatalo
         };
 
         let recommended = in_registry.map_or(false, |r| r.recommended);
+        let official = in_registry.map_or(false, |r| r.official);
+        let description = in_registry
+            .map(|r| r.description.clone())
+            .unwrap_or_default();
         list.push(McpCatalogItem {
             id,
             name,
+            description,
             command,
             args,
             source,
@@ -985,27 +1123,112 @@ fn build_mcp_catalog(mux_home: &Path, codex_home: &Path) -> Result<Vec<McpCatalo
                 in_sync: codex_in_sync,
             },
             recommended,
+            official,
         });
     }
 
-    // Recommended items first, then alphabetical
-    list.sort_by(|a, b| b.recommended.cmp(&a.recommended).then(a.id.cmp(&b.id)));
+    // Official first, then recommended, then alphabetical
+    list.sort_by(|a, b| {
+        b.official
+            .cmp(&a.official)
+            .then(b.recommended.cmp(&a.recommended))
+            .then(a.id.cmp(&b.id))
+    });
 
     Ok(list)
 }
 
 fn discover_skills(mux_home: &Path) -> Result<Vec<SkillSource>, AppError> {
     let skills_root = mux_home.join("skills");
-    let mut files = Vec::new();
-    collect_markdown_files(&skills_root, &mut files)?;
-
-    files.sort();
-
     let mut skills = Vec::new();
-    for path in files {
+    discover_skills_recursive(&skills_root, &skills_root, &mut skills)?;
+    skills.sort_by(|a, b| a.id.cmp(&b.id));
+    Ok(skills)
+}
+
+/// Recursively discover skills. A directory with SKILL.md is a directory skill
+/// (synced as a whole). A standalone .md file (not SKILL.md) is a file skill.
+fn discover_skills_recursive(
+    dir: &Path,
+    skills_root: &Path,
+    out: &mut Vec<SkillSource>,
+) -> Result<(), AppError> {
+    if !dir.exists() {
+        return Ok(());
+    }
+
+    // Check if this directory itself is a directory skill (has SKILL.md)
+    let skill_md = dir.join("SKILL.md");
+    if skill_md.exists() && dir != skills_root {
+        let id = dir
+            .strip_prefix(skills_root)
+            .unwrap_or(dir.as_ref())
+            .to_string_lossy()
+            .replace('\\', "/")
+            .trim_start_matches('/')
+            .to_string();
+
+        let fm = fs::read_to_string(&skill_md)
+            .ok()
+            .map(|raw| parse_skill_frontmatter(raw.trim_start_matches('\u{feff}')))
+            .unwrap_or_default();
+
+        let name = fm.name.unwrap_or_else(|| {
+            dir.file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("skill")
+                .to_string()
+        });
+        let description = fm.description.unwrap_or_default();
+
+        out.push(SkillSource {
+            id,
+            name,
+            description,
+            source_path: skill_md,
+            source_display: display_path(dir),
+            recommended: fm.recommended,
+            official: fm.official,
+            source_dir: Some(dir.to_path_buf()),
+        });
+        // Don't recurse further — everything in this dir belongs to this skill
+        return Ok(());
+    }
+
+    // Otherwise, scan entries: collect standalone .md files and recurse into subdirs
+    let entries = fs::read_dir(dir).map_err(|err| {
+        AppError::Internal(format!("读取目录失败（{}）: {}", dir.display(), err))
+    })?;
+
+    for entry in entries {
+        let entry = entry.map_err(|err| {
+            AppError::Internal(format!("读取目录项失败（{}）: {}", dir.display(), err))
+        })?;
+        let path = entry.path();
+
+        if path.is_dir() {
+            discover_skills_recursive(&path, skills_root, out)?;
+            continue;
+        }
+
+        let is_md = path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| ext.eq_ignore_ascii_case("md"))
+            .unwrap_or(false);
+
+        if !is_md {
+            continue;
+        }
+
+        // Skip SKILL.md at the root level (not a valid standalone skill)
+        if path.file_name().and_then(|n| n.to_str()) == Some("SKILL.md") {
+            continue;
+        }
+
         let source_display = display_path(&path);
         let id = path
-            .strip_prefix(&skills_root)
+            .strip_prefix(skills_root)
             .unwrap_or(path.as_path())
             .to_string_lossy()
             .replace('\\', "/")
@@ -1013,21 +1236,32 @@ fn discover_skills(mux_home: &Path) -> Result<Vec<SkillSource>, AppError> {
             .trim_end_matches(".md")
             .to_string();
 
-        let name = path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("skill")
-            .to_string();
+        let fm = fs::read_to_string(&path)
+            .ok()
+            .map(|raw| parse_skill_frontmatter(raw.trim_start_matches('\u{feff}')))
+            .unwrap_or_default();
 
-        skills.push(SkillSource {
+        let name = fm.name.unwrap_or_else(|| {
+            path.file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("skill")
+                .to_string()
+        });
+        let description = fm.description.unwrap_or_default();
+
+        out.push(SkillSource {
             id,
             name,
+            description,
             source_path: path,
             source_display,
+            recommended: fm.recommended,
+            official: fm.official,
+            source_dir: None,
         });
     }
 
-    Ok(skills)
+    Ok(())
 }
 
 fn discover_provider_skills(root: &Path, suffix: &str) -> Result<Vec<SkillSource>, AppError> {
@@ -1044,6 +1278,12 @@ fn discover_provider_skills(root: &Path, suffix: &str) -> Result<Vec<SkillSource
             .to_string_lossy()
             .replace('\\', "/");
         if relative.starts_with(".system/") {
+            continue;
+        }
+        // For Claude (.md suffix): skip SKILL.md inside directories — these are directory skills managed separately
+        if suffix == ".md"
+            && path.file_name().and_then(|n| n.to_str()) == Some("SKILL.md")
+        {
             continue;
         }
         if suffix == "/SKILL.md" && !relative.ends_with("/SKILL.md") {
@@ -1073,8 +1313,12 @@ fn discover_provider_skills(root: &Path, suffix: &str) -> Result<Vec<SkillSource
         out.push(SkillSource {
             id,
             name,
+            description: String::new(),
             source_path: path,
             source_display,
+            recommended: false,
+            official: false,
+            source_dir: None,
         });
     }
 
@@ -1123,8 +1367,12 @@ fn discover_claude_seed_skills(claude_home: &Path) -> Result<Vec<SkillSource>, A
         out.push(SkillSource {
             id,
             name,
+            description: String::new(),
             source_path: path,
             source_display,
+            recommended: false,
+            official: false,
+            source_dir: None,
         });
     }
 
@@ -1168,6 +1416,112 @@ fn collect_markdown_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), AppE
     }
 
     Ok(())
+}
+
+/// Collect all files (not just .md) from a directory recursively.
+fn collect_all_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), AppError> {
+    if !dir.exists() {
+        return Ok(());
+    }
+
+    let entries = fs::read_dir(dir)
+        .map_err(|err| AppError::Internal(format!("读取目录失败（{}）: {}", dir.display(), err)))?;
+
+    for entry in entries {
+        let entry = entry.map_err(|err| {
+            AppError::Internal(format!("读取目录项失败（{}）: {}", dir.display(), err))
+        })?;
+        let path = entry.path();
+
+        // Skip hidden files/dirs (like .DS_Store)
+        if path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .map(|n| n.starts_with('.'))
+            .unwrap_or(false)
+        {
+            continue;
+        }
+
+        if path.is_dir() {
+            collect_all_files(&path, out)?;
+        } else {
+            out.push(path);
+        }
+    }
+
+    Ok(())
+}
+
+/// Copy an entire directory tree from source to target.
+fn copy_dir_recursive(source: &Path, target: &Path) -> Result<(), AppError> {
+    fs::create_dir_all(target)
+        .map_err(|err| AppError::Internal(format!("创建目标目录失败: {}", err)))?;
+
+    let entries = fs::read_dir(source)
+        .map_err(|err| AppError::Internal(format!("读取源目录失败: {}", err)))?;
+
+    for entry in entries {
+        let entry = entry
+            .map_err(|err| AppError::Internal(format!("读取目录项失败: {}", err)))?;
+        let path = entry.path();
+        let file_name = path.file_name().unwrap();
+
+        // Skip hidden files
+        if file_name
+            .to_str()
+            .map(|n| n.starts_with('.'))
+            .unwrap_or(false)
+        {
+            continue;
+        }
+
+        let dest = target.join(file_name);
+        if path.is_dir() {
+            copy_dir_recursive(&path, &dest)?;
+        } else {
+            fs::copy(&path, &dest).map_err(|err| {
+                AppError::Internal(format!(
+                    "复制文件失败 {} → {}: {}",
+                    path.display(),
+                    dest.display(),
+                    err
+                ))
+            })?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Check if all files in a source directory match the target directory.
+fn dir_contents_match(source: &Path, target: &Path) -> bool {
+    if !target.exists() {
+        return false;
+    }
+
+    let mut source_files = Vec::new();
+    if collect_all_files(source, &mut source_files).is_err() {
+        return false;
+    }
+
+    for src_file in &source_files {
+        let relative = match src_file.strip_prefix(source) {
+            Ok(r) => r,
+            Err(_) => return false,
+        };
+        let target_file = target.join(relative);
+        if !target_file.exists() {
+            return false;
+        }
+        let src_bytes = fs::read(src_file).unwrap_or_default();
+        let tgt_bytes = fs::read(&target_file).unwrap_or_default();
+        if src_bytes != tgt_bytes {
+            return false;
+        }
+    }
+
+    true
 }
 
 fn seed_global_sources_if_empty(
@@ -1287,10 +1641,12 @@ fn seed_global_mcp_if_empty(
         entries.push(McpRegistryEntry {
             id: id.clone(),
             name: Some(id.clone()),
+            description: None,
             command: cmd.command.clone(),
             args: cmd.args.clone(),
             env: cmd.env.clone(),
             recommended: false,
+            official: false,
         });
 
         actions.push(SyncAction {
@@ -1368,11 +1724,20 @@ fn uninstall_source_skills(
     };
 
     for id in ids {
-        let source_path = skills_root.join(format!("{}.md", id));
-        let name = discovered_map
-            .get(&id)
+        let skill = discovered_map.get(&id);
+        let name = skill
             .map(|item| item.name.clone())
             .unwrap_or_else(|| id.clone());
+
+        // Determine the source path: directory skill or file skill
+        let (source_path, is_dir) = if let Some(s) = skill
+            && let Some(ref dir) = s.source_dir
+        {
+            (dir.clone(), true)
+        } else {
+            (skills_root.join(format!("{}.md", id)), false)
+        };
+
         let display = display_path(&source_path);
 
         if !source_path.exists() {
@@ -1389,9 +1754,19 @@ fn uninstall_source_skills(
             continue;
         }
 
-        match fs::remove_file(&source_path) {
+        let remove_result = if is_dir {
+            fs::remove_dir_all(&source_path)
+        } else {
+            fs::remove_file(&source_path)
+        };
+
+        match remove_result {
             Ok(_) => {
-                cleanup_empty_dirs(source_path.parent(), &skills_root);
+                if !is_dir {
+                    cleanup_empty_dirs(source_path.parent(), &skills_root);
+                } else {
+                    cleanup_empty_dirs(source_path.parent(), &skills_root);
+                }
                 actions.push(SyncAction {
                     kind: "skills".to_string(),
                     id: id.clone(),
@@ -1607,12 +1982,14 @@ fn load_mcp_registry(mux_home: &Path) -> Result<(Vec<McpSource>, PathBuf), AppEr
         out.push(McpSource {
             name: entry.name.unwrap_or_else(|| id.clone()),
             id,
+            description: entry.description.unwrap_or_default(),
             command: McpCommand {
                 command: entry.command,
                 args: entry.args,
                 env: entry.env,
             },
             recommended: entry.recommended,
+            official: entry.official,
         });
     }
 
@@ -1907,12 +2284,23 @@ fn codex_skill_target(codex_home: &Path, skill_id: &str) -> PathBuf {
     codex_home.join("skills").join(safe_id).join("SKILL.md")
 }
 
+/// Target directory for a directory skill on Codex.
+fn codex_skill_dir_target(codex_home: &Path, skill_id: &str) -> PathBuf {
+    let safe_id = skill_id.replace(['/', '\\'], "__");
+    codex_home.join("skills").join(safe_id)
+}
+
 fn claude_skills_root(claude_home: &Path) -> PathBuf {
     claude_home.join("skills")
 }
 
 fn claude_skill_target(claude_home: &Path, skill_id: &str) -> PathBuf {
     claude_skills_root(claude_home).join(format!("{}.md", skill_id))
+}
+
+/// Target directory for a directory skill on Claude.
+fn claude_skill_dir_target(claude_home: &Path, skill_id: &str) -> PathBuf {
+    claude_skills_root(claude_home).join(skill_id)
 }
 
 fn render_codex_skill_bytes(skill: &SkillSource) -> Result<Vec<u8>, AppError> {
@@ -2064,6 +2452,12 @@ fn parse_skill_frontmatter(input: &str) -> SkillFrontmatter {
             if !value.is_empty() {
                 parsed.description = Some(value.to_string());
             }
+        }
+        if let Some(value) = trimmed.strip_prefix("recommended:") {
+            parsed.recommended = value.trim().eq_ignore_ascii_case("true");
+        }
+        if let Some(value) = trimmed.strip_prefix("official:") {
+            parsed.official = value.trim().eq_ignore_ascii_case("true");
         }
     }
 
@@ -2258,4 +2652,223 @@ fn app_error_message(err: &AppError) -> String {
         | AppError::LastWindow(msg)
         | AppError::Internal(msg) => msg.clone(),
     }
+}
+
+// ── Global Config (instructions) ──
+
+const MARKER_START: &str = "<!-- 0xMux:start -->";
+const MARKER_END: &str = "<!-- 0xMux:end -->";
+
+fn global_config_path(mux_home: &Path) -> PathBuf {
+    mux_home.join("config").join("global-instructions.md")
+}
+
+fn claude_instructions_path() -> Result<PathBuf, AppError> {
+    let home = claude_home()?;
+    Ok(home.join("CLAUDE.md"))
+}
+
+fn codex_instructions_path() -> PathBuf {
+    let home = codex_home();
+    home.join("instructions.md")
+}
+
+fn extract_marker_section(content: &str) -> Option<String> {
+    let start_idx = content.find(MARKER_START)?;
+    let after_start = start_idx + MARKER_START.len();
+    let end_idx = content[after_start..].find(MARKER_END)?;
+    let section = &content[after_start..after_start + end_idx];
+    // Strip the leading and trailing newlines added by the marker block
+    let trimmed = section.strip_prefix('\n').unwrap_or(section);
+    let trimmed = trimmed.strip_suffix('\n').unwrap_or(trimmed);
+    Some(trimmed.to_string())
+}
+
+fn replace_marker_section(existing: &str, new_content: &str) -> String {
+    if new_content.is_empty() {
+        // Remove the marker block entirely
+        if let Some(start_idx) = existing.find(MARKER_START) {
+            let after_start = start_idx + MARKER_START.len();
+            if let Some(rel_end) = existing[after_start..].find(MARKER_END) {
+                let end_idx = after_start + rel_end + MARKER_END.len();
+                let mut result = String::new();
+                let before = &existing[..start_idx];
+                let after = &existing[end_idx..];
+                // Remove extra blank lines around the removed block
+                result.push_str(before.trim_end_matches('\n'));
+                let after_trimmed = after.trim_start_matches('\n');
+                if !after_trimmed.is_empty() {
+                    if !result.is_empty() {
+                        result.push('\n');
+                    }
+                    result.push_str(after_trimmed);
+                }
+                if !result.is_empty() && !result.ends_with('\n') {
+                    result.push('\n');
+                }
+                return result;
+            }
+        }
+        // No marker found, return as-is
+        return existing.to_string();
+    }
+
+    let block = format!("{}\n{}\n{}", MARKER_START, new_content, MARKER_END);
+
+    if let Some(start_idx) = existing.find(MARKER_START) {
+        let after_start = start_idx + MARKER_START.len();
+        if let Some(rel_end) = existing[after_start..].find(MARKER_END) {
+            let end_idx = after_start + rel_end + MARKER_END.len();
+            let mut result = String::new();
+            result.push_str(&existing[..start_idx]);
+            result.push_str(&block);
+            result.push_str(&existing[end_idx..]);
+            return result;
+        }
+    }
+
+    // No existing marker — append at end
+    let mut result = existing.to_string();
+    if !result.is_empty() && !result.ends_with('\n') {
+        result.push('\n');
+    }
+    if !result.is_empty() {
+        result.push('\n');
+    }
+    result.push_str(&block);
+    result.push('\n');
+    result
+}
+
+fn check_provider_sync(target_path: &Path, source_content: &str) -> ProviderSyncState {
+    if !target_path.exists() {
+        return ProviderSyncState {
+            exists: false,
+            in_sync: source_content.is_empty(),
+        };
+    }
+
+    let existing = fs::read_to_string(target_path).unwrap_or_default();
+    let current_section = extract_marker_section(&existing);
+
+    let in_sync = if source_content.is_empty() {
+        current_section.is_none()
+    } else {
+        current_section.as_deref() == Some(source_content)
+    };
+
+    ProviderSyncState {
+        exists: true,
+        in_sync,
+    }
+}
+
+pub fn get_global_config() -> Result<GlobalConfigResponse, AppError> {
+    let mux_home = mux_home()?;
+    let config_path = global_config_path(&mux_home);
+    let content = if config_path.exists() {
+        fs::read_to_string(&config_path).unwrap_or_default()
+    } else {
+        String::new()
+    };
+
+    let claude_path = claude_instructions_path()?;
+    let codex_path = codex_instructions_path();
+
+    let claude = check_provider_sync(&claude_path, &content);
+    let codex = check_provider_sync(&codex_path, &content);
+
+    Ok(GlobalConfigResponse {
+        content,
+        claude,
+        codex,
+    })
+}
+
+pub fn save_global_config(content: String) -> Result<GlobalConfigResponse, AppError> {
+    let mux_home = mux_home()?;
+    let config_path = global_config_path(&mux_home);
+
+    if let Some(parent) = config_path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|err| AppError::Internal(format!("创建配置目录失败: {}", err)))?;
+    }
+
+    fs::write(&config_path, &content)
+        .map_err(|err| AppError::Internal(format!("写入全局配置失败: {}", err)))?;
+
+    let claude_path = claude_instructions_path()?;
+    let codex_path = codex_instructions_path();
+
+    let claude = check_provider_sync(&claude_path, &content);
+    let codex = check_provider_sync(&codex_path, &content);
+
+    Ok(GlobalConfigResponse {
+        content,
+        claude,
+        codex,
+    })
+}
+
+pub fn sync_global_config(request: SyncGlobalConfigRequest) -> Result<GlobalConfigResponse, AppError> {
+    let mux_home = mux_home()?;
+    let config_path = global_config_path(&mux_home);
+    let content = if config_path.exists() {
+        fs::read_to_string(&config_path).unwrap_or_default()
+    } else {
+        String::new()
+    };
+
+    let status = get_status()?;
+
+    let providers: Vec<String> = if request.providers.is_empty() {
+        let mut installed = Vec::new();
+        if status.providers.claude.installed {
+            installed.push("claude".to_string());
+        }
+        if status.providers.codex.installed {
+            installed.push("codex".to_string());
+        }
+        installed
+    } else {
+        request.providers
+    };
+
+    for provider in &providers {
+        let target_path = if provider == "claude" {
+            claude_instructions_path()?
+        } else if provider == "codex" {
+            codex_instructions_path()
+        } else {
+            continue;
+        };
+
+        let existing = if target_path.exists() {
+            fs::read_to_string(&target_path).unwrap_or_default()
+        } else {
+            String::new()
+        };
+
+        let updated = replace_marker_section(&existing, &content);
+
+        if let Some(parent) = target_path.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|err| AppError::Internal(format!("创建目标目录失败: {}", err)))?;
+        }
+
+        fs::write(&target_path, &updated)
+            .map_err(|err| AppError::Internal(format!("写入目标文件失败（{}）: {}", target_path.display(), err)))?;
+    }
+
+    // Re-check sync state after writing
+    let claude_path = claude_instructions_path()?;
+    let codex_path = codex_instructions_path();
+    let claude = check_provider_sync(&claude_path, &content);
+    let codex = check_provider_sync(&codex_path, &content);
+
+    Ok(GlobalConfigResponse {
+        content,
+        claude,
+        codex,
+    })
 }

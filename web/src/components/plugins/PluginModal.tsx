@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Icon } from '@iconify/react'
-import { IconPuzzle, IconRefreshCw, IconX } from '../../lib/icons'
+import { IconPuzzle, IconRefreshCw, IconX, IconChevronDown, IconChevronUp } from '../../lib/icons'
 import { Tabs } from '../ui'
 import type {
   AiCatalogResponse,
@@ -10,6 +10,7 @@ import type {
   ProviderSyncState,
   SkillCatalogItem,
   McpCatalogItem,
+  GlobalConfigResponse,
 } from '../../lib/types'
 
 interface PluginModalProps {
@@ -27,6 +28,10 @@ interface PluginModalProps {
   onUninstallItem: (kind: AiSyncType, id: string, providers: AiProvider[]) => void
   onDeleteAll: (providers: AiProvider[]) => void
   onDeleteItem: (kind: AiSyncType, id: string, providers: AiProvider[]) => void
+  globalConfig: GlobalConfigResponse | null
+  globalConfigSaving: boolean
+  onSaveGlobalConfig: (content: string) => void
+  onSyncGlobalConfig: () => void
 }
 
 export function PluginModal({
@@ -44,6 +49,10 @@ export function PluginModal({
   onUninstallItem,
   onDeleteAll,
   onDeleteItem,
+  globalConfig,
+  globalConfigSaving,
+  onSaveGlobalConfig,
+  onSyncGlobalConfig,
 }: PluginModalProps) {
   const [search, setSearch] = useState('')
   if (!open) return null
@@ -99,7 +108,7 @@ export function PluginModal({
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50" onClick={onClose} />
+      <div className="fixed inset-0 bg-black/30 z-50" style={{ backdropFilter: 'var(--modal-backdrop-blur)' }} onClick={onClose} />
 
       <div
         className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[860px] max-w-[95vw] max-h-[86vh] bg-[var(--color-bg)] border-[length:var(--border-w)] border-[var(--color-border)] rounded-[var(--radius)] shadow-[4px_4px_0_var(--color-border-light)] z-50 flex flex-col overflow-hidden"
@@ -182,53 +191,81 @@ export function PluginModal({
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {isEmpty && (
-            <div className="p-3 border-[length:var(--border-w)] border-[var(--color-border-light)] rounded-[var(--radius)] text-xs text-[var(--color-fg-muted)]">
-              <div className="font-bold text-[var(--color-fg)] mb-1">暂无可管理内容</div>
-              <div>可在设置里导入或添加技能后再同步。</div>
-            </div>
-          )}
-          {noMatch && (
-            <div className="p-3 border-[length:var(--border-w)] border-[var(--color-border-light)] rounded-[var(--radius)] text-xs text-[var(--color-fg-muted)]">
-              没有匹配 "{search.trim()}" 的结果。
-            </div>
-          )}
-
-          {!isEmpty && !noMatch && (
-            <Tabs
-              tabs={[
-                {
-                  id: 'skills',
-                  label: `Skills (${skills.length})`,
-                  content: (
-                    <SkillList
-                      items={skills}
-                      syncing={syncing}
-                      providers={activeProviders}
-                      onSyncItem={onSyncItem}
-                      onUninstallItem={onUninstallItem}
-                      onDeleteItem={onDeleteItem}
-                    />
-                  ),
-                },
-                {
-                  id: 'mcp',
-                  label: `MCP (${mcp.length})`,
-                  content: (
-                    <McpList
-                      items={mcp}
-                      syncing={syncing}
-                      providers={activeProviders}
-                      onSyncItem={onSyncItem}
-                      onUninstallItem={onUninstallItem}
-                      onDeleteItem={onDeleteItem}
-                    />
-                  ),
-                },
-              ]}
-              defaultTab="skills"
-            />
-          )}
+          <Tabs
+            tabs={[
+              {
+                id: 'skills',
+                label: `Skills (${skills.length})`,
+                content: (
+                  <>
+                    {isEmpty && (
+                      <div className="p-3 border-[length:var(--border-w)] border-[var(--color-border-light)] rounded-[var(--radius)] text-xs text-[var(--color-fg-muted)]">
+                        <div className="font-bold text-[var(--color-fg)] mb-1">暂无可管理内容</div>
+                        <div>可在设置里导入或添加技能后再同步。</div>
+                      </div>
+                    )}
+                    {noMatch && (
+                      <div className="p-3 border-[length:var(--border-w)] border-[var(--color-border-light)] rounded-[var(--radius)] text-xs text-[var(--color-fg-muted)]">
+                        没有匹配 &quot;{search.trim()}&quot; 的结果。
+                      </div>
+                    )}
+                    {!isEmpty && !noMatch && (
+                      <SkillList
+                        items={skills}
+                        syncing={syncing}
+                        providers={activeProviders}
+                        onSyncItem={onSyncItem}
+                        onUninstallItem={onUninstallItem}
+                        onDeleteItem={onDeleteItem}
+                      />
+                    )}
+                  </>
+                ),
+              },
+              {
+                id: 'mcp',
+                label: `MCP (${mcp.length})`,
+                content: (
+                  <>
+                    {isEmpty && (
+                      <div className="p-3 border-[length:var(--border-w)] border-[var(--color-border-light)] rounded-[var(--radius)] text-xs text-[var(--color-fg-muted)]">
+                        <div className="font-bold text-[var(--color-fg)] mb-1">暂无可管理内容</div>
+                        <div>可在设置里导入或添加技能后再同步。</div>
+                      </div>
+                    )}
+                    {noMatch && (
+                      <div className="p-3 border-[length:var(--border-w)] border-[var(--color-border-light)] rounded-[var(--radius)] text-xs text-[var(--color-fg-muted)]">
+                        没有匹配 &quot;{search.trim()}&quot; 的结果。
+                      </div>
+                    )}
+                    {!isEmpty && !noMatch && (
+                      <McpList
+                        items={mcp}
+                        syncing={syncing}
+                        providers={activeProviders}
+                        onSyncItem={onSyncItem}
+                        onUninstallItem={onUninstallItem}
+                        onDeleteItem={onDeleteItem}
+                      />
+                    )}
+                  </>
+                ),
+              },
+              {
+                id: 'global-config',
+                label: '全局配置',
+                content: (
+                  <GlobalConfigEditor
+                    config={globalConfig}
+                    saving={globalConfigSaving}
+                    onSave={onSaveGlobalConfig}
+                    onSync={onSyncGlobalConfig}
+                  />
+                ),
+              },
+            ]}
+            defaultTab="skills"
+          />
 
           {lastResultText && (
             <div className="p-3 border-[length:var(--border-w)] border-[var(--color-border-light)] rounded-[var(--radius)] text-xs text-[var(--color-fg-muted)]">
@@ -267,6 +304,7 @@ function SkillList({
           key={item.id}
           id={item.id}
           name={item.name}
+          description={item.description}
           source={item.source}
           command={null}
           claude={item.claude}
@@ -274,6 +312,8 @@ function SkillList({
           syncing={syncing}
           providers={providers}
           kind="skills"
+          recommended={item.recommended}
+          official={item.official}
           onSyncItem={onSyncItem}
           onUninstallItem={onUninstallItem}
           onDeleteItem={onDeleteItem}
@@ -309,6 +349,7 @@ function McpList({
           key={item.id}
           id={item.id}
           name={item.name}
+          description={item.description}
           source={item.source}
           command={`${item.command} ${item.args.join(' ')}`.trim()}
           claude={item.claude}
@@ -317,6 +358,7 @@ function McpList({
           providers={providers}
           kind="mcp"
           recommended={item.recommended}
+          official={item.official}
           onSyncItem={onSyncItem}
           onUninstallItem={onUninstallItem}
           onDeleteItem={onDeleteItem}
@@ -329,6 +371,7 @@ function McpList({
 function ItemCard({
   id,
   name,
+  description,
   source,
   command,
   claude,
@@ -337,12 +380,14 @@ function ItemCard({
   providers,
   kind,
   recommended,
+  official,
   onSyncItem,
   onUninstallItem,
   onDeleteItem,
 }: {
   id: string
   name: string
+  description: string
   source: string
   command: string | null
   claude: ProviderSyncState
@@ -351,19 +396,29 @@ function ItemCard({
   providers: AiProvider[]
   kind: AiSyncType
   recommended?: boolean
+  official?: boolean
   onSyncItem: (kind: AiSyncType, id: string, providers: AiProvider[]) => void
   onUninstallItem: (kind: AiSyncType, id: string, providers: AiProvider[]) => void
   onDeleteItem: (kind: AiSyncType, id: string, providers: AiProvider[]) => void
 }) {
+  const [expanded, setExpanded] = useState(false)
+  const hasDescription = description.length > 0
+  const highlighted = official || recommended
+
   return (
-    <div className={`p-3 border-[length:var(--border-w)] rounded-[var(--radius)] ${recommended ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5' : 'border-[var(--color-border-light)]'}`}>
+    <div className={`p-3 border-[length:var(--border-w)] rounded-[var(--radius)] ${highlighted ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5' : 'border-[var(--color-border-light)]'}`}>
       <div className="flex items-start justify-between gap-3 mb-1">
         <div className="min-w-0">
           <div className="font-bold text-sm truncate flex items-center gap-2">
             {name}
-            {recommended && (
-              <span className="text-[10px] px-1.5 py-0.5 bg-[var(--color-primary)] text-white font-bold shrink-0">
-                推荐安装
+            {official && (
+              <span className="text-[10px] px-1.5 py-0.5 bg-[var(--color-primary)] text-[var(--color-primary-fg)] font-bold shrink-0">
+                官方
+              </span>
+            )}
+            {recommended && !official && (
+              <span className="text-[10px] px-1.5 py-0.5 bg-[var(--color-warning)] text-[var(--color-bg)] font-bold shrink-0">
+                推荐
               </span>
             )}
           </div>
@@ -400,10 +455,24 @@ function ItemCard({
           </button>
         </div>
       </div>
-      <div className="text-xs flex gap-3 text-[var(--color-fg-muted)]">
+      <div className="text-xs flex items-center gap-3 text-[var(--color-fg-muted)]">
         <span>Claude: <StateTag state={claude} /></span>
         <span>Codex: <StateTag state={codex} /></span>
+        {hasDescription && (
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="ml-auto flex items-center gap-0.5 text-[var(--color-primary)] hover:underline"
+          >
+            {expanded ? '收起' : '详情'}
+            <Icon icon={expanded ? IconChevronUp : IconChevronDown} width={12} />
+          </button>
+        )}
       </div>
+      {expanded && hasDescription && (
+        <div className="mt-2 pt-2 border-t-[length:var(--border-w)] border-[var(--color-border-light)] text-xs text-[var(--color-fg-muted)] whitespace-pre-wrap">
+          {description}
+        </div>
+      )}
     </div>
   )
 }
@@ -412,4 +481,69 @@ function StateTag({ state }: { state: ProviderSyncState }) {
   if (!state.exists) return <span className="text-[var(--color-fg-muted)]">未配置</span>
   if (state.in_sync) return <span className="text-[var(--color-success)]">已同步</span>
   return <span className="text-[var(--color-warning)]">待同步</span>
+}
+
+function GlobalConfigEditor({
+  config,
+  saving,
+  onSave,
+  onSync,
+}: {
+  config: GlobalConfigResponse | null
+  saving: boolean
+  onSave: (content: string) => void
+  onSync: () => void
+}) {
+  const [draft, setDraft] = useState(config?.content ?? '')
+  const [initialized, setInitialized] = useState(false)
+
+  // Sync draft from config when first loaded
+  if (config && !initialized) {
+    setDraft(config.content)
+    setInitialized(true)
+  }
+
+  const isDirty = draft !== (config?.content ?? '')
+
+  return (
+    <div className="space-y-3">
+      <div className="text-xs text-[var(--color-fg-muted)] border-[length:var(--border-w)] border-[var(--color-border-light)] rounded-[var(--radius)] px-3 py-2">
+        编写全局指令（如 CLAUDE.md 内容），保存后可同步到 Claude CLI 和 Codex CLI。
+        目标文件中会用注释标记 0xMux 管理的区域，不会覆盖你手写的其他内容。
+      </div>
+
+      <textarea
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        placeholder="在此输入全局指令..."
+        className="w-full h-48 px-3 py-2 text-sm font-mono border-[length:var(--border-w)] border-[var(--color-border-light)] rounded-[var(--radius)] bg-[var(--color-bg)] text-[var(--color-fg)] placeholder:text-[var(--color-fg-muted)] focus:outline-none focus:border-[var(--color-primary)] resize-y"
+      />
+
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          onClick={() => onSave(draft)}
+          disabled={saving || !isDirty}
+          className="px-3 py-1.5 text-xs font-bold border-[length:var(--border-w)] border-[var(--color-primary)] text-[var(--color-primary)] rounded-[var(--radius)] hover:bg-[var(--color-primary)] hover:text-[var(--color-primary-fg)] disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {saving ? '保存中...' : '保存'}
+        </button>
+
+        <button
+          onClick={onSync}
+          disabled={saving || isDirty}
+          className="px-3 py-1.5 text-xs font-bold border-[length:var(--border-w)] border-[var(--color-border-light)] rounded-[var(--radius)] hover:border-[var(--color-border)] disabled:opacity-50 disabled:cursor-not-allowed"
+          title={isDirty ? '请先保存再同步' : '同步到已安装的 Provider'}
+        >
+          同步到 Provider
+        </button>
+
+        {config && (
+          <div className="flex gap-3 text-xs text-[var(--color-fg-muted)] ml-auto">
+            <span>Claude: <StateTag state={config.claude} /></span>
+            <span>Codex: <StateTag state={config.codex} /></span>
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }

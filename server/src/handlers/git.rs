@@ -1,9 +1,10 @@
 use axum::{Json, extract::Query, response::IntoResponse};
 use serde::Deserialize;
-use serde_json::json;
 
 use crate::error::AppError;
+use crate::models::git::{GitCommitRequest, GitPushRequest, GitStageAllRequest, GitStageRequest};
 use crate::services::{git, workspace};
+use serde_json::json;
 
 // ── GET /api/git/status ─────────────────────────────────────────────
 
@@ -70,4 +71,64 @@ pub async fn branches_handler(
     let root = workspace::resolve_workspace_root(q.session.as_deref(), q.window)?;
     let branches = git::get_branches(&root)?;
     Ok(Json(json!({ "branches": branches })))
+}
+
+// ── POST /api/git/commit ──────────────────────────────────────────
+
+pub async fn commit_handler(
+    Json(body): Json<GitCommitRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let root = workspace::resolve_workspace_root(body.session.as_deref(), body.window)?;
+    let result = git::commit(&root, &body.message)?;
+    Ok(Json(result))
+}
+
+// ── POST /api/git/push ────────────────────────────────────────────
+
+pub async fn push_handler(
+    Json(body): Json<GitPushRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let root = workspace::resolve_workspace_root(body.session.as_deref(), body.window)?;
+    let result = git::push(&root)?;
+    Ok(Json(result))
+}
+
+// ── POST /api/git/stage ───────────────────────────────────────────
+
+pub async fn stage_handler(
+    Json(body): Json<GitStageRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let root = workspace::resolve_workspace_root(body.session.as_deref(), body.window)?;
+    git::stage(&root, &body.paths)?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+// ── POST /api/git/unstage ─────────────────────────────────────────
+
+pub async fn unstage_handler(
+    Json(body): Json<GitStageRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let root = workspace::resolve_workspace_root(body.session.as_deref(), body.window)?;
+    git::unstage(&root, &body.paths)?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+// ── POST /api/git/stage-all ───────────────────────────────────────
+
+pub async fn stage_all_handler(
+    Json(body): Json<GitStageAllRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let root = workspace::resolve_workspace_root(body.session.as_deref(), body.window)?;
+    git::stage_all(&root)?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+// ── POST /api/git/unstage-all ─────────────────────────────────────
+
+pub async fn unstage_all_handler(
+    Json(body): Json<GitStageAllRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let root = workspace::resolve_workspace_root(body.session.as_deref(), body.window)?;
+    git::unstage_all(&root)?;
+    Ok(Json(json!({ "ok": true })))
 }

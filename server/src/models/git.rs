@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// Git status response
 #[derive(Serialize)]
@@ -50,4 +50,49 @@ pub struct GitBranchInfo {
     pub upstream: Option<String>,
     pub is_current: bool,
     pub is_remote: bool,
+}
+
+/// Git commit request
+#[derive(Deserialize)]
+pub struct GitCommitRequest {
+    pub message: String,
+    pub session: Option<String>,
+    pub window: Option<u32>,
+}
+
+/// Git commit response
+#[derive(Serialize)]
+pub struct GitCommitResponse {
+    pub hash: String,
+    pub short_hash: String,
+    pub message: String,
+}
+
+/// Git push request
+#[derive(Deserialize)]
+pub struct GitPushRequest {
+    pub session: Option<String>,
+    pub window: Option<u32>,
+}
+
+/// Git push response
+#[derive(Serialize)]
+pub struct GitPushResponse {
+    pub success: bool,
+    pub message: String,
+}
+
+/// Git stage/unstage request
+#[derive(Deserialize)]
+pub struct GitStageRequest {
+    pub paths: Vec<String>,
+    pub session: Option<String>,
+    pub window: Option<u32>,
+}
+
+/// Git stage-all / unstage-all request (workspace only)
+#[derive(Deserialize)]
+pub struct GitStageAllRequest {
+    pub session: Option<String>,
+    pub window: Option<u32>,
 }

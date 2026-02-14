@@ -42,6 +42,9 @@
   --radius:   0px;
   --border-w: 3px;
 
+  /* Modal */
+  --modal-backdrop-blur: blur(4px);
+
   /* Font */
   --font-body:    'Silkscreen', 'Fusion Pixel', cursive;
   --font-heading: 'Silkscreen', 'Fusion Pixel', cursive;

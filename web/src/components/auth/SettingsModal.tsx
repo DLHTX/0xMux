@@ -19,6 +19,7 @@ import { EDITOR_SKINS, EDITOR_SKIN_KEYS, getEditorSkinPalette } from '../../lib/
 import type {
   ChangePasswordRequest,
   EditorSkin,
+  ModalBlur,
   UserSettings,
 } from '../../lib/types'
 
@@ -53,7 +54,8 @@ export function SettingsModal({ open, onClose, onChangePassword, onLogout }: Set
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50"
+        className="fixed inset-0 bg-black/30 z-50"
+        style={{ backdropFilter: 'var(--modal-backdrop-blur)' }}
         onClick={onClose}
       />
 
@@ -346,18 +348,41 @@ function EditorTab({ settings, updateSettings }: {
         </div>
         <button
           onClick={() => updateSettings({ quickFileTrigger: !settings.quickFileTrigger })}
-          className={`shrink-0 w-10 h-5 rounded-full transition-colors relative ${
+          className={`shrink-0 w-5 h-5 border-[length:var(--border-w)] flex items-center justify-center transition-colors ${
             settings.quickFileTrigger
-              ? 'bg-[var(--color-primary)]'
-              : 'bg-[var(--color-border-light)]'
+              ? 'border-[var(--color-primary)] bg-[var(--color-primary)]'
+              : 'border-[var(--color-border-light)] bg-transparent'
           }`}
         >
-          <span
-            className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
-              settings.quickFileTrigger ? 'translate-x-5' : 'translate-x-0.5'
-            }`}
-          />
+          {settings.quickFileTrigger && (
+            <span className="text-[10px] font-bold text-[var(--color-primary-fg)]">✓</span>
+          )}
         </button>
+      </div>
+
+      {/* Modal Blur */}
+      <div className="flex items-center justify-between py-2">
+        <div className="flex-1 min-w-0 mr-4">
+          <div className="text-xs font-bold">弹框背景模糊</div>
+          <div className="text-[10px] text-[var(--color-fg-muted)] mt-0.5">
+            弹框遮罩层的背景模糊强度
+          </div>
+        </div>
+        <div className="shrink-0 flex gap-1">
+          {([['none', '无'], ['sm', '低'], ['md', '中'], ['lg', '高']] as const).map(([value, label]) => (
+            <button
+              key={value}
+              onClick={() => updateSettings({ modalBlur: value as ModalBlur })}
+              className={`px-2 py-0.5 text-[10px] font-bold border-[length:var(--border-w)] transition-colors ${
+                settings.modalBlur === value
+                  ? 'border-[var(--color-primary)] bg-[var(--color-primary)] text-[var(--color-primary-fg)]'
+                  : 'border-[var(--color-border-light)] text-[var(--color-fg-muted)] hover:border-[var(--color-border)]'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="pt-4 border-t-[length:var(--border-w)] border-[var(--color-border-light)]">

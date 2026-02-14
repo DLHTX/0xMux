@@ -129,11 +129,39 @@ const en = {
   'git.ahead': '{n} ahead',
   'git.behind': '{n} behind',
 
+  // Drag & Drop
+  'terminal.dropExternal': 'Upload & paste path',
+  'terminal.dropFile': 'Drop to paste path',
+  'editor.dropHere': 'Drop files to current directory',
+
   // Editor
   'editor.unsaved': 'Unsaved changes',
   'editor.save': 'Save (Ctrl+S)',
   'editor.close': 'Close',
   'editor.closeOthers': 'Close Others',
+
+  // Context Menu (File Explorer)
+  'ctx.open': 'Open',
+  'ctx.newFile': 'New File...',
+  'ctx.newFolder': 'New Folder...',
+  'ctx.copyPath': 'Copy Relative Path',
+  'ctx.copyAbsPath': 'Copy Absolute Path',
+  'ctx.copyName': 'Copy Name',
+  'ctx.rename': 'Rename',
+  'ctx.delete': 'Delete',
+  'ctx.reveal': 'Reveal in File Manager',
+  'ctx.deleteConfirm': 'Delete "{name}"?',
+  'ctx.deleteMultiple': 'Delete {n} items?',
+  'ctx.deleteSelected': 'Delete Selected ({n})',
+  'ctx.deleteHint': 'File will be moved to system trash.',
+  'ctx.dontAskAgain': "Don't ask again",
+  'ctx.cancel': 'Cancel',
+  'ctx.confirmDelete': 'Delete',
+
+  // Undo
+  'undo.rename': 'Undo rename: {old} → {new}',
+  'undo.create': 'Undo create: {name}',
+  'undo.empty': 'Nothing to undo',
 } as const
 
 const zh: { [K in keyof typeof en]: string } = {
@@ -245,10 +273,35 @@ const zh: { [K in keyof typeof en]: string } = {
   'git.ahead': '领先 {n}',
   'git.behind': '落后 {n}',
 
+  'terminal.dropExternal': '上传文件并粘贴路径',
+  'terminal.dropFile': '粘贴文件绝对路径',
+  'editor.dropHere': '拖拽文件到当前目录',
+
   'editor.unsaved': '未保存更改',
   'editor.save': '保存 (Ctrl+S)',
   'editor.close': '关闭',
   'editor.closeOthers': '关闭其他',
+
+  'ctx.open': '打开',
+  'ctx.newFile': '新建文件...',
+  'ctx.newFolder': '新建文件夹...',
+  'ctx.copyPath': '复制相对路径',
+  'ctx.copyAbsPath': '复制绝对路径',
+  'ctx.copyName': '复制名称',
+  'ctx.rename': '重命名',
+  'ctx.delete': '删除',
+  'ctx.reveal': '在文件管理器中打开',
+  'ctx.deleteConfirm': '删除 "{name}"？',
+  'ctx.deleteMultiple': '删除 {n} 个项目？',
+  'ctx.deleteSelected': '删除选中 ({n})',
+  'ctx.deleteHint': '文件将移至系统回收站。',
+  'ctx.dontAskAgain': '下次不再提醒',
+  'ctx.cancel': '取消',
+  'ctx.confirmDelete': '删除',
+
+  'undo.rename': '撤销重命名：{old} → {new}',
+  'undo.create': '撤销创建：{name}',
+  'undo.empty': '没有可撤销的操作',
 }
 
 export type MessageKey = keyof typeof en

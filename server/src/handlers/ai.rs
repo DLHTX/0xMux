@@ -1,7 +1,7 @@
 use axum::{Json, response::IntoResponse};
 
 use crate::error::AppError;
-use crate::models::ai::{AiSyncRequest, AiUninstallRequest};
+use crate::models::ai::{AiSyncRequest, AiUninstallRequest, SaveGlobalConfigRequest, SyncGlobalConfigRequest};
 use crate::services;
 
 pub async fn ai_status_handler() -> Result<impl IntoResponse, AppError> {
@@ -22,4 +22,20 @@ pub async fn ai_uninstall_handler(
     Json(body): Json<AiUninstallRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     Ok(Json(services::ai_sync::uninstall(body)?))
+}
+
+pub async fn ai_global_config_handler() -> Result<impl IntoResponse, AppError> {
+    Ok(Json(services::ai_sync::get_global_config()?))
+}
+
+pub async fn ai_save_global_config_handler(
+    Json(body): Json<SaveGlobalConfigRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    Ok(Json(services::ai_sync::save_global_config(body.content)?))
+}
+
+pub async fn ai_sync_global_config_handler(
+    Json(body): Json<SyncGlobalConfigRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    Ok(Json(services::ai_sync::sync_global_config(body)?))
 }

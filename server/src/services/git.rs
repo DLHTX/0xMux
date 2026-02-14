@@ -1,6 +1,7 @@
 use crate::error::AppError;
 use crate::models::git::{
-    GitBranchInfo, GitChangedFile, GitDiffResponse, GitLogEntry, GitStatusResponse,
+    GitBranchInfo, GitChangedFile, GitCommitResponse, GitDiffResponse, GitLogEntry,
+    GitPushResponse, GitStatusResponse,
 };
 use crate::services::fs::detect_language;
 use std::path::{Path, PathBuf};
@@ -346,4 +347,126 @@ pub fn get_branches(repo_path: &Path) -> Result<Vec<GitBranchInfo>, AppError> {
     }
 
     Ok(branches)
+}
+
+/// Commit staged changes with the given message.
+pub fn commit(repo_path: &Path, message: &str) -> Result<GitCommitResponse, AppError> {
+    let output = git_cmd(repo_path)
+        .args(["commit", "-m", message])
+        .output()
+        .map_err(|e| AppError::Internal(format!("git commit failed: {e}")))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(AppError::BadRequest(format!("git commit error: {stderr}")));
+    }
+
+    // Get the hash of the newly created commit
+    let hash_output = git_cmd(repo_path)
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .map_err(|e| AppError::Internal(format!("git rev-parse failed: {e}")))?;
+
+    let hash = String::from_utf8_lossy(&hash_output.stdout).trim().to_string();
+    let short_hash = hash.chars().take(7).collect();
+
+    Ok(GitCommitResponse {
+        hash,
+        short_hash,
+        message: message.to_string(),
+    })
+}
+
+/// Push to the remote repository.
+pub fn push(repo_path: &Path) -> Result<GitPushResponse, AppError> {
+    let output = git_cmd(repo_path)
+        .args(["push"])
+        .output()
+        .map_err(|e| AppError::Internal(format!("git push failed: {e}")))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(AppError::BadRequest(format!("git push error: {stderr}")));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    // git push writes progress to stderr
+    let msg = if stdout.trim().is_empty() {
+        stderr.trim().to_string()
+    } else {
+        stdout.trim().to_string()
+    };
+
+    Ok(GitPushResponse {
+        success: true,
+        message: if msg.is_empty() { "Push completed".into() } else { msg },
+    })
+}
+
+/// Stage specific files (git add).
+pub fn stage(repo_path: &Path, paths: &[String]) -> Result<(), AppError> {
+    if paths.is_empty() {
+        return Ok(());
+    }
+    let mut cmd = git_cmd(repo_path);
+    cmd.arg("add").arg("--");
+    for p in paths {
+        cmd.arg(p);
+    }
+    let output = cmd
+        .output()
+        .map_err(|e| AppError::Internal(format!("git add failed: {e}")))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(AppError::BadRequest(format!("git add error: {stderr}")));
+    }
+    Ok(())
+}
+
+/// Stage all changes (git add -A).
+pub fn stage_all(repo_path: &Path) -> Result<(), AppError> {
+    let output = git_cmd(repo_path)
+        .args(["add", "-A"])
+        .output()
+        .map_err(|e| AppError::Internal(format!("git add -A failed: {e}")))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(AppError::BadRequest(format!("git add error: {stderr}")));
+    }
+    Ok(())
+}
+
+/// Unstage specific files (git reset HEAD).
+pub fn unstage(repo_path: &Path, paths: &[String]) -> Result<(), AppError> {
+    if paths.is_empty() {
+        return Ok(());
+    }
+    let mut cmd = git_cmd(repo_path);
+    cmd.arg("reset").arg("HEAD").arg("--");
+    for p in paths {
+        cmd.arg(p);
+    }
+    let output = cmd
+        .output()
+        .map_err(|e| AppError::Internal(format!("git reset failed: {e}")))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(AppError::BadRequest(format!("git reset error: {stderr}")));
+    }
+    Ok(())
+}
+
+/// Unstage all files (git reset HEAD).
+pub fn unstage_all(repo_path: &Path) -> Result<(), AppError> {
+    let output = git_cmd(repo_path)
+        .args(["reset", "HEAD"])
+        .output()
+        .map_err(|e| AppError::Internal(format!("git reset failed: {e}")))?;
+    // git reset exits 0 even when there's nothing to unstage, but stderr may have warnings
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(AppError::BadRequest(format!("git reset error: {stderr}")));
+    }
+    Ok(())
 }

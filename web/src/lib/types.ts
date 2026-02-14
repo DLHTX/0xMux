@@ -147,20 +147,25 @@ export interface ProviderSyncState {
 export interface SkillCatalogItem {
   id: string
   name: string
+  description: string
   source: string
   claude: ProviderSyncState
   codex: ProviderSyncState
+  recommended: boolean
+  official: boolean
 }
 
 export interface McpCatalogItem {
   id: string
   name: string
+  description: string
   command: string
   args: string[]
   source: string
   claude: ProviderSyncState
   codex: ProviderSyncState
   recommended: boolean
+  official: boolean
 }
 
 export interface AiCatalogResponse {
@@ -224,6 +229,20 @@ export interface AiUninstallResponse {
   summary: UninstallSummary
 }
 
+export interface GlobalConfigResponse {
+  content: string
+  claude: ProviderSyncState
+  codex: ProviderSyncState
+}
+
+export interface SaveGlobalConfigRequest {
+  content: string
+}
+
+export interface SyncGlobalConfigRequest {
+  providers?: string[]
+}
+
 export type AiProviderView = 'global' | AiProvider
 
 export type ConnectionStatus = 'connected' | 'connecting' | 'disconnected'
@@ -253,6 +272,7 @@ export interface TerminalInstance {
 }
 
 export type SplitDirection = 'horizontal' | 'vertical'
+export type ModalBlur = 'none' | 'sm' | 'md' | 'lg'
 export type MarkdownRenderMode = 'code' | 'wysiwyg' | 'ir' | 'sv'
 export type EditorSkin = 'classic' | 'ocean' | 'forest' | 'sunset'
 
@@ -284,6 +304,8 @@ export interface UserSettings {
   editorSkin: EditorSkin
   /** Markdown editing mode in floating editor (fixed to wysiwyg) */
   markdownRenderMode: 'wysiwyg'
+  /** Backdrop blur level for modal overlays */
+  modalBlur: ModalBlur
 }
 
 export interface CreateWindowRequest {

@@ -1,8 +1,8 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Icon } from '@iconify/react'
-import { IconGitBranch, IconRefreshCw, IconChevronDown, IconChevronRight } from '../../lib/icons'
+import { IconGitBranch, IconRefreshCw, IconChevronDown, IconChevronRight, IconCheck, IconArrowUp, IconPlus, IconMinus } from '../../lib/icons'
 import { useGitStatus } from '../../hooks/useGitStatus'
-import { useState } from 'react'
+import { gitCommit, gitPush, gitStage, gitUnstage, gitStageAll, gitUnstageAll } from '../../lib/api'
 import type { GitChangedFile, WorkspaceContext } from '../../lib/types'
 import { getGitStatusBadge, getGitStatusColor } from '../../lib/gitDecorations'
 
@@ -11,48 +11,61 @@ interface GitPanelProps {
   workspace?: WorkspaceContext
 }
 
-function FileItem({ file, onOpen }: { file: GitChangedFile; onOpen: () => void }) {
+function FileItem({ file, onOpen, action, actionIcon, actionTitle }: {
+  file: GitChangedFile
+  onOpen: () => void
+  action: () => void
+  actionIcon: typeof IconPlus
+  actionTitle: string
+}) {
   const filename = file.path.split('/').pop() ?? file.path
   const dir = file.path.includes('/') ? file.path.substring(0, file.path.lastIndexOf('/')) : ''
 
   return (
-    <button
-      onClick={onOpen}
-      className="w-full text-left px-3 py-0.5 flex items-center gap-1.5 hover:bg-[var(--color-bg-alt)] transition-colors text-xs group"
-    >
-      <span
-        className="shrink-0 w-4 text-center font-bold text-[10px]"
-        style={{ color: getGitStatusColor(file.status) }}
+    <div className="w-full flex items-center hover:bg-[var(--color-bg-alt)] transition-colors text-xs group">
+      <button
+        onClick={onOpen}
+        className="flex-1 min-w-0 text-left px-3 py-0.5 flex items-center gap-1.5"
       >
-        {getGitStatusBadge(file.status)}
-      </span>
-      <span className="truncate text-[var(--color-fg)]">{filename}</span>
-      {dir && <span className="truncate text-[var(--color-fg-muted)] text-[10px]">{dir}</span>}
-    </button>
+        <span
+          className="shrink-0 w-4 text-center font-bold text-[10px]"
+          style={{ color: getGitStatusColor(file.status) }}
+        >
+          {getGitStatusBadge(file.status)}
+        </span>
+        <span className="truncate text-[var(--color-fg)]">{filename}</span>
+        {dir && <span className="truncate text-[var(--color-fg-muted)] text-[10px]">{dir}</span>}
+      </button>
+      <button
+        onClick={e => { e.stopPropagation(); action() }}
+        className="shrink-0 w-5 h-5 flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] opacity-0 group-hover:opacity-100 transition-opacity mr-1"
+        title={actionTitle}
+      >
+        <Icon icon={actionIcon} width={12} />
+      </button>
+    </div>
   )
 }
 
-function CollapsibleSection({ title, count, children, defaultOpen = true }: {
+function SectionHeader({ title, count, open, onToggle, actions }: {
   title: string
   count: number
-  children: React.ReactNode
-  defaultOpen?: boolean
+  open: boolean
+  onToggle: () => void
+  actions?: React.ReactNode
 }) {
-  const [open, setOpen] = useState(defaultOpen)
-
-  if (count === 0) return null
-
   return (
-    <div>
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-1 px-2 py-1 text-xs font-bold text-[var(--color-fg)] hover:bg-[var(--color-bg-alt)] transition-colors"
-      >
+    <div className="w-full flex items-center px-2 py-1 text-xs font-bold text-[var(--color-fg)] hover:bg-[var(--color-bg-alt)] transition-colors group">
+      <button onClick={onToggle} className="flex-1 min-w-0 flex items-center gap-1 text-left">
         <Icon icon={open ? IconChevronDown : IconChevronRight} width={12} />
         <span className="flex-1 text-left">{title}</span>
-        <span className="text-[var(--color-fg-muted)] text-[10px] tabular-nums">{count}</span>
+        <span className="text-[var(--color-fg-muted)] text-[10px] tabular-nums font-normal">{count}</span>
       </button>
-      {open && children}
+      {actions && (
+        <div className="flex items-center gap-0.5 ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          {actions}
+        </div>
+      )}
     </div>
   )
 }
@@ -61,6 +74,63 @@ export function GitPanel({ onOpenDiff, workspace }: GitPanelProps) {
   const { status, commits, branches, loading, error, refresh } = useGitStatus(workspace)
   const [showCommits, setShowCommits] = useState(false)
   const [showBranches, setShowBranches] = useState(false)
+  const [stagedOpen, setStagedOpen] = useState(true)
+  const [changesOpen, setChangesOpen] = useState(true)
+  const [untrackedOpen, setUntrackedOpen] = useState(true)
+  const [commitMsg, setCommitMsg] = useState('')
+  const [committing, setCommitting] = useState(false)
+  const [pushing, setPushing] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
+
+  const hasStagedChanges = status ? status.files.some(f => f.staged) : false
+  const hasUnpushedCommits = status ? status.ahead > 0 : false
+
+  function catchErr(e: unknown) {
+    const msg = e && typeof e === 'object' && 'message' in e
+      ? (e as { message: string }).message
+      : 'Operation failed'
+    setActionError(msg)
+  }
+
+  async function handleStage(paths: string[]) {
+    setActionError(null)
+    try { await gitStage(paths, workspace); refresh() } catch (e) { catchErr(e) }
+  }
+
+  async function handleUnstage(paths: string[]) {
+    setActionError(null)
+    try { await gitUnstage(paths, workspace); refresh() } catch (e) { catchErr(e) }
+  }
+
+  async function handleStageAll() {
+    setActionError(null)
+    try { await gitStageAll(workspace); refresh() } catch (e) { catchErr(e) }
+  }
+
+  async function handleUnstageAll() {
+    setActionError(null)
+    try { await gitUnstageAll(workspace); refresh() } catch (e) { catchErr(e) }
+  }
+
+  async function handleCommit() {
+    if (!commitMsg.trim() || !hasStagedChanges) return
+    setCommitting(true)
+    setActionError(null)
+    try {
+      await gitCommit(commitMsg.trim(), workspace)
+      setCommitMsg('')
+      refresh()
+    } catch (e) { catchErr(e) } finally { setCommitting(false) }
+  }
+
+  async function handlePush() {
+    setPushing(true)
+    setActionError(null)
+    try {
+      await gitPush(workspace)
+      refresh()
+    } catch (e) { catchErr(e) } finally { setPushing(false) }
+  }
 
   useEffect(() => {
     refresh()
@@ -117,27 +187,140 @@ export function GitPanel({ onOpenDiff, workspace }: GitPanelProps) {
         </button>
       </div>
 
+      {/* Commit input + action buttons */}
+      <div className="px-2 py-1.5 border-b-[length:var(--border-w)] border-[var(--color-border-light)] shrink-0 flex flex-col gap-1">
+        <input
+          type="text"
+          value={commitMsg}
+          onChange={e => setCommitMsg(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') handleCommit() }}
+          placeholder="Commit message"
+          className="w-full text-xs px-1.5 py-1 bg-[var(--color-bg)] border-[length:var(--border-w)] border-[var(--color-border)] text-[var(--color-fg)] placeholder:text-[var(--color-fg-muted)] outline-none focus:border-[var(--color-primary)]"
+          disabled={committing}
+        />
+        <div className="flex items-center gap-1">
+          <button
+            onClick={handleCommit}
+            disabled={!commitMsg.trim() || !hasStagedChanges || committing}
+            className="flex-1 h-6 flex items-center justify-center gap-1 text-xs font-bold bg-[var(--color-primary)] text-[var(--color-bg)] border-[length:var(--border-w)] border-[var(--color-border)] hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            title={!hasStagedChanges ? 'No staged changes' : 'Commit (Enter)'}
+          >
+            <Icon icon={IconCheck} width={12} />
+            <span>Commit</span>
+          </button>
+          {hasUnpushedCommits && (
+            <button
+              onClick={handlePush}
+              disabled={pushing}
+              className="flex-1 h-6 flex items-center justify-center gap-1 text-xs font-bold bg-[var(--color-bg-alt)] text-[var(--color-fg)] border-[length:var(--border-w)] border-[var(--color-border)] hover:bg-[var(--color-primary)] hover:text-[var(--color-bg)] transition-all disabled:opacity-40"
+              title={`Push ${status.ahead} commit(s) to remote`}
+            >
+              <Icon icon={IconArrowUp} width={12} />
+              <span>Push {status.ahead}</span>
+            </button>
+          )}
+        </div>
+        {actionError && (
+          <div className="text-[10px] text-[var(--color-danger)] px-0.5 break-all">{actionError}</div>
+        )}
+      </div>
+
       {/* File changes */}
       <div className="flex-1 overflow-y-auto">
-        <CollapsibleSection title="Staged Changes" count={staged.length}>
-          {staged.map(f => (
-            <FileItem key={`s-${f.path}`} file={f} onOpen={() => onOpenDiff(f.path, true)} />
-          ))}
-        </CollapsibleSection>
+        {/* Staged Changes */}
+        {staged.length > 0 && (
+          <div>
+            <SectionHeader
+              title="Staged Changes"
+              count={staged.length}
+              open={stagedOpen}
+              onToggle={() => setStagedOpen(!stagedOpen)}
+              actions={
+                <button
+                  onClick={handleUnstageAll}
+                  className="w-5 h-5 flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
+                  title="Unstage All"
+                >
+                  <Icon icon={IconMinus} width={12} />
+                </button>
+              }
+            />
+            {stagedOpen && staged.map(f => (
+              <FileItem
+                key={`s-${f.path}`}
+                file={f}
+                onOpen={() => onOpenDiff(f.path, true)}
+                action={() => handleUnstage([f.path])}
+                actionIcon={IconMinus}
+                actionTitle="Unstage"
+              />
+            ))}
+          </div>
+        )}
 
-        <CollapsibleSection title="Changes" count={unstaged.length}>
-          {unstaged.map(f => (
-            <FileItem key={`u-${f.path}`} file={f} onOpen={() => onOpenDiff(f.path, false)} />
-          ))}
-        </CollapsibleSection>
+        {/* Changes (unstaged) */}
+        {unstaged.length > 0 && (
+          <div>
+            <SectionHeader
+              title="Changes"
+              count={unstaged.length}
+              open={changesOpen}
+              onToggle={() => setChangesOpen(!changesOpen)}
+              actions={
+                <button
+                  onClick={() => handleStage(unstaged.map(f => f.path))}
+                  className="w-5 h-5 flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
+                  title="Stage All Changes"
+                >
+                  <Icon icon={IconPlus} width={12} />
+                </button>
+              }
+            />
+            {changesOpen && unstaged.map(f => (
+              <FileItem
+                key={`u-${f.path}`}
+                file={f}
+                onOpen={() => onOpenDiff(f.path, false)}
+                action={() => handleStage([f.path])}
+                actionIcon={IconPlus}
+                actionTitle="Stage"
+              />
+            ))}
+          </div>
+        )}
 
-        <CollapsibleSection title="Untracked" count={untracked.length}>
-          {untracked.map(f => (
-            <FileItem key={`t-${f.path}`} file={f} onOpen={() => onOpenDiff(f.path, false)} />
-          ))}
-        </CollapsibleSection>
+        {/* Untracked */}
+        {untracked.length > 0 && (
+          <div>
+            <SectionHeader
+              title="Untracked"
+              count={untracked.length}
+              open={untrackedOpen}
+              onToggle={() => setUntrackedOpen(!untrackedOpen)}
+              actions={
+                <button
+                  onClick={() => handleStage(untracked.map(f => f.path))}
+                  className="w-5 h-5 flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
+                  title="Stage All Untracked"
+                >
+                  <Icon icon={IconPlus} width={12} />
+                </button>
+              }
+            />
+            {untrackedOpen && untracked.map(f => (
+              <FileItem
+                key={`t-${f.path}`}
+                file={f}
+                onOpen={() => onOpenDiff(f.path, false)}
+                action={() => handleStage([f.path])}
+                actionIcon={IconPlus}
+                actionTitle="Stage"
+              />
+            ))}
+          </div>
+        )}
 
-        {/* Commits */}
+        {/* Recent Commits */}
         <div className="border-t-[length:var(--border-w)] border-[var(--color-border-light)]">
           <button
             onClick={() => setShowCommits(!showCommits)}

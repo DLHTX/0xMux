@@ -123,10 +123,17 @@ function ImagePreviewPane({ src, fileName }: { src: string; fileName: string }) 
   const [imgSize, setImgSize] = useState({ w: 0, h: 0 })
   const [isPanning, setIsPanning] = useState(false)
   const panRef = useRef({ startX: 0, startY: 0, startTx: 0, startTy: 0 })
+  const containerRef = useRef<HTMLDivElement>(null)
+  const fitScaleRef = useRef(1)
+
+  const fitToWindow = useCallback(() => {
+    setScale(fitScaleRef.current)
+    setTranslate({ x: 0, y: 0 })
+  }, [])
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault()
-    const delta = e.deltaY > 0 ? 0.9 : 1.1
+    const delta = e.deltaY > 0 ? 0.95 : 1.05
     setScale((s) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, s * delta)))
   }, [])
 
@@ -173,7 +180,7 @@ function ImagePreviewPane({ src, fileName }: { src: string; fileName: string }) 
         style={{ borderColor: 'var(--color-border-light)' }}
       >
         <button
-          onClick={() => setScale((s) => Math.max(MIN_SCALE, s / 1.3))}
+          onClick={() => setScale((s) => Math.max(MIN_SCALE, s / 1.2))}
           className="px-1.5 py-0.5 text-xs font-mono hover:opacity-70"
           style={{ color: 'var(--color-fg-muted)' }}
         >
@@ -186,11 +193,18 @@ function ImagePreviewPane({ src, fileName }: { src: string; fileName: string }) 
           {Math.round(scale * 100)}%
         </span>
         <button
-          onClick={() => setScale((s) => Math.min(MAX_SCALE, s * 1.3))}
+          onClick={() => setScale((s) => Math.min(MAX_SCALE, s * 1.2))}
           className="px-1.5 py-0.5 text-xs font-mono hover:opacity-70"
           style={{ color: 'var(--color-fg-muted)' }}
         >
           +
+        </button>
+        <button
+          onClick={fitToWindow}
+          className="px-1.5 py-0.5 text-xs font-mono hover:opacity-70"
+          style={{ color: 'var(--color-fg-muted)' }}
+        >
+          Fit
         </button>
         <button
           onClick={() => { setScale(1); setTranslate({ x: 0, y: 0 }) }}
@@ -211,6 +225,7 @@ function ImagePreviewPane({ src, fileName }: { src: string; fileName: string }) 
 
       {/* Image area */}
       <div
+        ref={containerRef}
         className="flex-1 min-h-0 overflow-hidden flex items-center justify-center cursor-grab active:cursor-grabbing"
         style={{
           background: 'repeating-conic-gradient(var(--color-border-light) 0% 25%, transparent 0% 50%) 50% / 16px 16px',
@@ -233,7 +248,18 @@ function ImagePreviewPane({ src, fileName }: { src: string; fileName: string }) 
           draggable={false}
           onLoad={(e) => {
             const img = e.currentTarget
-            setImgSize({ w: img.naturalWidth, h: img.naturalHeight })
+            const { naturalWidth, naturalHeight } = img
+            setImgSize({ w: naturalWidth, h: naturalHeight })
+            const container = containerRef.current
+            if (container) {
+              const fit = Math.min(
+                container.clientWidth / naturalWidth,
+                container.clientHeight / naturalHeight,
+                1,
+              )
+              fitScaleRef.current = fit
+              setScale(fit)
+            }
           }}
         />
       </div>

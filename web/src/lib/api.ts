@@ -26,6 +26,9 @@ import type {
   AiSyncResponse,
   AiUninstallRequest,
   AiUninstallResponse,
+  GlobalConfigResponse,
+  SaveGlobalConfigRequest,
+  SyncGlobalConfigRequest,
   WorkspaceContext,
   NotificationListResponse,
 } from './types'
@@ -140,6 +143,24 @@ export async function syncAi(data: AiSyncRequest): Promise<AiSyncResponse> {
 
 export async function uninstallAi(data: AiUninstallRequest): Promise<AiUninstallResponse> {
   return request<AiUninstallResponse>('/ai/uninstall', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function getGlobalConfig(): Promise<GlobalConfigResponse> {
+  return request<GlobalConfigResponse>('/ai/global-config')
+}
+
+export async function saveGlobalConfig(data: SaveGlobalConfigRequest): Promise<GlobalConfigResponse> {
+  return request<GlobalConfigResponse>('/ai/global-config', {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function syncGlobalConfig(data: SyncGlobalConfigRequest): Promise<GlobalConfigResponse> {
+  return request<GlobalConfigResponse>('/ai/global-config/sync', {
     method: 'POST',
     body: JSON.stringify(data),
   })
@@ -349,6 +370,101 @@ export async function searchFiles(
   return request(`/files/search?${params}`)
 }
 
+export async function deleteFile(
+  path: string,
+  workspace?: WorkspaceContext
+): Promise<{ success: boolean }> {
+  return request('/files/delete', {
+    method: 'POST',
+    body: JSON.stringify({
+      path,
+      session: workspace?.session,
+      window: workspace?.window,
+    }),
+  })
+}
+
+export async function renameFile(
+  oldPath: string,
+  newName: string,
+  workspace?: WorkspaceContext
+): Promise<{ success: boolean; new_path: string }> {
+  return request('/files/rename', {
+    method: 'POST',
+    body: JSON.stringify({
+      old_path: oldPath,
+      new_name: newName,
+      session: workspace?.session,
+      window: workspace?.window,
+    }),
+  })
+}
+
+export async function createFile(
+  path: string,
+  isDirectory: boolean,
+  workspace?: WorkspaceContext
+): Promise<{ success: boolean }> {
+  return request('/files/create', {
+    method: 'POST',
+    body: JSON.stringify({
+      path,
+      is_directory: isDirectory,
+      session: workspace?.session,
+      window: workspace?.window,
+    }),
+  })
+}
+
+export async function revealInFileManager(
+  path: string,
+  workspace?: WorkspaceContext
+): Promise<{ success: boolean }> {
+  return request('/files/reveal', {
+    method: 'POST',
+    body: JSON.stringify({
+      path,
+      session: workspace?.session,
+      window: workspace?.window,
+    }),
+  })
+}
+
+// ── File Upload API ──
+
+export interface FileUploadResult {
+  path: string
+  absolute_path: string
+  filename: string
+  size: number
+}
+
+export async function uploadFiles(
+  files: File[],
+  dir?: string,
+  workspace?: WorkspaceContext,
+): Promise<FileUploadResult[]> {
+  const formData = new FormData()
+  for (const file of files) formData.append('file', file, file.name)
+
+  const params = new URLSearchParams()
+  if (dir) params.set('dir', dir)
+  if (workspace?.session) params.set('session', workspace.session)
+  if (workspace?.window != null) params.set('window', String(workspace.window))
+
+  const query = params.toString()
+  const url = `${API_BASE}/files/upload${query ? `?${query}` : ''}`
+
+  const headers: HeadersInit = {}
+  const token = getAuthToken()
+  if (token) headers['Authorization'] = `Bearer ${token}`
+
+  const res = await fetch(url, { method: 'POST', headers, body: formData })
+  if (res.status === 401) setAuthToken(null)
+  if (!res.ok) throw await res.json().catch(() => ({ error: 'unknown', message: res.statusText }))
+  return res.json()
+}
+
 // ── Git API ──
 
 export async function getGitStatus(workspace?: WorkspaceContext): Promise<import('./types').GitStatus> {
@@ -381,4 +497,57 @@ export async function getGitBranches(workspace?: WorkspaceContext): Promise<{ br
   const params = withWorkspaceParams(new URLSearchParams(), workspace)
   const query = params.toString()
   return request(`/git/branches${query ? `?${query}` : ''}`)
+}
+
+export async function gitCommit(
+  message: string,
+  workspace?: WorkspaceContext
+): Promise<{ hash: string; short_hash: string; message: string }> {
+  const body: Record<string, unknown> = { message }
+  if (workspace) {
+    body.session = workspace.session
+    body.window = workspace.window
+  }
+  return request('/git/commit', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export async function gitPush(
+  workspace?: WorkspaceContext
+): Promise<{ success: boolean; message: string }> {
+  const body: Record<string, unknown> = {}
+  if (workspace) {
+    body.session = workspace.session
+    body.window = workspace.window
+  }
+  return request('/git/push', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export async function gitStage(paths: string[], workspace?: WorkspaceContext): Promise<void> {
+  const body: Record<string, unknown> = { paths }
+  if (workspace) { body.session = workspace.session; body.window = workspace.window }
+  return request('/git/stage', { method: 'POST', body: JSON.stringify(body) })
+}
+
+export async function gitUnstage(paths: string[], workspace?: WorkspaceContext): Promise<void> {
+  const body: Record<string, unknown> = { paths }
+  if (workspace) { body.session = workspace.session; body.window = workspace.window }
+  return request('/git/unstage', { method: 'POST', body: JSON.stringify(body) })
+}
+
+export async function gitStageAll(workspace?: WorkspaceContext): Promise<void> {
+  const body: Record<string, unknown> = {}
+  if (workspace) { body.session = workspace.session; body.window = workspace.window }
+  return request('/git/stage-all', { method: 'POST', body: JSON.stringify(body) })
+}
+
+export async function gitUnstageAll(workspace?: WorkspaceContext): Promise<void> {
+  const body: Record<string, unknown> = {}
+  if (workspace) { body.session = workspace.session; body.window = workspace.window }
+  return request('/git/unstage-all', { method: 'POST', body: JSON.stringify(body) })
 }

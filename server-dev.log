@@ -1,0 +1,126 @@
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.30s
+     Running `server/target/debug/oxmux-server --port 1235`
+[2m2026-02-14T08:58:54.892377Z[0m [32m INFO[0m [2moxmux_server::services::tmux[0m[2m:[0m Cleaned up orphaned grouped session: _0xmux_a2dddf7d_1e8b8dbb
+[2m2026-02-14T08:58:54.904717Z[0m [32m INFO[0m [2moxmux_server::services::tmux[0m[2m:[0m Cleaned up orphaned grouped session: _0xmux_a2dddf7d_426ebdd0
+[2m2026-02-14T08:58:54.911733Z[0m [32m INFO[0m [2moxmux_server::services::tmux[0m[2m:[0m Cleaned up orphaned grouped session: _0xmux_a2dddf7d_960b42e8
+[2m2026-02-14T08:58:54.917664Z[0m [32m INFO[0m [2moxmux_server::services::tmux[0m[2m:[0m Cleaned up orphaned grouped session: _0xmux_a2dddf7d_e68b768d
+[2m2026-02-14T08:58:54.920448Z[0m [33m WARN[0m [2moxmux_server[0m[2m:[0m 首次启动，请在Web界面设置密码
+
+  [32m██████╗ ██╗  ██╗███╗   ███╗██╗   ██╗██╗  ██╗[0m
+  [32m██╔═████╗╚██╗██╔╝████╗ ████║██║   ██║╚██╗██╔╝[0m
+  [32m██║██╔██║ ╚███╔╝ ██╔████╔██║██║   ██║ ╚███╔╝[0m
+  [32m████╔╝██║ ██╔██╗ ██║╚██╔╝██║██║   ██║ ██╔██╗[0m
+  [32m╚██████╔╝██╔╝ ██╗██║ ╚═╝ ██║╚██████╔╝██╔╝ ██╗[0m
+  [32m ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝ ╚═════╝ ╚═╝  ╚═╝[0m
+
+  [90m0xMux v0.4.2[0m
+  [32m→[0m http://0.0.0.0:1235
+
+[2m2026-02-14T08:58:54.921816Z[0m [32m INFO[0m [2moxmux_server[0m[2m:[0m 0xMux server listening on 0.0.0.0:1235
+[2m2026-02-14T08:59:22.600784Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m MuxSocket connection closed
+[2m2026-02-14T08:59:22.796552Z[0m [32m INFO[0m [2moxmux_server::ws::mux[0m[2m:[0m Opening channel 1 for 0xMux window Some(0)
+[2m2026-02-14T08:59:22.864685Z[0m [32m INFO[0m [2moxmux_server::ws::mux[0m[2m:[0m Channel 1 opened successfully
+not in a mode
+[2m2026-02-14T09:01:55.116074Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_2610dda4': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:01:55.208235Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_2610dda4': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:01:55.242551Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_2610dda4': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:01:55.388873Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_2610dda4': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:01:55.424157Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_2610dda4': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:01:55.458753Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_2610dda4': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:01:55.492570Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_2610dda4': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:01:55.527250Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_2610dda4': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:01:55.562523Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_2610dda4': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:01:55.597719Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_2610dda4': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:01:55.632150Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_2610dda4': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:01:55.667358Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_2610dda4': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:01:55.701904Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_2610dda4': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:01:55.737097Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_2610dda4': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:01:55.770734Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_2610dda4': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:01:55.807834Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_2610dda4': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:01:55.841294Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_2610dda4': tmux send-keys scroll-down exited with exit status: 1
+[2m2026-02-14T09:01:57.303721Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Cleaned up mux channel (group _0xmux_2da120c9_2610dda4)
+[2m2026-02-14T09:01:57.303847Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m MuxSocket connection closed
+[2m2026-02-14T09:01:57.700454Z[0m [32m INFO[0m [2moxmux_server::ws::mux[0m[2m:[0m Opening channel 1 for 0xMux window Some(0)
+[2m2026-02-14T09:01:57.835037Z[0m [32m INFO[0m [2moxmux_server::ws::mux[0m[2m:[0m Channel 1 opened successfully
+not in a mode
+[2m2026-02-14T09:01:58.468015Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_35458861': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:01:58.495816Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_35458861': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:01:58.534434Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_35458861': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:01:58.562182Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_35458861': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:01:58.600505Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_35458861': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:01:58.636159Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_35458861': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:02:35.135345Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_35458861': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:02:35.168176Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_35458861': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:02:35.200968Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_35458861': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:02:35.299521Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_35458861': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:02:35.331260Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_35458861': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:02:35.366117Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_35458861': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:02:50.753269Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_35458861': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:02:50.774057Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_35458861': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:02:50.809700Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_35458861': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:02:50.844333Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_35458861': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:02:50.879666Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_35458861': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:02:50.911784Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_35458861': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:02:50.947648Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_35458861': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:02:50.982375Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_35458861': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:02:51.253485Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_35458861': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:02:51.279606Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_35458861': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:02:51.314690Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_35458861': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:02:51.350856Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_35458861': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:02:51.384260Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_35458861': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:02:51.642618Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_35458861': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:02:51.669256Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_35458861': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:02:51.703978Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_35458861': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:02:51.743267Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_35458861': tmux send-keys scroll-down exited with exit status: 1
+not in a mode
+[2m2026-02-14T09:02:51.774705Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Failed to scroll tmux history for group '_0xmux_2da120c9_35458861': tmux send-keys scroll-down exited with exit status: 1
+[2m2026-02-14T09:05:14.700565Z[0m [32m INFO[0m [2moxmux_server[0m[2m:[0m Shutdown signal received, draining connections…
+[2m2026-02-14T09:05:14.700869Z[0m [32m INFO[0m [2moxmux_server[0m[2m:[0m Cleaning up remaining grouped sessions…
+[2m2026-02-14T09:05:14.721488Z[0m [32m INFO[0m [2moxmux_server::services::tmux[0m[2m:[0m Cleaned up orphaned grouped session: _0xmux_2da120c9_35458861
+[2m2026-02-14T09:05:14.721546Z[0m [32m INFO[0m [2moxmux_server[0m[2m:[0m 0xMux server stopped.
+can't find session: _0xmux_2da120c9_35458861
+[2m2026-02-14T09:05:14.774048Z[0m [34mDEBUG[0m [2moxmux_server::ws::mux[0m[2m:[0m Cleaned up mux channel (group _0xmux_2da120c9_35458861)

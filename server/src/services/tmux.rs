@@ -536,6 +536,74 @@ fn is_pane_dead(target: &str) -> Result<bool, AppError> {
     }
 }
 
+pub fn send_keys(session: &str, window: u32, data: &str) -> Result<(), AppError> {
+    let target = format!("{session}:{window}");
+    let status = tmux_cmd()
+        .args(["send-keys", "-t", &target, "-l", data])
+        .status()
+        .map_err(|e| AppError::Internal(format!("Failed to send keys: {e}")))?;
+    if !status.success() {
+        return Err(AppError::Internal(format!(
+            "tmux send-keys failed for '{target}'"
+        )));
+    }
+    Ok(())
+}
+
+pub fn capture_pane(session: &str, window: u32, lines: Option<u32>) -> Result<String, AppError> {
+    let target = format!("{session}:{window}");
+    let start = format!("-{}", lines.unwrap_or(50));
+    let output = tmux_cmd()
+        .args(["capture-pane", "-t", &target, "-p", "-S", &start])
+        .output()
+        .map_err(|e| AppError::Internal(format!("Failed to capture pane: {e}")))?;
+    if !output.status.success() {
+        return Err(AppError::Internal(format!(
+            "tmux capture-pane failed for '{target}'"
+        )));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+pub fn window_info(
+    session: &str,
+    window: u32,
+) -> Result<crate::models::window::WindowInfoResponse, AppError> {
+    let target = format!("{session}:{window}");
+    let output = tmux_cmd()
+        .args([
+            "display-message",
+            "-t",
+            &target,
+            "-p",
+            "#{window_name}|#{pane_pid}|#{pane_current_path}|#{pane_current_command}",
+        ])
+        .output()
+        .map_err(|e| AppError::Internal(format!("Failed to get window info: {e}")))?;
+
+    if !output.status.success() {
+        return Err(AppError::NotFound(format!(
+            "Window '{target}' not found"
+        )));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parts: Vec<&str> = stdout.trim().split('|').collect();
+    if parts.len() < 4 {
+        return Err(AppError::Internal(format!(
+            "Unexpected tmux output for '{target}'"
+        )));
+    }
+
+    Ok(crate::models::window::WindowInfoResponse {
+        index: window,
+        name: parts[0].to_string(),
+        pane_pid: parts[1].to_string(),
+        pane_current_path: parts[2].to_string(),
+        pane_current_command: parts[3].to_string(),
+    })
+}
+
 /// If the active pane in `target` is dead, respawn it and verify it stays
 /// alive before returning.  Retries up to 2 times if the new shell exits
 /// immediately (e.g. due to .zshrc incompatibilities in detached mode).

@@ -44,7 +44,8 @@ export function ThemeConfigurator({ open, onClose }: ThemeConfiguratorProps) {
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50"
+        className="fixed inset-0 bg-black/30 z-50"
+        style={{ backdropFilter: 'var(--modal-backdrop-blur)' }}
         onClick={onClose}
       />
 

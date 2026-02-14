@@ -62,6 +62,40 @@ fn default_max_results() -> usize {
     200
 }
 
+/// File delete request
+#[derive(Deserialize)]
+pub struct FileDeleteRequest {
+    pub path: String,
+    pub session: Option<String>,
+    pub window: Option<u32>,
+}
+
+/// File rename request
+#[derive(Deserialize)]
+pub struct FileRenameRequest {
+    pub old_path: String,
+    pub new_name: String,
+    pub session: Option<String>,
+    pub window: Option<u32>,
+}
+
+/// File/directory create request
+#[derive(Deserialize)]
+pub struct FileCreateRequest {
+    pub path: String,
+    pub is_directory: bool,
+    pub session: Option<String>,
+    pub window: Option<u32>,
+}
+
+/// Reveal in file manager request
+#[derive(Deserialize)]
+pub struct FileRevealRequest {
+    pub path: String,
+    pub session: Option<String>,
+    pub window: Option<u32>,
+}
+
 /// Single search match
 #[derive(Serialize)]
 pub struct SearchMatch {

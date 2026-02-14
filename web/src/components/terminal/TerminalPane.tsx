@@ -4,7 +4,7 @@ import { useMux } from '../../contexts/MuxContext'
 import { useMobile } from '../../hooks/useMobile'
 import { useI18n } from '../../hooks/useI18n'
 import { consumePendingInit } from '../../lib/init-commands'
-import { resolveAbsoluteFilePath } from '../../lib/api'
+import { resolveAbsoluteFilePath, uploadFiles } from '../../lib/api'
 import { getTerminalFileDragData, isTerminalFileDrag } from '../../lib/terminalFileDrag'
 import type { WorkspaceContext } from '../../lib/types'
 import type { MuxChannelHandle } from '../../hooks/useMuxSocket'
@@ -124,6 +124,8 @@ export function TerminalPane({
     setTmuxScrollProgress(1)
   }, [isMobile, requestChannelScroll, terminal])
 
+  const [isExternalDrag, setIsExternalDrag] = useState(false)
+
   const handleFileDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
     const hasTerminalFilePayload = isTerminalFileDrag(event.dataTransfer)
     const hasNativeFiles = Array.from(event.dataTransfer.types).includes('Files')
@@ -131,11 +133,9 @@ export function TerminalPane({
 
     event.preventDefault()
     event.stopPropagation()
-    event.dataTransfer.dropEffect = hasTerminalFilePayload ? 'copy' : 'none'
-
-    if (hasTerminalFilePayload) {
-      setIsFileDropOver(true)
-    }
+    event.dataTransfer.dropEffect = 'copy'
+    setIsFileDropOver(true)
+    setIsExternalDrag(!hasTerminalFilePayload && hasNativeFiles)
   }, [])
 
   const handleFileDragLeave = useCallback((event: React.DragEvent<HTMLDivElement>) => {
@@ -148,6 +148,7 @@ export function TerminalPane({
     event.preventDefault()
     event.stopPropagation()
     setIsFileDropOver(false)
+    setIsExternalDrag(false)
   }, [])
 
   const handleFileDrop = useCallback(async (event: React.DragEvent<HTMLDivElement>) => {
@@ -158,27 +159,44 @@ export function TerminalPane({
     event.preventDefault()
     event.stopPropagation()
     setIsFileDropOver(false)
-    if (!payload) return
+    setIsExternalDrag(false)
 
     const fallbackWorkspace: WorkspaceContext = {
       session: sessionName,
       window: windowIndex ?? 0,
     }
-    let absolutePath = payload.path
 
-    if (!absolutePath.startsWith('/')) {
-      try {
-        const resolved = await resolveAbsoluteFilePath(payload.path, payload.workspace ?? fallbackWorkspace)
-        absolutePath = resolved.path
-      } catch (error) {
-        console.error('Failed to resolve dropped file path', error)
+    // Internal file drag (from file explorer)
+    if (payload) {
+      let absolutePath = payload.path
+      if (!absolutePath.startsWith('/')) {
+        try {
+          const resolved = await resolveAbsoluteFilePath(payload.path, payload.workspace ?? fallbackWorkspace)
+          absolutePath = resolved.path
+        } catch (error) {
+          console.error('Failed to resolve dropped file path', error)
+        }
       }
+      if (!absolutePath) return
+      chRef.current?.send(`${quoteShellPath(absolutePath)} `)
+      onFocus?.()
+      focus()
+      return
     }
 
-    if (!absolutePath) return
-    chRef.current?.send(`${quoteShellPath(absolutePath)} `)
-    onFocus?.()
-    focus()
+    // External file drag (from OS)
+    const nativeFiles = Array.from(event.dataTransfer.files)
+    if (nativeFiles.length > 0) {
+      try {
+        const results = await uploadFiles(nativeFiles, undefined, fallbackWorkspace)
+        const paths = results.map(r => quoteShellPath(r.absolute_path)).join(' ')
+        chRef.current?.send(`${paths} `)
+        onFocus?.()
+        focus()
+      } catch (error) {
+        console.error('Failed to upload dropped files', error)
+      }
+    }
   }, [focus, onFocus, quoteShellPath, sessionName, windowIndex])
 
   // Open a mux channel when the pane mounts (or session/window changes)
@@ -494,7 +512,7 @@ export function TerminalPane({
         <div className="absolute inset-0 z-[8] pointer-events-none bg-[var(--color-success)]/10 border-2 border-dashed border-[var(--color-success)]/70">
           <div className="absolute inset-0 flex items-center justify-center">
             <span className="px-2 py-1 text-[10px] font-mono text-[var(--color-success)] bg-[#0a0a0a]/90 border border-[var(--color-success)]/50">
-              Drop file to paste absolute path
+              {isExternalDrag ? t('terminal.dropExternal') : t('terminal.dropFile')}
             </span>
           </div>
         </div>

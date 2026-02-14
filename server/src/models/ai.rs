@@ -29,21 +29,26 @@ pub struct ProviderSyncState {
 pub struct SkillCatalogItem {
     pub id: String,
     pub name: String,
+    pub description: String,
     pub source: String,
     pub claude: ProviderSyncState,
     pub codex: ProviderSyncState,
+    pub recommended: bool,
+    pub official: bool,
 }
 
 #[derive(Serialize, Clone, Debug)]
 pub struct McpCatalogItem {
     pub id: String,
     pub name: String,
+    pub description: String,
     pub command: String,
     pub args: Vec<String>,
     pub source: String,
     pub claude: ProviderSyncState,
     pub codex: ProviderSyncState,
     pub recommended: bool,
+    pub official: bool,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -118,4 +123,22 @@ pub struct UninstallSummary {
 pub struct AiUninstallResponse {
     pub actions: Vec<SyncAction>,
     pub summary: UninstallSummary,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct GlobalConfigResponse {
+    pub content: String,
+    pub claude: ProviderSyncState,
+    pub codex: ProviderSyncState,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct SaveGlobalConfigRequest {
+    pub content: String,
+}
+
+#[derive(Deserialize, Clone, Debug, Default)]
+pub struct SyncGlobalConfigRequest {
+    #[serde(default)]
+    pub providers: Vec<String>,
 }
