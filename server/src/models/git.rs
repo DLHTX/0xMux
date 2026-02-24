@@ -96,3 +96,11 @@ pub struct GitStageAllRequest {
     pub session: Option<String>,
     pub window: Option<u32>,
 }
+
+/// Git checkout request
+#[derive(Deserialize)]
+pub struct GitCheckoutRequest {
+    pub branch: String,
+    pub session: Option<String>,
+    pub window: Option<u32>,
+}

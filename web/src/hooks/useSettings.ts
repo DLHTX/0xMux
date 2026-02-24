@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ModalBlur, UserSettings } from '../lib/types'
-import { DEFAULT_EDITOR_SKIN, isEditorSkin } from '../lib/editor-skins'
+import { DEFAULT_EDITOR_SKIN, isEditorSkin, skinForPreset } from '../lib/editor-skins'
+import { loadConfig, type PresetName } from '../lib/theme'
 import { loadJSON, saveJSON } from '../lib/storage'
 
 const BLUR_VALUES: Record<ModalBlur, string> = {
@@ -31,17 +32,29 @@ const DEFAULT_SETTINGS: UserSettings = {
 
 function loadSettings(): UserSettings {
   const parsed = loadJSON<Partial<UserSettings>>(STORAGE_KEY)
+  let editorSkin = DEFAULT_SETTINGS.editorSkin
+  if (parsed && isEditorSkin(parsed.editorSkin)) {
+    editorSkin = parsed.editorSkin
+  }
+  // Auto-sync editor skin with current theme preset if a mapping exists
+  // and the user hasn't manually picked a different skin
+  const themeConfig = loadConfig()
+  if (themeConfig) {
+    const presetSkin = skinForPreset(themeConfig.preset)
+    if (presetSkin && editorSkin !== presetSkin) {
+      editorSkin = presetSkin
+    }
+  }
   if (parsed) {
     return {
       ...DEFAULT_SETTINGS,
       ...parsed,
-      editorSkin: isEditorSkin(parsed.editorSkin) ? parsed.editorSkin : DEFAULT_SETTINGS.editorSkin,
+      editorSkin,
       modalBlur: isModalBlur(parsed.modalBlur) ? parsed.modalBlur : DEFAULT_SETTINGS.modalBlur,
-      // Markdown editor is intentionally fixed to WYSIWYG.
       markdownRenderMode: 'wysiwyg',
     }
   }
-  return DEFAULT_SETTINGS
+  return { ...DEFAULT_SETTINGS, editorSkin }
 }
 
 function saveSettings(settings: UserSettings) {
@@ -74,12 +87,26 @@ export function useSettings() {
       setSettingsState(loadSettings())
     }
 
+    const handlePresetChanged = (event: Event) => {
+      const preset = (event as CustomEvent<PresetName>).detail
+      const skin = skinForPreset(preset)
+      if (skin) {
+        setSettingsState((prev) => {
+          const next = { ...prev, editorSkin: skin }
+          saveSettings(next)
+          return next
+        })
+      }
+    }
+
     window.addEventListener(SETTINGS_UPDATED_EVENT, handleSettingsUpdated)
     window.addEventListener('storage', handleSettingsUpdated)
+    window.addEventListener('0xmux-preset-changed', handlePresetChanged)
 
     return () => {
       window.removeEventListener(SETTINGS_UPDATED_EVENT, handleSettingsUpdated)
       window.removeEventListener('storage', handleSettingsUpdated)
+      window.removeEventListener('0xmux-preset-changed', handlePresetChanged)
     }
   }, [])
 

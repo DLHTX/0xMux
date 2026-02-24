@@ -182,6 +182,9 @@ pub fn build(state: AppState) -> Router {
         .route("/api/git/unstage", post(handlers::git::unstage_handler))
         .route("/api/git/stage-all", post(handlers::git::stage_all_handler))
         .route("/api/git/unstage-all", post(handlers::git::unstage_all_handler))
+        .route("/api/git/checkout", post(handlers::git::checkout_handler))
+        .route("/api/git/discard", post(handlers::git::discard_handler))
+        .route("/api/git/discard-all", post(handlers::git::discard_all_handler))
         .route(
             "/api/sessions/{name}/windows",
             get(handlers::window::list_windows_handler)

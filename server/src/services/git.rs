@@ -466,3 +466,126 @@ pub fn unstage_all(repo_path: &Path) -> Result<(), AppError> {
     }
     Ok(())
 }
+
+/// Checkout a branch.
+/// For remote branches like `origin/xxx`, automatically create a local tracking branch.
+pub fn checkout(repo_path: &Path, branch: &str) -> Result<(), AppError> {
+    let local_branch = branch
+        .strip_prefix("origin/")
+        .unwrap_or(branch);
+
+    let output = git_cmd(repo_path)
+        .args(["checkout", local_branch])
+        .output()
+        .map_err(|e| AppError::Internal(format!("git checkout failed: {e}")))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(AppError::BadRequest(format!(
+            "git checkout error: {stderr}"
+        )));
+    }
+    Ok(())
+}
+
+/// Discard changes for specific files.
+/// Tracked files: `git checkout -- <paths>`
+/// Untracked files: `git clean -f -- <paths>`
+pub fn discard(repo_path: &Path, paths: &[String]) -> Result<(), AppError> {
+    if paths.is_empty() {
+        return Ok(());
+    }
+
+    // Use git status --porcelain to classify files
+    let output = git_cmd(repo_path)
+        .args(["status", "--porcelain"])
+        .output()
+        .map_err(|e| AppError::Internal(format!("git status failed: {e}")))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut untracked: Vec<&str> = Vec::new();
+    let mut tracked: Vec<&str> = Vec::new();
+
+    let path_set: std::collections::HashSet<&str> = paths.iter().map(|s| s.as_str()).collect();
+
+    for line in stdout.lines() {
+        if line.len() < 4 {
+            continue;
+        }
+        let status_code = &line[..2];
+        let file_path = line[3..].trim();
+        if !path_set.contains(file_path) {
+            continue;
+        }
+        if status_code == "??" {
+            untracked.push(file_path);
+        } else {
+            tracked.push(file_path);
+        }
+    }
+
+    // Discard tracked file changes
+    if !tracked.is_empty() {
+        let mut cmd = git_cmd(repo_path);
+        cmd.arg("checkout").arg("--");
+        for p in &tracked {
+            cmd.arg(p);
+        }
+        let out = cmd
+            .output()
+            .map_err(|e| AppError::Internal(format!("git checkout -- failed: {e}")))?;
+        if !out.status.success() {
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            return Err(AppError::BadRequest(format!(
+                "git checkout error: {stderr}"
+            )));
+        }
+    }
+
+    // Remove untracked files
+    if !untracked.is_empty() {
+        let mut cmd = git_cmd(repo_path);
+        cmd.arg("clean").arg("-f").arg("--");
+        for p in &untracked {
+            cmd.arg(p);
+        }
+        let out = cmd
+            .output()
+            .map_err(|e| AppError::Internal(format!("git clean failed: {e}")))?;
+        if !out.status.success() {
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            return Err(AppError::BadRequest(format!(
+                "git clean error: {stderr}"
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+/// Discard all changes: `git checkout -- .` + `git clean -fd`
+pub fn discard_all(repo_path: &Path) -> Result<(), AppError> {
+    let output = git_cmd(repo_path)
+        .args(["checkout", "--", "."])
+        .output()
+        .map_err(|e| AppError::Internal(format!("git checkout -- . failed: {e}")))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(AppError::BadRequest(format!(
+            "git checkout error: {stderr}"
+        )));
+    }
+
+    let output = git_cmd(repo_path)
+        .args(["clean", "-fd"])
+        .output()
+        .map_err(|e| AppError::Internal(format!("git clean -fd failed: {e}")))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(AppError::BadRequest(format!(
+            "git clean error: {stderr}"
+        )));
+    }
+
+    Ok(())
+}

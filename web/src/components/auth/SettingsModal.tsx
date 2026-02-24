@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Icon } from '@iconify/react'
-import { IconX, IconShield, IconLogOut, IconGlobe, IconInfo, IconEye, IconEyeOff, IconCode } from '../../lib/icons'
+import { IconX, IconShield, IconLogOut, IconGlobe, IconInfo, IconEye, IconEyeOff, IconCode, IconTrash } from '../../lib/icons'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { Tabs } from '../ui/Tabs'
@@ -51,17 +51,17 @@ export function SettingsModal({ open, onClose, onChangePassword, onLogout }: Set
   if (!open) return null
 
   return (
-    <>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ backdropFilter: 'var(--modal-backdrop-blur)' }}
+      onClick={onClose}
+    >
       {/* Backdrop */}
-      <div
-        className="fixed inset-0 bg-black/30 z-50"
-        style={{ backdropFilter: 'var(--modal-backdrop-blur)' }}
-        onClick={onClose}
-      />
+      <div className="absolute inset-0 bg-black/30" />
 
       {/* Modal */}
       <div
-        className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] max-w-[90vw] max-h-[80vh] bg-[var(--color-bg)] border-[length:var(--border-w)] border-[var(--color-border)] rounded-[var(--radius)] shadow-[4px_4px_0_var(--color-border-light)] z-50 flex flex-col overflow-hidden"
+        className="pipboy-crt-open-center relative w-[600px] max-w-[90vw] max-h-[80vh] bg-[var(--color-bg)] border-[length:var(--border-w)] border-[var(--color-border)] rounded-[var(--radius)] shadow-[4px_4px_0_var(--color-border-light)] flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -120,7 +120,7 @@ export function SettingsModal({ open, onClose, onChangePassword, onLogout }: Set
           />
         </div>
       </div>
-    </>
+    </div>
   )
 }
 
@@ -663,6 +663,7 @@ type UpdateState =
 function AboutTab() {
   const [version, setVersion] = useState<string | null>(null)
   const [updateState, setUpdateState] = useState<UpdateState>({ phase: 'idle' })
+  const [clearing, setClearing] = useState(false)
 
   useEffect(() => {
     getConfig()
@@ -778,6 +779,43 @@ function AboutTab() {
           </button>
         </div>
       )}
+
+      {/* Clear cache */}
+      <div className="pt-4 border-t-[length:var(--border-w)] border-[var(--color-border-light)]">
+        <h4 className="text-xs font-bold flex items-center gap-2 mb-1">
+          <Icon icon={IconTrash} width={14} />
+          缓存管理
+        </h4>
+        <p className="text-[10px] text-[var(--color-fg-muted)] mb-3">
+          清除浏览器缓存并强制重新加载页面，解决页面不更新的问题
+        </p>
+        <button
+          onClick={async () => {
+            setClearing(true)
+            try {
+              // Unregister all service workers
+              if ('serviceWorker' in navigator) {
+                const regs = await navigator.serviceWorker.getRegistrations()
+                await Promise.all(regs.map(r => r.unregister()))
+              }
+              // Clear Cache API
+              if ('caches' in window) {
+                const keys = await caches.keys()
+                await Promise.all(keys.map(k => caches.delete(k)))
+              }
+              // Hard reload
+              window.location.reload()
+            } catch {
+              setClearing(false)
+            }
+          }}
+          disabled={clearing}
+          className="w-full py-2 text-xs font-bold text-[var(--color-fg-muted)] border-[length:var(--border-w)] border-[var(--color-border-light)] rounded-[var(--radius)]
+            hover:border-[var(--color-danger)] hover:text-[var(--color-danger)] transition-colors disabled:opacity-40"
+        >
+          {clearing ? '清除中...' : '清除缓存并刷新'}
+        </button>
+      </div>
     </div>
   )
 }

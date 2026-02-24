@@ -2,7 +2,7 @@ use axum::{Json, extract::Query, response::IntoResponse};
 use serde::Deserialize;
 
 use crate::error::AppError;
-use crate::models::git::{GitCommitRequest, GitPushRequest, GitStageAllRequest, GitStageRequest};
+use crate::models::git::{GitCheckoutRequest, GitCommitRequest, GitPushRequest, GitStageAllRequest, GitStageRequest};
 use crate::services::{git, workspace};
 use serde_json::json;
 
@@ -130,5 +130,35 @@ pub async fn unstage_all_handler(
 ) -> Result<impl IntoResponse, AppError> {
     let root = workspace::resolve_workspace_root(body.session.as_deref(), body.window)?;
     git::unstage_all(&root)?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+// ── POST /api/git/checkout ───────────────────────────────────────
+
+pub async fn checkout_handler(
+    Json(body): Json<GitCheckoutRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let root = workspace::resolve_workspace_root(body.session.as_deref(), body.window)?;
+    git::checkout(&root, &body.branch)?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+// ── POST /api/git/discard ────────────────────────────────────────
+
+pub async fn discard_handler(
+    Json(body): Json<GitStageRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let root = workspace::resolve_workspace_root(body.session.as_deref(), body.window)?;
+    git::discard(&root, &body.paths)?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+// ── POST /api/git/discard-all ────────────────────────────────────
+
+pub async fn discard_all_handler(
+    Json(body): Json<GitStageAllRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let root = workspace::resolve_workspace_root(body.session.as_deref(), body.window)?;
+    git::discard_all(&root)?;
     Ok(Json(json!({ "ok": true })))
 }

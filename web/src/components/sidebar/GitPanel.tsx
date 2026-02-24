@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Icon } from '@iconify/react'
-import { IconGitBranch, IconRefreshCw, IconChevronDown, IconChevronRight, IconCheck, IconArrowUp, IconPlus, IconMinus } from '../../lib/icons'
+import { IconGitBranch, IconRefreshCw, IconChevronDown, IconChevronRight, IconCheck, IconArrowUp, IconPlus, IconMinus, IconUndo } from '../../lib/icons'
 import type { ToastItem } from '../../hooks/useToast'
 import { useGitStatus } from '../../hooks/useGitStatus'
-import { gitCommit, gitPush, gitStage, gitUnstage, gitUnstageAll } from '../../lib/api'
+import { gitCommit, gitPush, gitStage, gitUnstage, gitUnstageAll, gitCheckout, gitDiscard } from '../../lib/api'
 import type { GitChangedFile, WorkspaceContext } from '../../lib/types'
 import { getGitStatusBadge, getGitStatusColor } from '../../lib/gitDecorations'
 import { getErrorMessage } from '../../lib/error'
@@ -15,12 +15,15 @@ interface GitPanelProps {
   onChangeCount?: (count: number) => void
 }
 
-function FileItem({ file, onOpen, action, actionIcon, actionTitle }: {
+function FileItem({ file, onOpen, action, actionIcon, actionTitle, secondaryAction, secondaryIcon, secondaryTitle }: {
   file: GitChangedFile
   onOpen: () => void
   action: () => void
   actionIcon: typeof IconPlus
   actionTitle: string
+  secondaryAction?: () => void
+  secondaryIcon?: typeof IconPlus
+  secondaryTitle?: string
 }) {
   const filename = file.path.split('/').pop() ?? file.path
   const dir = file.path.includes('/') ? file.path.substring(0, file.path.lastIndexOf('/')) : ''
@@ -40,13 +43,24 @@ function FileItem({ file, onOpen, action, actionIcon, actionTitle }: {
         <span className="truncate text-[var(--color-fg)]">{filename}</span>
         {dir && <span className="truncate text-[var(--color-fg-muted)] text-[10px]">{dir}</span>}
       </button>
-      <button
-        onClick={e => { e.stopPropagation(); action() }}
-        className="shrink-0 w-5 h-5 flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] opacity-0 group-hover:opacity-100 transition-opacity mr-1"
-        title={actionTitle}
-      >
-        <Icon icon={actionIcon} width={12} />
-      </button>
+      <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity mr-1">
+        {secondaryAction && secondaryIcon && (
+          <button
+            onClick={e => { e.stopPropagation(); secondaryAction() }}
+            className="shrink-0 w-5 h-5 flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-danger)]"
+            title={secondaryTitle}
+          >
+            <Icon icon={secondaryIcon} width={12} />
+          </button>
+        )}
+        <button
+          onClick={e => { e.stopPropagation(); action() }}
+          className="shrink-0 w-5 h-5 flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
+          title={actionTitle}
+        >
+          <Icon icon={actionIcon} width={12} />
+        </button>
+      </div>
     </div>
   )
 }
@@ -84,6 +98,7 @@ export function GitPanel({ onOpenDiff, workspace, addToast, onChangeCount }: Git
   const [commitMsg, setCommitMsg] = useState('')
   const [committing, setCommitting] = useState(false)
   const [pushing, setPushing] = useState(false)
+  const [checkingOut, setCheckingOut] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
 
   const hasStagedChanges = status ? status.files.some(f => f.staged) : false
@@ -102,6 +117,25 @@ export function GitPanel({ onOpenDiff, workspace, addToast, onChangeCount }: Git
   async function handleUnstageAll() {
     setActionError(null)
     try { await gitUnstageAll(workspace); refresh() } catch (e) { setActionError(getErrorMessage(e, 'Unstage all failed')) }
+  }
+
+  async function handleDiscard(paths: string[]) {
+    setActionError(null)
+    try { await gitDiscard(paths, workspace); refresh() } catch (e) { setActionError(getErrorMessage(e, 'Discard failed')) }
+  }
+
+  async function handleCheckout(branch: string) {
+    setCheckingOut(branch)
+    setActionError(null)
+    try {
+      await gitCheckout(branch, workspace)
+      addToast(`Switched to ${branch}`, 'success')
+      refresh()
+    } catch (e) {
+      const msg = getErrorMessage(e, 'Checkout failed')
+      setActionError(msg)
+      addToast(`Checkout failed: ${msg}`, 'error')
+    } finally { setCheckingOut(null) }
   }
 
   async function handleCommit() {
@@ -280,13 +314,22 @@ export function GitPanel({ onOpenDiff, workspace, addToast, onChangeCount }: Git
               open={changesOpen}
               onToggle={() => setChangesOpen(!changesOpen)}
               actions={
-                <button
-                  onClick={() => handleStage(unstaged.map(f => f.path))}
-                  className="w-5 h-5 flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
-                  title="Stage All Changes"
-                >
-                  <Icon icon={IconPlus} width={12} />
-                </button>
+                <>
+                  <button
+                    onClick={() => handleDiscard(unstaged.map(f => f.path))}
+                    className="w-5 h-5 flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-danger)]"
+                    title="Discard All Changes"
+                  >
+                    <Icon icon={IconUndo} width={12} />
+                  </button>
+                  <button
+                    onClick={() => handleStage(unstaged.map(f => f.path))}
+                    className="w-5 h-5 flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
+                    title="Stage All Changes"
+                  >
+                    <Icon icon={IconPlus} width={12} />
+                  </button>
+                </>
               }
             />
             {changesOpen && unstaged.map(f => (
@@ -297,6 +340,9 @@ export function GitPanel({ onOpenDiff, workspace, addToast, onChangeCount }: Git
                 action={() => handleStage([f.path])}
                 actionIcon={IconPlus}
                 actionTitle="Stage"
+                secondaryAction={() => handleDiscard([f.path])}
+                secondaryIcon={IconUndo}
+                secondaryTitle="Discard"
               />
             ))}
           </div>
@@ -311,13 +357,22 @@ export function GitPanel({ onOpenDiff, workspace, addToast, onChangeCount }: Git
               open={untrackedOpen}
               onToggle={() => setUntrackedOpen(!untrackedOpen)}
               actions={
-                <button
-                  onClick={() => handleStage(untracked.map(f => f.path))}
-                  className="w-5 h-5 flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
-                  title="Stage All Untracked"
-                >
-                  <Icon icon={IconPlus} width={12} />
-                </button>
+                <>
+                  <button
+                    onClick={() => handleDiscard(untracked.map(f => f.path))}
+                    className="w-5 h-5 flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-danger)]"
+                    title="Discard All Untracked"
+                  >
+                    <Icon icon={IconUndo} width={12} />
+                  </button>
+                  <button
+                    onClick={() => handleStage(untracked.map(f => f.path))}
+                    className="w-5 h-5 flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
+                    title="Stage All Untracked"
+                  >
+                    <Icon icon={IconPlus} width={12} />
+                  </button>
+                </>
               }
             />
             {untrackedOpen && untracked.map(f => (
@@ -328,6 +383,9 @@ export function GitPanel({ onOpenDiff, workspace, addToast, onChangeCount }: Git
                 action={() => handleStage([f.path])}
                 actionIcon={IconPlus}
                 actionTitle="Stage"
+                secondaryAction={() => handleDiscard([f.path])}
+                secondaryIcon={IconUndo}
+                secondaryTitle="Discard"
               />
             ))}
           </div>
@@ -364,9 +422,17 @@ export function GitPanel({ onOpenDiff, workspace, addToast, onChangeCount }: Git
           {showBranches && branches.map(b => (
             <div key={b.name} className="px-3 py-0.5 text-xs flex items-center gap-1.5">
               {b.is_current && <span className="text-[var(--color-primary)]">*</span>}
-              <span className={`truncate ${b.is_current ? 'font-bold text-[var(--color-fg)]' : 'text-[var(--color-fg-muted)]'}`}>
-                {b.name}
-              </span>
+              {b.is_current ? (
+                <span className="truncate font-bold text-[var(--color-fg)]">{b.name}</span>
+              ) : (
+                <button
+                  onClick={() => handleCheckout(b.name)}
+                  disabled={checkingOut !== null}
+                  className="truncate text-[var(--color-fg-muted)] hover:text-[var(--color-primary)] hover:underline disabled:opacity-40 text-left"
+                >
+                  {checkingOut === b.name ? 'Switching...' : b.name}
+                </button>
+              )}
               <span className="text-[10px] text-[var(--color-fg-muted)] font-mono">{b.short_hash}</span>
             </div>
           ))}

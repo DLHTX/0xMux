@@ -58,6 +58,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     saveConfig(config)
     const meta = document.querySelector('meta[name="theme-color"]')
     if (meta) meta.setAttribute('content', tokens.colorBg)
+    // Set data-preset for CSS-only effects (e.g. CRT overlay for pipboy)
+    document.documentElement.setAttribute('data-preset', config.preset)
   }, [config, tokens])
 
   const setToken = useCallback(<K extends keyof ThemeTokens>(key: K, value: ThemeTokens[K]) => {
@@ -73,6 +75,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       preset: name,
       overrides: {},
     }))
+    // Notify settings hook to auto-sync editor skin
+    window.dispatchEvent(new CustomEvent('0xmux-preset-changed', { detail: name }))
   }, [])
 
   const toggleMode = useCallback(() => {

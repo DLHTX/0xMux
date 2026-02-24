@@ -1,5 +1,5 @@
 import type { EditorSkin } from './types'
-import type { ThemeMode } from './theme'
+import type { ThemeMode, PresetName } from './theme'
 
 export interface EditorSkinPalette {
   textColor: string
@@ -82,6 +82,22 @@ export const EDITOR_SKINS: Record<EditorSkin, EditorSkinOption> = {
       monacoBase: 'vs-dark',
     },
   },
+  pipboy: {
+    label: 'Pip-Boy',
+    description: 'Fallout CRT phosphor green terminal.',
+    light: {
+      textColor: '#d4d4d4',
+      mutedColor: '#808080',
+      accentColor: '#1BFF80',
+      monacoBase: 'vs-dark',
+    },
+    dark: {
+      textColor: '#d4d4d4',
+      mutedColor: '#808080',
+      accentColor: '#1BFF80',
+      monacoBase: 'vs-dark',
+    },
+  },
 }
 
 export const EDITOR_SKIN_KEYS = Object.keys(EDITOR_SKINS) as EditorSkin[]
@@ -92,4 +108,14 @@ export function isEditorSkin(value: unknown): value is EditorSkin {
 
 export function getEditorSkinPalette(skin: EditorSkin, mode: ThemeMode): EditorSkinPalette {
   return EDITOR_SKINS[skin][mode]
+}
+
+/** Map theme presets to their matching editor skin. */
+const PRESET_TO_SKIN: Partial<Record<PresetName, EditorSkin>> = {
+  pipboy: 'pipboy',
+  terminal: 'forest',
+}
+
+export function skinForPreset(preset: PresetName): EditorSkin | undefined {
+  return PRESET_TO_SKIN[preset]
 }

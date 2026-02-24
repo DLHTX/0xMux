@@ -193,3 +193,6 @@ export {
 export {
   default as IconUpload,
 } from '@iconify-icons/lucide/upload'
+export {
+  default as IconUndo,
+} from '@iconify-icons/lucide/undo-2'

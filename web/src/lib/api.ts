@@ -560,6 +560,24 @@ export async function gitUnstageAll(workspace?: WorkspaceContext): Promise<void>
   return request('/git/unstage-all', { method: 'POST', body: JSON.stringify(body) })
 }
 
+export async function gitCheckout(branch: string, workspace?: WorkspaceContext): Promise<void> {
+  const body: Record<string, unknown> = { branch }
+  if (workspace) { body.session = workspace.session; body.window = workspace.window }
+  return request('/git/checkout', { method: 'POST', body: JSON.stringify(body) })
+}
+
+export async function gitDiscard(paths: string[], workspace?: WorkspaceContext): Promise<void> {
+  const body: Record<string, unknown> = { paths }
+  if (workspace) { body.session = workspace.session; body.window = workspace.window }
+  return request('/git/discard', { method: 'POST', body: JSON.stringify(body) })
+}
+
+export async function gitDiscardAll(workspace?: WorkspaceContext): Promise<void> {
+  const body: Record<string, unknown> = {}
+  if (workspace) { body.session = workspace.session; body.window = workspace.window }
+  return request('/git/discard-all', { method: 'POST', body: JSON.stringify(body) })
+}
+
 // ── Image API ──
 
 export async function deleteImage(filename: string): Promise<void> {
