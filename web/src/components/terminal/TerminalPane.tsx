@@ -611,7 +611,7 @@ export function TerminalPane({
     <div
       ref={wrapperRef}
       className={`relative w-full h-full min-h-0 overflow-hidden transition-opacity duration-150 ${isMobile ? 'mobile-terminal-pane' : ''} ${mounted ? 'opacity-100' : 'opacity-0'}`}
-      style={{ height: '100%', background: '#0a0a0a' }}
+      style={{ height: '100%', background: 'var(--color-bg)' }}
       onDragOver={handleFileDragOver}
       onDragLeave={handleFileDragLeave}
       onDrop={handleFileDrop}
@@ -629,13 +629,13 @@ export function TerminalPane({
         <div
           ref={containerRef}
           className="w-full h-full overflow-hidden"
-          style={{ background: '#0a0a0a' }}
+          style={{ background: 'var(--color-bg)' }}
         />
 
       {isFileDropOver && (
         <div className="absolute inset-0 z-[8] pointer-events-none bg-[var(--color-success)]/10 border-2 border-dashed border-[var(--color-success)]/70">
           <div className="absolute inset-0 flex items-center justify-center">
-            <span className="px-2 py-1 text-[10px] font-mono text-[var(--color-success)] bg-[#0a0a0a]/90 border border-[var(--color-success)]/50">
+            <span className="px-2 py-1 text-[10px] font-mono text-[var(--color-success)] bg-[var(--color-bg)]/90 border border-[var(--color-success)]/50">
               {isExternalDrag ? t('terminal.dropExternal') : t('terminal.dropFile')}
             </span>
           </div>

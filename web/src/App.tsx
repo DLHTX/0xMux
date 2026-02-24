@@ -902,13 +902,68 @@ function AppContent() {
     }
   }, [floatingEditor, activeWorkspace])
 
-  // Auth loading
+  // Auth loading — CRT boot sequence
   if (authLoading || depsLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <span className="animate-pulse text-sm text-[var(--color-fg-muted)]">
-          {t('app.initializing')}
-        </span>
+      <div
+        className="min-h-screen flex flex-col items-center justify-center gap-6"
+        style={{ background: 'var(--color-bg)', animation: 'crt-boot 0.6s ease-out' }}
+      >
+        {/* Vault Boy ASCII / pixel icon */}
+        <div
+          className="text-[var(--color-primary)] opacity-80"
+          style={{
+            textShadow: '0 0 8px rgba(27,255,128,0.5), 0 0 20px rgba(27,255,128,0.2)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: '10px',
+            lineHeight: '10px',
+            letterSpacing: '1px',
+            whiteSpace: 'pre',
+          }}
+        >
+{`    ██
+   ████
+   ████
+  ██████
+ ██ ██ █
+    ██
+   ████
+   █  █
+   █  █  `}
+        </div>
+        {/* Boot text lines */}
+        <div
+          className="flex flex-col items-center gap-1 text-[var(--color-primary)]"
+          style={{
+            fontFamily: 'var(--font-mono)',
+            textShadow: '0 0 6px rgba(27,255,128,0.4)',
+          }}
+        >
+          <span className="text-xs tracking-widest opacity-60">VAULT-TEC INDUSTRIES</span>
+          <span className="text-lg font-bold tracking-wider">0xMux TERMINAL</span>
+          <span className="text-xs animate-pulse tracking-wide opacity-70 mt-2">
+            {t('app.initializing')}
+          </span>
+          {/* Blinking cursor */}
+          <span
+            className="inline-block w-[8px] h-[14px] bg-[var(--color-primary)] mt-1"
+            style={{ animation: 'blink 1s step-end infinite' }}
+          />
+        </div>
+        <style>{`
+          @keyframes crt-boot {
+            0% { opacity: 0; transform: scaleY(0.01); filter: brightness(10); }
+            40% { opacity: 1; transform: scaleY(0.01); filter: brightness(10); }
+            50% { transform: scaleY(1.1); filter: brightness(2); }
+            65% { transform: scaleY(0.95); filter: brightness(1.2); }
+            80% { transform: scaleY(1.02); }
+            100% { transform: scaleY(1); filter: brightness(1); }
+          }
+          @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+          }
+        `}</style>
       </div>
     )
   }

@@ -196,7 +196,7 @@ export function CreateSessionModal({
       onClick={onClose}
     >
       <div
-        className="bg-[var(--color-bg)] border-[length:var(--border-w)] border-[var(--color-border)] rounded-[var(--radius)] p-5 w-full max-w-lg mx-4 max-h-[80vh] flex flex-col overflow-y-auto"
+        className="pipboy-crt-open-center bg-[var(--color-bg)] border-[length:var(--border-w)] border-[var(--color-border)] rounded-[var(--radius)] p-5 w-full max-w-lg mx-4 max-h-[80vh] flex flex-col overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header: command hint */}

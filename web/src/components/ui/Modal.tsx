@@ -26,7 +26,7 @@ export function Modal({ open, onClose, children, className = '' }: ModalProps) {
       onClick={onClose}
     >
       <div
-        className={`bg-[var(--color-bg)] border-[length:var(--border-w)] border-[var(--color-border)] rounded-[var(--radius)] p-6 w-full max-w-md mx-4 ${className}`}
+        className={`pipboy-crt-open-center bg-[var(--color-bg)] border-[length:var(--border-w)] border-[var(--color-border)] rounded-[var(--radius)] p-6 w-full max-w-md mx-4 ${className}`}
         onClick={(e) => e.stopPropagation()}
       >
         {children}

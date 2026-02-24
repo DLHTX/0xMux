@@ -274,7 +274,7 @@ export interface TerminalInstance {
 export type SplitDirection = 'horizontal' | 'vertical'
 export type ModalBlur = 'none' | 'sm' | 'md' | 'lg'
 export type MarkdownRenderMode = 'code' | 'wysiwyg' | 'ir' | 'sv'
-export type EditorSkin = 'classic' | 'ocean' | 'forest' | 'sunset'
+export type EditorSkin = 'classic' | 'ocean' | 'forest' | 'sunset' | 'pipboy'
 
 export interface SplitLayoutLeaf {
   id: string

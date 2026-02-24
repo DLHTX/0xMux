@@ -107,11 +107,15 @@ export function PluginModal({
   }
 
   return (
-    <>
-      <div className="fixed inset-0 bg-black/30 z-50" style={{ backdropFilter: 'var(--modal-backdrop-blur)' }} onClick={onClose} />
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ backdropFilter: 'var(--modal-backdrop-blur)' }}
+      onClick={onClose}
+    >
+      <div className="absolute inset-0 bg-black/30" />
 
       <div
-        className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[860px] max-w-[95vw] max-h-[86vh] bg-[var(--color-bg)] border-[length:var(--border-w)] border-[var(--color-border)] rounded-[var(--radius)] shadow-[4px_4px_0_var(--color-border-light)] z-50 flex flex-col overflow-hidden"
+        className="pipboy-crt-open-center relative w-[860px] max-w-[95vw] max-h-[86vh] bg-[var(--color-bg)] border-[length:var(--border-w)] border-[var(--color-border)] rounded-[var(--radius)] shadow-[4px_4px_0_var(--color-border-light)] flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-4 border-b-[length:var(--border-w)] border-[var(--color-border)]">
@@ -274,7 +278,7 @@ export function PluginModal({
           )}
         </div>
       </div>
-    </>
+    </div>
   )
 }
 

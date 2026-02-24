@@ -25,7 +25,7 @@ export interface ThemeTokens {
 }
 
 export type ThemeMode = 'light' | 'dark'
-export type PresetName = 'brutalist' | 'clean' | 'terminal' | 'soft'
+export type PresetName = 'brutalist' | 'clean' | 'terminal' | 'soft' | 'pipboy'
 
 export interface FontOption {
   label: string
@@ -43,6 +43,8 @@ export const FONT_OPTIONS: FontOption[] = [
   { label: 'Press Start 2P', value: "'Press Start 2P', cursive", googleFont: 'Press+Start+2P' },
   { label: 'Pixelify Sans', value: "'Pixelify Sans', sans-serif", googleFont: 'Pixelify+Sans:wght@400;500;600;700' },
   { label: 'DotGothic16', value: "'DotGothic16', sans-serif", googleFont: 'DotGothic16' },
+  // CRT / retro fonts
+  { label: 'VT323 (CRT)', value: "'VT323', monospace", googleFont: 'VT323' },
   // Mono fonts
   { label: 'JetBrains Mono', value: "'JetBrains Mono', monospace", googleFont: 'JetBrains+Mono:wght@400;500;700;800' },
   { label: 'IBM Plex Mono', value: "'IBM Plex Mono', monospace", googleFont: 'IBM+Plex+Mono:wght@400;500;700' },
@@ -224,14 +226,57 @@ const SOFT_DARK: ThemeTokens = {
   fontScale: '1',
 }
 
+const PIPBOY_LIGHT: ThemeTokens = {
+  colorPrimary: '#1BFF80',
+  colorPrimaryFg: '#0a0e0a',
+  colorBg: '#1a2318',
+  colorBgAlt: '#1f2b1c',
+  colorFg: '#1BFF80',
+  colorFgMuted: '#0fad56',
+  colorFgFaint: '#0a7a3c',
+  colorBorder: '#1BFF80',
+  colorBorderLight: '#0a4a24',
+  colorSuccess: '#1BFF80',
+  colorWarning: '#FFB641',
+  colorDanger: '#ff4444',
+  radius: '0px',
+  borderW: '2px',
+  fontBody: "'VT323', monospace",
+  fontHeading: "'VT323', monospace",
+  fontMono: "'VT323', monospace",
+  fontScale: '1.1',
+}
+
+const PIPBOY_DARK: ThemeTokens = {
+  colorPrimary: '#1BFF80',
+  colorPrimaryFg: '#0a0e0a',
+  colorBg: '#0a0e0a',
+  colorBgAlt: '#0f150f',
+  colorFg: '#1BFF80',
+  colorFgMuted: '#0fad56',
+  colorFgFaint: '#0a7a3c',
+  colorBorder: '#1BFF80',
+  colorBorderLight: '#0a3a1e',
+  colorSuccess: '#1BFF80',
+  colorWarning: '#FFB641',
+  colorDanger: '#ff4444',
+  radius: '0px',
+  borderW: '2px',
+  fontBody: "'VT323', monospace",
+  fontHeading: "'VT323', monospace",
+  fontMono: "'VT323', monospace",
+  fontScale: '1.1',
+}
+
 export const PRESETS: Record<PresetName, { light: ThemeTokens; dark: ThemeTokens; label: string }> = {
   brutalist: { light: BRUTALIST_LIGHT, dark: BRUTALIST_DARK, label: 'Brutalist' },
   clean: { light: CLEAN_LIGHT, dark: CLEAN_DARK, label: 'Clean' },
   terminal: { light: TERMINAL_LIGHT, dark: TERMINAL_DARK, label: 'Terminal' },
   soft: { light: SOFT_LIGHT, dark: SOFT_DARK, label: 'Soft' },
+  pipboy: { light: PIPBOY_LIGHT, dark: PIPBOY_DARK, label: 'Pip-Boy' },
 }
 
-export const DEFAULT_PRESET: PresetName = 'brutalist'
+export const DEFAULT_PRESET: PresetName = 'pipboy'
 
 // ── CSS Variable Mapping ──
 

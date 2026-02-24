@@ -23,33 +23,33 @@
    These are fallbacks. JS (ThemeContext) will override via inline styles on :root.
    Keeping defaults here ensures the page renders correctly before JS loads. */
 :root {
-  /* Colors */
-  --color-primary:      #1a1a1a;
-  --color-primary-fg:   #FAF8F2;
-  --color-bg:           #FAF8F2;
-  --color-bg-alt:       #F3F0E8;
-  --color-fg:           #1a1a1a;
-  --color-fg-muted:     #6b6b6b;
-  --color-fg-faint:     #a0a0a0;
-  --color-border:       #1a1a1a;
-  --color-border-light: #d0cdc4;
-  --color-success:      #2d7a3a;
-  --color-warning:      #b8860b;
-  --color-danger:       #c0392b;
-  --color-scrollbar-accent: #00ff41;
+  /* Colors — defaults match pipboy dark preset */
+  --color-primary:      #1BFF80;
+  --color-primary-fg:   #0a0e0a;
+  --color-bg:           #0a0e0a;
+  --color-bg-alt:       #0f150f;
+  --color-fg:           #1BFF80;
+  --color-fg-muted:     #0fad56;
+  --color-fg-faint:     #0a7a3c;
+  --color-border:       #1BFF80;
+  --color-border-light: #0a3a1e;
+  --color-success:      #1BFF80;
+  --color-warning:      #FFB641;
+  --color-danger:       #ff4444;
+  --color-scrollbar-accent: #1BFF80;
 
   /* Shape */
   --radius:   0px;
-  --border-w: 3px;
+  --border-w: 2px;
 
   /* Modal */
   --modal-backdrop-blur: blur(4px);
 
   /* Font */
-  --font-body:    'Silkscreen', 'Fusion Pixel', cursive;
-  --font-heading: 'Silkscreen', 'Fusion Pixel', cursive;
-  --font-mono:    'JetBrains Mono', monospace;
-  --font-scale:   1;
+  --font-body:    'VT323', monospace;
+  --font-heading: 'VT323', monospace;
+  --font-mono:    'VT323', monospace;
+  --font-scale:   1.1;
 }
 
 html, body, #root {
@@ -246,6 +246,124 @@ input[type="range"].floating-opacity-slider:hover::-moz-range-thumb {
 }
 .floating-markdown-vditor .vditor-reset img {
   max-width: 100%;
+}
+
+/* ── Pip-Boy CRT Effects ──
+   Active only when data-preset="pipboy" is set on <html> */
+
+/* Scanlines overlay */
+[data-preset="pipboy"] body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      rgba(0, 0, 0, 0.15) 0px,
+      rgba(0, 0, 0, 0.15) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* Subtle flicker overlay (no vignette — removed for readability) */
+[data-preset="pipboy"] body::after {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  pointer-events: none;
+  z-index: 9998;
+  animation: crt-flicker 0.08s infinite alternate;
+}
+
+@keyframes crt-flicker {
+  0%   { opacity: 0.97; }
+  50%  { opacity: 1; }
+  100% { opacity: 0.98; }
+}
+
+/* CRT power-on animation for modals (with glitch) */
+@keyframes crt-open-center {
+  0%   { opacity: 0; transform: scaleY(0.005) scaleX(0.5); filter: brightness(8); }
+  35%  { opacity: 1; transform: scaleY(0.005) scaleX(0.8); filter: brightness(6); }
+  /* Glitch burst */
+  42%  { transform: scaleY(0.6) scaleX(1.04) translateX(4px); filter: brightness(3) saturate(2); clip-path: inset(10% 0 30% 0); }
+  46%  { transform: scaleY(0.85) scaleX(0.97) translateX(-6px); filter: brightness(1.8); clip-path: inset(40% 0 5% 0); }
+  50%  { transform: scaleY(1.1) scaleX(1.03) translateX(3px); filter: brightness(2.5) hue-rotate(30deg); clip-path: inset(0 0 20% 0); }
+  54%  { transform: scaleY(0.95) scaleX(1.01) translateX(-1px); filter: brightness(1.4); clip-path: none; }
+  /* Settle */
+  65%  { transform: scaleY(1.04) scaleX(1.01); filter: brightness(1.2); }
+  78%  { transform: scaleY(0.98); filter: brightness(1.05); }
+  90%  { transform: scaleY(1.01); filter: brightness(1); }
+  100% { transform: scaleY(1) scaleX(1); filter: brightness(1); opacity: 1; }
+}
+
+[data-preset="pipboy"] .pipboy-crt-open-center {
+  animation: crt-open-center 0.45s ease-out forwards;
+}
+
+/* Phosphor glow on all text */
+[data-preset="pipboy"] body {
+  text-shadow:
+    0 0 3px rgba(27, 255, 128, 0.5),
+    0 0 8px rgba(27, 255, 128, 0.3),
+    0 0 20px rgba(27, 255, 128, 0.15);
+}
+
+/* Scrollbar in Pip-Boy green */
+[data-preset="pipboy"] ::-webkit-scrollbar-thumb {
+  background: #0a7a3c !important;
+}
+[data-preset="pipboy"] ::-webkit-scrollbar-thumb:hover {
+  background: #1BFF80 !important;
+}
+[data-preset="pipboy"] ::-webkit-scrollbar-track {
+  background: #0a0e0a !important;
+}
+
+/* Subtle ambient screen glow on body */
+[data-preset="pipboy"] body {
+  box-shadow: inset 0 0 60px rgba(27, 255, 128, 0.02);
+}
+
+/* Phosphor glow on borders */
+[data-preset="pipboy"] [style*="border"],
+[data-preset="pipboy"] .border-\\[var\\(--color-border\\)\\],
+[data-preset="pipboy"] .border-\\[var\\(--color-border-light\\)\\] {
+  box-shadow: 0 0 4px rgba(27, 255, 128, 0.15);
+}
+
+/* Moving scanline bar (slow sweep) */
+[data-preset="pipboy"] #root::after {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 80px;
+  background: linear-gradient(
+    0deg,
+    transparent 0%,
+    rgba(27, 255, 128, 0.04) 50%,
+    transparent 100%
+  );
+  pointer-events: none;
+  z-index: 9997;
+  animation: crt-scanbar 8s linear infinite;
+}
+
+@keyframes crt-scanbar {
+  0%   { transform: translateY(-80px); }
+  100% { transform: translateY(100vh); }
 }
 
 /* ── xterm.js canvas fixes ── */

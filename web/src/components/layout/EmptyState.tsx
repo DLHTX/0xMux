@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Icon } from '@iconify/react'
 import { IconPlus } from '../../lib/icons'
+import { VaultBoyIcon } from './VaultBoyIcon'
 
 interface EmptyStateProps {
   onQuickCreate: () => Promise<void>
@@ -23,7 +24,7 @@ export function EmptyState({ onQuickCreate, onCustomCreate }: EmptyStateProps) {
   return (
     <div className="flex-1 flex items-center justify-center">
       <div className="flex flex-col items-center gap-8 max-w-md px-4">
-        {/* Terminal prompt with blinking cursor */}
+        {/* Vault Boy + terminal prompt */}
         <div
           className="w-full border-[length:var(--border-w)] border-[var(--color-border)] rounded-[var(--radius)] bg-[var(--color-bg-alt)] p-4"
         >
@@ -32,6 +33,12 @@ export function EmptyState({ onQuickCreate, onCustomCreate }: EmptyStateProps) {
             <div className="w-2 h-2 bg-[var(--color-warning)]" />
             <div className="w-2 h-2 bg-[var(--color-success)]" />
           </div>
+
+          {/* Vault Boy icon centered */}
+          <div className="flex justify-center mb-3 opacity-40">
+            <VaultBoyIcon size={48} className="text-[var(--color-primary)]" />
+          </div>
+
           <div className="flex items-center gap-1" style={{ fontFamily: 'var(--font-mono)' }}>
             <span className="text-[var(--color-success)] text-sm font-bold">{'>'}</span>
             <span className="text-sm text-[var(--color-fg)]">
