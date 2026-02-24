@@ -1,5 +1,6 @@
 # Rust
 server/target/
+target/
 
 # Node / Bun
 web/node_modules/

@@ -76,6 +76,16 @@ async fn main() {
         }
     }
 
+    // Agent cron service (feature-gated)
+    #[cfg(feature = "agent")]
+    let cron_service = {
+        let svc = oxmux_agent::cron::CronService::new();
+        if let Err(e) = svc.start().await {
+            tracing::warn!("Failed to start cron service: {e}");
+        }
+        Some(svc)
+    };
+
     let state = AppState {
         session_tx,
         notification_tx,
@@ -83,6 +93,8 @@ async fn main() {
         install_manager: InstallManager::new(),
         auth_service,
         notification_service,
+        #[cfg(feature = "agent")]
+        cron_service,
     };
 
     let app = router::build(state);

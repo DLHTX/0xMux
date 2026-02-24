@@ -237,6 +237,118 @@ pub fn build(state: AppState) -> Router {
             "/ws/install/{task_id}",
             get(ws::install::ws_install_handler),
         )
+        ;
+
+    // Agent desktop automation API (feature-gated)
+    #[cfg(feature = "agent")]
+    let app = app
+        .route(
+            "/api/agent/desktop/screenshot",
+            post(handlers::agent::screenshot_handler),
+        )
+        .route(
+            "/api/agent/desktop/displays",
+            get(handlers::agent::displays_handler),
+        )
+        .route(
+            "/api/agent/desktop/click",
+            post(handlers::agent::click_handler),
+        )
+        .route(
+            "/api/agent/desktop/type",
+            post(handlers::agent::type_text_handler),
+        )
+        .route(
+            "/api/agent/desktop/key",
+            post(handlers::agent::press_key_handler),
+        )
+        .route(
+            "/api/agent/desktop/drag",
+            post(handlers::agent::drag_handler),
+        )
+        .route(
+            "/api/agent/desktop/windows",
+            get(handlers::agent::list_windows_handler),
+        )
+        .route(
+            "/api/agent/desktop/focus",
+            post(handlers::agent::focus_window_handler),
+        )
+        .route(
+            "/api/agent/desktop/launch",
+            post(handlers::agent::launch_app_handler),
+        )
+        .route(
+            "/api/agent/desktop/quit",
+            post(handlers::agent::quit_app_handler),
+        )
+        .route(
+            "/api/agent/desktop/app-status",
+            post(handlers::agent::app_status_handler),
+        )
+        .route(
+            "/api/agent/desktop/command",
+            post(handlers::agent::run_command_handler),
+        )
+        .route(
+            "/api/agent/desktop/ui-tree",
+            get(handlers::agent::ui_tree_handler),
+        )
+        .route(
+            "/api/agent/desktop/ui-find",
+            get(handlers::agent::ui_find_handler),
+        )
+        .route(
+            "/api/agent/desktop/click-ref",
+            post(handlers::agent::click_or_ref_handler),
+        )
+        // Cron API
+        .route(
+            "/api/agent/cron",
+            get(handlers::agent_cron::list_jobs_handler)
+                .post(handlers::agent_cron::create_job_handler),
+        )
+        .route(
+            "/api/agent/cron/{id}",
+            get(handlers::agent_cron::get_job_handler)
+                .put(handlers::agent_cron::update_job_handler)
+                .delete(handlers::agent_cron::delete_job_handler),
+        )
+        .route(
+            "/api/agent/cron/{id}/run",
+            post(handlers::agent_cron::run_now_handler),
+        )
+        .route(
+            "/api/agent/cron/{id}/toggle",
+            put(handlers::agent_cron::toggle_job_handler),
+        )
+        // Browser automation API
+        .route(
+            "/api/agent/browser/navigate",
+            post(handlers::agent_browser::navigate_handler),
+        )
+        .route(
+            "/api/agent/browser/snapshot",
+            get(handlers::agent_browser::snapshot_handler),
+        )
+        .route(
+            "/api/agent/browser/click",
+            post(handlers::agent_browser::browser_click_handler),
+        )
+        .route(
+            "/api/agent/browser/type",
+            post(handlers::agent_browser::browser_type_handler),
+        )
+        .route(
+            "/api/agent/browser/tabs",
+            get(handlers::agent_browser::tabs_handler),
+        )
+        .route(
+            "/api/agent/browser/close",
+            post(handlers::agent_browser::close_handler),
+        );
+
+    let app = app
         // 添加鉴权中间件
         .layer(middleware::from_fn_with_state(
             state.clone(),

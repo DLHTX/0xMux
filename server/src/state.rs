@@ -13,4 +13,6 @@ pub struct AppState {
     pub install_manager: Arc<InstallManager>,
     pub auth_service: Arc<AuthService>,
     pub notification_service: Arc<NotificationService>,
+    #[cfg(feature = "agent")]
+    pub cron_service: Option<oxmux_agent::cron::CronService>,
 }

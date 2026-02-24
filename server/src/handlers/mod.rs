@@ -1,4 +1,10 @@
 pub mod ai;
+#[cfg(feature = "agent")]
+pub mod agent;
+#[cfg(feature = "agent")]
+pub mod agent_browser;
+#[cfg(feature = "agent")]
+pub mod agent_cron;
 pub mod auth;
 pub mod files;
 pub mod git;

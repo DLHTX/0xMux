@@ -36,8 +36,12 @@ sha2 = "0.10"
 hmac = "0.12"
 toml = "0.8"
 
+# Agent module (optional)
+oxmux-agent = { path = "../agent", optional = true }
+
 [features]
 embed-frontend = ["rust-embed", "mime_guess"]
+agent = ["dep:oxmux-agent"]
 
 [profile.release]
 opt-level = "z"
