@@ -3,7 +3,7 @@ import { Icon } from '@iconify/react'
 import { IconGitBranch, IconRefreshCw, IconChevronDown, IconChevronRight, IconCheck, IconArrowUp, IconPlus, IconMinus } from '../../lib/icons'
 import type { ToastItem } from '../../hooks/useToast'
 import { useGitStatus } from '../../hooks/useGitStatus'
-import { gitCommit, gitPush, gitStage, gitUnstage, gitStageAll, gitUnstageAll } from '../../lib/api'
+import { gitCommit, gitPush, gitStage, gitUnstage, gitUnstageAll } from '../../lib/api'
 import type { GitChangedFile, WorkspaceContext } from '../../lib/types'
 import { getGitStatusBadge, getGitStatusColor } from '../../lib/gitDecorations'
 import { getErrorMessage } from '../../lib/error'
@@ -97,11 +97,6 @@ export function GitPanel({ onOpenDiff, workspace, addToast, onChangeCount }: Git
   async function handleUnstage(paths: string[]) {
     setActionError(null)
     try { await gitUnstage(paths, workspace); refresh() } catch (e) { setActionError(getErrorMessage(e, 'Unstage failed')) }
-  }
-
-  async function handleStageAll() {
-    setActionError(null)
-    try { await gitStageAll(workspace); refresh() } catch (e) { setActionError(getErrorMessage(e, 'Stage all failed')) }
   }
 
   async function handleUnstageAll() {

@@ -1,5 +1,4 @@
 import type { WorkspaceContext } from './types'
-import type { CachedImage } from './api'
 
 let counter = 0
 const byIndex = new Map<number, { path: string; url: string }>()

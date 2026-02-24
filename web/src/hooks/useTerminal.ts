@@ -109,8 +109,6 @@ export function useTerminal(options: UseTerminalOptions = {}) {
           rowTexts.push(t)
           cumLen += t.length
         }
-        const logicalEndRow = logicalStartRow + rowTexts.length - 1 // 0-based inclusive
-
         // Only process once per logical line: when bufferLineNumber is the first row.
         // For continuation rows, still process (xterm calls provideLinks per visible row).
         const fullText = rowTexts.join('')

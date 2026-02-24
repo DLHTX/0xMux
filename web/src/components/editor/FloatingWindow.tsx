@@ -35,7 +35,7 @@ export default function FloatingWindow({
   width,
   height,
   opacity,
-  title,
+  title: _title,
   onClose,
   onMinimize,
   onRestore,
