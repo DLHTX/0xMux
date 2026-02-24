@@ -951,6 +951,11 @@ function AppContent() {
     ? Math.min(settings.fontSize, 9)
     : Math.min(settings.fontSize, 10)
 
+  // Compact desktop (foldable split-screen, 640–768px): use mobile-level font
+  const desktopTerminalFontSize = isCompact
+    ? Math.min(settings.fontSize, 10)
+    : settings.fontSize
+
   return (
     <div className="h-screen flex flex-col overflow-hidden" style={{ height: '100dvh' }}>
       <LocaleFontBridge />
@@ -1237,7 +1242,7 @@ function AppContent() {
               <div className="flex-1 flex flex-col min-h-0">
                   <SplitWorkspace
                     layout={layout}
-                    fontSize={settings.fontSize}
+                    fontSize={desktopTerminalFontSize}
                     canSplit={canSplit}
                     activePaneId={activePaneId}
                     paneCount={paneCount}
