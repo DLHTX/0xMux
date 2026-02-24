@@ -1,6 +1,6 @@
 {
   "name": "0xmux",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Hacker-grade tmux session manager with web UI",
   "license": "MIT",
   "bin": {
