@@ -3,17 +3,58 @@ use crate::models::files::{SearchMatch, SearchQuery, SearchResponse, SearchResul
 use std::collections::HashMap;
 use std::path::Path;
 
+/// Get git-tracked files relative to root. Returns None if not a git repo.
+async fn git_tracked_files(root: &Path) -> Option<std::collections::HashSet<String>> {
+    use tokio::process::Command;
+
+    if !root.join(".git").exists() {
+        return None;
+    }
+
+    let output = Command::new("git")
+        .args(["ls-files"])
+        .current_dir(root)
+        .output()
+        .await
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let text = String::from_utf8_lossy(&output.stdout);
+    Some(
+        text.lines()
+            .filter(|l| !l.is_empty())
+            .map(|l| l.to_string())
+            .collect(),
+    )
+}
+
 /// Search files using ripgrep CLI. Falls back to basic search if rg is unavailable.
+/// In a git repo, only git-tracked files are included in results.
 pub async fn search_files(root: &Path, query: &SearchQuery) -> Result<SearchResponse, AppError> {
     if query.query.is_empty() {
         return Err(AppError::BadRequest("Search query cannot be empty".into()));
     }
 
-    // Try ripgrep first
-    match search_with_rg(root, query).await {
-        Ok(response) => Ok(response),
-        Err(_) => search_fallback(root, query),
+    let tracked = git_tracked_files(root).await;
+
+    let mut response = match search_with_rg(root, query).await {
+        Ok(r) => r,
+        Err(_) => search_fallback(root, query)?,
+    };
+
+    // Filter to git-tracked files only
+    if let Some(ref tracked_set) = tracked {
+        response
+            .results
+            .retain(|g| tracked_set.contains(&g.file_path));
+        response.total_matches = response.results.iter().map(|g| g.matches.len()).sum();
+        response.total_files = response.results.len();
     }
+
+    Ok(response)
 }
 
 /// Search using `rg --json` for structured output.

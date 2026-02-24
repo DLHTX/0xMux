@@ -41,7 +41,7 @@ export function useSearch(workspace?: WorkspaceContext) {
       } finally {
         setLoading(false)
       }
-    }, 300)
+    }, 150)
   }, [workspace])
 
   const updateQuery = useCallback((query: string) => {

@@ -82,7 +82,7 @@ export function SearchPanel({ onOpenFile, workspace }: SearchPanelProps) {
                 <span className="text-[var(--color-fg-muted)] shrink-0 tabular-nums w-8 text-right">{m.line_number}</span>
                 <span className="truncate text-[var(--color-fg)]">
                   {m.line_content.substring(0, m.match_start)}
-                  <span className="bg-[color-mix(in_srgb,var(--color-primary)_30%,transparent)] font-bold">
+                  <span className="bg-[#22c55e33] text-[#15803d] font-bold">
                     {m.line_content.substring(m.match_start, m.match_end)}
                   </span>
                   {m.line_content.substring(m.match_end)}

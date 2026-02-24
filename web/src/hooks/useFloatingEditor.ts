@@ -307,6 +307,37 @@ export function useFloatingEditor(options?: { enabled?: boolean }) {
           t.workspace?.window === workspace?.window,
       )
       if (existingTab) {
+        // If the tab has unsaved changes, just activate it
+        if (existingTab.isDirty) {
+          setState((prev) => ({
+            ...prev,
+            isOpen: true,
+            minimized: false,
+            activeTabId: existingTab.id,
+          }))
+          return
+        }
+        // Otherwise, reload content from disk to pick up external changes
+        try {
+          if (!isImageFile(path)) {
+            const file = await readFile(path, workspace)
+            const language = file.language || detectLanguage(path)
+            setState((prev) => ({
+              ...prev,
+              isOpen: true,
+              minimized: false,
+              activeTabId: existingTab.id,
+              tabs: prev.tabs.map((t) =>
+                t.id === existingTab.id
+                  ? { ...t, content: file.content, originalContent: file.content, language, isDirty: false }
+                  : t,
+              ),
+            }))
+            return
+          }
+        } catch {
+          // If reload fails, just activate the existing tab
+        }
         setState((prev) => ({
           ...prev,
           isOpen: true,
