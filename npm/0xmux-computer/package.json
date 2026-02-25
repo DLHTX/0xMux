@@ -1,0 +1,53 @@
+{
+  "name": "0xmux-computer",
+  "version": "0.1.0",
+  "description": "macOS Computer Use MCP Server - control mouse, keyboard, windows, and screenshots via AI",
+  "type": "module",
+  "bin": {
+    "0xmux-computer": "dist/index.js"
+  },
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "prepublishOnly": "npm run build",
+    "preversion": "npm run build",
+    "postversion": "git push && git push --tags"
+  },
+  "keywords": [
+    "mcp",
+    "macos",
+    "computer-use",
+    "automation",
+    "ai"
+  ],
+  "author": "0xMux",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DLHTX/0xMux",
+    "directory": "npm/0xmux-computer"
+  },
+  "homepage": "https://github.com/DLHTX/0xMux/tree/main/npm/0xmux-computer",
+  "bugs": {
+    "url": "https://github.com/DLHTX/0xMux/issues"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "zod": "^3.24.4"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.0",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "os": [
+    "darwin"
+  ],
+  "files": [
+    "dist"
+  ]
+}

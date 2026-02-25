@@ -24,6 +24,8 @@ node_modules/
 
 # npm distribution build artifacts (keep npm/ tracked for CI templates)
 npm/@0xmux/
+npm/0xmux-computer/dist/
+npm/0xmux-computer/node_modules/
 *.tgz
 .claude/
 .playwright-mcp
