@@ -11,6 +11,7 @@ import {
   IconTerminal,
 } from '../../lib/icons'
 import { useI18n } from '../../hooks/useI18n'
+import { useCrtClose } from '../../hooks/useCrtClose'
 import { listDirs } from '../../lib/api'
 import type { DirEntry } from '../../lib/types'
 
@@ -182,7 +183,9 @@ export function CreateSessionModal({
     onClose()
   }
 
-  if (!open) return null
+  const { visible, closing } = useCrtClose(open)
+
+  if (!visible) return null
 
   const breadcrumbs = toBreadcrumbs(browsePath)
   const filteredDirs = dirs.filter((d) =>
@@ -191,12 +194,12 @@ export function CreateSessionModal({
 
   return (
     <div
-      className="fixed inset-0 bg-[var(--color-bg)]/80 flex items-center justify-center z-50"
+      className={`fixed inset-0 bg-[var(--color-bg)]/80 flex items-center justify-center z-50 ${closing ? 'pipboy-crt-backdrop-close' : ''}`}
       style={{ backdropFilter: 'var(--modal-backdrop-blur)' }}
       onClick={onClose}
     >
       <div
-        className="pipboy-crt-open-center bg-[var(--color-bg)] border-[length:var(--border-w)] border-[var(--color-border)] rounded-[var(--radius)] p-5 w-full max-w-lg mx-4 max-h-[80vh] flex flex-col overflow-y-auto"
+        className={`${closing ? 'pipboy-crt-close-center' : 'pipboy-crt-open-center'} bg-[var(--color-bg)] border-[length:var(--border-w)] border-[var(--color-border)] rounded-[var(--radius)] p-5 w-full max-w-lg mx-4 max-h-[80vh] flex flex-col overflow-y-auto`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header: command hint */}

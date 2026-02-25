@@ -1334,7 +1334,7 @@ function AppContent() {
                 y={floatingEditor.state.y}
                 width={floatingEditor.state.width}
                 height={floatingEditor.state.height}
-                opacity={floatingEditor.state.opacity}
+                opacity={settings.editorOpacity}
                 title={
                   floatingEditor.state.tabs.find(t => t.id === floatingEditor.state.activeTabId)?.filePath.split('/').pop() ?? 'Editor'
                 }
@@ -1343,7 +1343,7 @@ function AppContent() {
                 onRestore={floatingEditor.restoreEditor}
                 onPositionChange={floatingEditor.updatePosition}
                 onSizeChange={floatingEditor.updateSize}
-                onOpacityChange={floatingEditor.updateOpacity}
+                onOpacityChange={(o) => updateSettings({ editorOpacity: o })}
               >
                 {/* Wrapper: whole editor panel accepts external file drops */}
                 <div

@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
+import { useCrtClose } from '../../hooks/useCrtClose'
 import { Icon } from '@iconify/react'
 import { IconX, IconShield, IconLogOut, IconGlobe, IconInfo, IconEye, IconEyeOff, IconCode, IconTrash } from '../../lib/icons'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { Tabs } from '../ui/Tabs'
+import { Slider, SliderRow } from '../ui/Slider'
 import { useTheme } from '../../hooks/useTheme'
 import { useI18n } from '../../hooks/useI18n'
 import { useSettings } from '../../hooks/useSettings'
@@ -47,12 +49,13 @@ export function SettingsModal({ open, onClose, onChangePassword, onLogout }: Set
   const { tokens, preset, mode, setToken, setPreset, toggleMode, resetOverrides } = useTheme()
   const { t, locale, setLocale } = useI18n()
   const { settings, updateSettings } = useSettings()
+  const { visible, closing } = useCrtClose(open)
 
-  if (!open) return null
+  if (!visible) return null
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
+      className={`fixed inset-0 z-50 flex items-center justify-center ${closing ? 'pipboy-crt-backdrop-close' : ''}`}
       style={{ backdropFilter: 'var(--modal-backdrop-blur)' }}
       onClick={onClose}
     >
@@ -61,7 +64,7 @@ export function SettingsModal({ open, onClose, onChangePassword, onLogout }: Set
 
       {/* Modal */}
       <div
-        className="pipboy-crt-open-center relative w-[600px] max-w-[90vw] max-h-[80vh] bg-[var(--color-bg)] border-[length:var(--border-w)] border-[var(--color-border)] rounded-[var(--radius)] shadow-[4px_4px_0_var(--color-border-light)] flex flex-col overflow-hidden"
+        className={`${closing ? 'pipboy-crt-close-center' : 'pipboy-crt-open-center'} relative w-[600px] max-w-[90vw] max-h-[80vh] bg-[var(--color-bg)] border-[length:var(--border-w)] border-[var(--color-border)] rounded-[var(--radius)] shadow-[4px_4px_0_var(--color-border-light)] flex flex-col overflow-hidden`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -149,10 +152,6 @@ function AppearanceTab({
   resetOverrides: () => void
   t: (key: MessageKey, params?: Record<string, string | number>) => string
 }) {
-  const [section, setSection] = useState<string | null>('lang')
-
-  const toggle = (s: string) => setSection(section === s ? null : s)
-
   const radiusNum = parseInt(tokens.radius)
   const borderWNum = parseInt(tokens.borderW)
   const scaleNum = parseFloat(tokens.fontScale)
@@ -160,7 +159,7 @@ function AppearanceTab({
   return (
     <div className="flex flex-col gap-5">
       {/* Language */}
-      <Section title={t('theme.language')} open={section === 'lang'} onToggle={() => toggle('lang')}>
+      <Section title={t('theme.language')} open onToggle={() => {}}>
         <div className="flex gap-2">
           {LOCALES.map((l) => (
             <button
@@ -182,7 +181,7 @@ function AppearanceTab({
       </Section>
 
       {/* Presets */}
-      <Section title={t('theme.presets')} open={section === 'presets'} onToggle={() => toggle('presets')}>
+      <Section title={t('theme.presets')} open onToggle={() => {}}>
         <div className="grid grid-cols-2 gap-2">
           {PRESET_KEYS.map((key) => (
             <button
@@ -204,7 +203,7 @@ function AppearanceTab({
       </Section>
 
       {/* Mode */}
-      <Section title={t('theme.mode')} open={section === 'mode'} onToggle={() => toggle('mode')}>
+      <Section title={t('theme.mode')} open onToggle={() => {}}>
         <div className="flex gap-2">
           {(['light', 'dark'] as const).map((m) => (
             <button
@@ -226,7 +225,7 @@ function AppearanceTab({
       </Section>
 
       {/* Primary Color */}
-      <Section title={t('theme.primaryColor')} open={section === 'color'} onToggle={() => toggle('color')}>
+      <Section title={t('theme.primaryColor')} open onToggle={() => {}}>
         <div className="flex flex-wrap gap-2">
           {PRIMARY_COLORS.map((c) => (
             <button
@@ -255,7 +254,7 @@ function AppearanceTab({
       </Section>
 
       {/* Border */}
-      <Section title={t('theme.border')} open={section === 'border'} onToggle={() => toggle('border')}>
+      <Section title={t('theme.border')} open onToggle={() => {}}>
         <div className="flex flex-col gap-3">
           <SliderRow
             label={t('theme.borderWidth')}
@@ -279,7 +278,7 @@ function AppearanceTab({
       </Section>
 
       {/* Font */}
-      <Section title={t('theme.font')} open={section === 'font'} onToggle={() => toggle('font')}>
+      <Section title={t('theme.font')} open onToggle={() => {}}>
         <div className="flex flex-col gap-3">
           <FontSelect
             label={t('theme.fontBody')}
@@ -299,7 +298,7 @@ function AppearanceTab({
       </Section>
 
       {/* Font Scale */}
-      <Section title={t('theme.fontSize')} open={section === 'scale'} onToggle={() => toggle('scale')}>
+      <Section title={t('theme.fontSize')} open onToggle={() => {}}>
         <SliderRow
           label={t('theme.fontScale')}
           value={scaleNum}
@@ -406,6 +405,25 @@ function EditorTab({ settings, updateSettings }: {
         <div className="text-xs font-bold mb-2">Markdown 编辑体验</div>
         <div className="text-[10px] text-[var(--color-fg-muted)] mb-3">
           Markdown 固定为「所见即所得」并隐藏顶部工具栏，只保留渲染编辑区
+        </div>
+      </div>
+
+      {/* Editor opacity */}
+      <div className="pt-4 border-t-[length:var(--border-w)] border-[var(--color-border-light)]">
+        <div className="text-xs font-bold mb-2">编辑器窗口透明度</div>
+        <div className="text-[10px] text-[var(--color-fg-muted)] mb-3">
+          浮动编辑器窗口的背景透明度
+        </div>
+        <div className="flex items-center gap-3">
+          <Slider
+            value={settings.editorOpacity}
+            min={0.3}
+            max={1.0}
+            step={0.05}
+            onChange={(v) => updateSettings({ editorOpacity: v })}
+            className="flex-1"
+          />
+          <span className="text-xs font-bold w-10 text-right">{Math.round(settings.editorOpacity * 100)}%</span>
         </div>
       </div>
     </div>
@@ -848,62 +866,25 @@ function UrlRow({ label, url, copied, onCopy }: {
 
 function Section({
   title,
-  open,
-  onToggle,
   children,
 }: {
   title: string
-  open: boolean
-  onToggle: () => void
+  open?: boolean
+  onToggle?: () => void
   children: React.ReactNode
 }) {
   return (
     <div>
-      <button
-        onClick={onToggle}
-        className="flex items-center justify-between w-full text-xs font-bold uppercase text-[var(--color-fg-muted)] mb-2 hover:text-[var(--color-fg)] transition-colors"
-      >
+      <div className="text-xs font-bold uppercase text-[var(--color-fg-muted)] mb-2">
         {title}
-        <span className="text-[10px]">{open ? '-' : '+'}</span>
-      </button>
-      {open && children}
+      </div>
+      <div className="pl-3">
+        {children}
+      </div>
     </div>
   )
 }
 
-function SliderRow({
-  label,
-  value,
-  min,
-  max,
-  step,
-  display,
-  onChange,
-}: {
-  label: string
-  value: number
-  min: number
-  max: number
-  step: number
-  display: string
-  onChange: (v: number) => void
-}) {
-  return (
-    <div className="flex items-center gap-3">
-      <span className="text-xs text-[var(--color-fg-muted)] w-14 shrink-0">{label}</span>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="brutalist-slider flex-1"
-      />
-      <span className="text-xs font-bold w-10 text-right">{display}</span>
-    </div>
-  )
-}
 
 function EditorSkinCard({
   skin,

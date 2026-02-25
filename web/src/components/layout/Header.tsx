@@ -41,7 +41,7 @@ export function Header({
   return (
     <>
       <header
-        className="flex items-center justify-between px-3 md:px-4 border-b border-b-[var(--color-border-light)]/10 bg-[var(--color-bg)] shrink-0 h-10 md:h-12"
+        className="flex items-center justify-between px-3 md:px-4 border-b-[length:var(--border-w)] border-b-[var(--color-border-light)] bg-[var(--color-bg)] shrink-0 h-10 md:h-12"
       >
         {/* Left: Logo */}
         <div className="flex items-center gap-2">

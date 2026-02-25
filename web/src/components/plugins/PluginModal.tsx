@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useCrtClose } from '../../hooks/useCrtClose'
 import { Icon } from '@iconify/react'
 import { IconPuzzle, IconRefreshCw, IconX, IconChevronDown, IconChevronUp } from '../../lib/icons'
 import { Tabs } from '../ui'
@@ -55,7 +56,8 @@ export function PluginModal({
   onSyncGlobalConfig,
 }: PluginModalProps) {
   const [search, setSearch] = useState('')
-  if (!open) return null
+  const { visible, closing } = useCrtClose(open)
+  if (!visible) return null
   const providerMeta: Record<AiProvider, { label: string; installed: boolean; path: string | null }> = {
     claude: {
       label: 'Claude',
@@ -108,14 +110,14 @@ export function PluginModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
+      className={`fixed inset-0 z-50 flex items-center justify-center ${closing ? 'pipboy-crt-backdrop-close' : ''}`}
       style={{ backdropFilter: 'var(--modal-backdrop-blur)' }}
       onClick={onClose}
     >
       <div className="absolute inset-0 bg-black/30" />
 
       <div
-        className="pipboy-crt-open-center relative w-[860px] max-w-[95vw] max-h-[86vh] bg-[var(--color-bg)] border-[length:var(--border-w)] border-[var(--color-border)] rounded-[var(--radius)] shadow-[4px_4px_0_var(--color-border-light)] flex flex-col overflow-hidden"
+        className={`${closing ? 'pipboy-crt-close-center' : 'pipboy-crt-open-center'} relative w-[860px] max-w-[95vw] max-h-[86vh] bg-[var(--color-bg)] border-[length:var(--border-w)] border-[var(--color-border)] rounded-[var(--radius)] shadow-[4px_4px_0_var(--color-border-light)] flex flex-col overflow-hidden`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-4 border-b-[length:var(--border-w)] border-[var(--color-border)]">

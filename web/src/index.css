@@ -311,6 +311,34 @@ input[type="range"].floating-opacity-slider:hover::-moz-range-thumb {
   animation: crt-open-center 0.45s ease-out forwards;
 }
 
+/* CRT power-off animation for modals (old TV shutdown) */
+@keyframes crt-close-center {
+  0%   { transform: scaleY(1) scaleX(1); filter: brightness(1); opacity: 1; }
+  15%  { transform: scaleY(1) scaleX(1); filter: brightness(1.8); opacity: 1; }
+  /* Collapse to horizontal line */
+  45%  { transform: scaleY(0.008) scaleX(0.85); filter: brightness(6); opacity: 1; }
+  60%  { transform: scaleY(0.008) scaleX(0.6); filter: brightness(8); opacity: 1; }
+  /* Line shrinks to bright dot */
+  80%  { transform: scaleY(0.008) scaleX(0.08); filter: brightness(12); opacity: 0.9; }
+  90%  { transform: scaleY(0.005) scaleX(0.02); filter: brightness(15); opacity: 0.6; }
+  /* Afterglow fades */
+  100% { transform: scaleY(0) scaleX(0); filter: brightness(20); opacity: 0; }
+}
+
+@keyframes crt-backdrop-close {
+  0%   { opacity: 1; }
+  60%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+[data-preset="pipboy"] .pipboy-crt-close-center {
+  animation: crt-close-center 0.35s ease-in forwards;
+}
+
+[data-preset="pipboy"] .pipboy-crt-backdrop-close {
+  animation: crt-backdrop-close 0.35s ease-in forwards;
+}
+
 /* Phosphor glow on all text */
 [data-preset="pipboy"] body {
   text-shadow:
@@ -340,30 +368,6 @@ input[type="range"].floating-opacity-slider:hover::-moz-range-thumb {
 [data-preset="pipboy"] .border-\\[var\\(--color-border\\)\\],
 [data-preset="pipboy"] .border-\\[var\\(--color-border-light\\)\\] {
   box-shadow: 0 0 4px rgba(27, 255, 128, 0.15);
-}
-
-/* Moving scanline bar (slow sweep) */
-[data-preset="pipboy"] #root::after {
-  content: "";
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 80px;
-  background: linear-gradient(
-    0deg,
-    transparent 0%,
-    rgba(27, 255, 128, 0.04) 50%,
-    transparent 100%
-  );
-  pointer-events: none;
-  z-index: 9997;
-  animation: crt-scanbar 8s linear infinite;
-}
-
-@keyframes crt-scanbar {
-  0%   { transform: translateY(-80px); }
-  100% { transform: translateY(100vh); }
 }
 
 /* ── xterm.js canvas fixes ── */

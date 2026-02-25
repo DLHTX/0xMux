@@ -28,6 +28,7 @@ const DEFAULT_SETTINGS: UserSettings = {
   editorSkin: DEFAULT_EDITOR_SKIN,
   markdownRenderMode: 'wysiwyg',
   modalBlur: 'sm',
+  editorOpacity: 1.0,
 }
 
 function loadSettings(): UserSettings {
@@ -46,10 +47,13 @@ function loadSettings(): UserSettings {
     }
   }
   if (parsed) {
+    const rawOpacity = typeof parsed.editorOpacity === 'number' ? parsed.editorOpacity : DEFAULT_SETTINGS.editorOpacity
+    const editorOpacity = Math.min(1, Math.max(0.3, rawOpacity))
     return {
       ...DEFAULT_SETTINGS,
       ...parsed,
       editorSkin,
+      editorOpacity,
       modalBlur: isModalBlur(parsed.modalBlur) ? parsed.modalBlur : DEFAULT_SETTINGS.modalBlur,
       markdownRenderMode: 'wysiwyg',
     }

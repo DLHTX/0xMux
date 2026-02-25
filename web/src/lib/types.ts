@@ -306,6 +306,8 @@ export interface UserSettings {
   markdownRenderMode: 'wysiwyg'
   /** Backdrop blur level for modal overlays */
   modalBlur: ModalBlur
+  /** Floating editor window opacity (0.3–1.0) */
+  editorOpacity: number
 }
 
 export interface CreateWindowRequest {
