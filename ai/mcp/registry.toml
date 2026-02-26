@@ -10,3 +10,13 @@ name = "CoDriver Desktop"
 command = "npx"
 args = ["-y", "codriver-mcp"]
 recommended = true
+
+[[mcp]]
+id = "computer-use"
+name = "0xMux Computer Use"
+description = "macOS desktop control - mouse, keyboard, windows, screenshots"
+command = "npx"
+args = ["-y", "0xmux-computer"]
+official = true
+recommended = true
+os = ["darwin"]
