@@ -2,6 +2,7 @@ import { Icon } from '@iconify/react'
 import { IconTrash } from '../../lib/icons'
 import type { TmuxWindow } from '../../lib/types'
 import { SPLIT_GROUP_COLOR } from '../../lib/session-utils'
+import { useI18n } from '../../hooks/useI18n'
 
 interface WindowItemProps {
   sessionName: string
@@ -22,6 +23,8 @@ export function WindowItem({
   onSelect,
   onDelete,
 }: WindowItemProps) {
+  const { t } = useI18n()
+
   const handleDeleteClick = (e: React.MouseEvent) => {
     e.stopPropagation()
     onDelete(sessionName, window.index)
@@ -69,7 +72,7 @@ export function WindowItem({
           shrink-0 w-5 h-5 flex items-center justify-center transition-colors
           text-[var(--color-border-light)] hover:text-[var(--color-danger)]
         "
-        title="Delete window"
+        title={t('session.deleteWindow')}
       >
         <Icon icon={IconTrash} width={12} height={12} />
       </button>

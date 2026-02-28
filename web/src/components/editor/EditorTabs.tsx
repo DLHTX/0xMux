@@ -5,6 +5,7 @@ import { IconX } from '../../lib/icons.ts'
 import type { EditorTab } from '../../lib/types.ts'
 import { setTerminalFileDragData } from '../../lib/terminalFileDrag.ts'
 import { HorizontalScrollbar } from '../ui/HorizontalScrollbar.tsx'
+import { useI18n } from '../../hooks/useI18n'
 
 export interface EditorTabsProps {
   tabs: EditorTab[]
@@ -113,6 +114,7 @@ export default function EditorTabs({
   onCloseTabsToLeft,
   onCloseTabsToRight,
 }: EditorTabsProps) {
+  const { t } = useI18n()
   const scrollRef = useRef<HTMLDivElement>(null)
   const [contextTabId, setContextTabId] = useState<string | null>(null)
   const [contextPos, setContextPos] = useState<{ x: number; y: number } | null>(null)
@@ -226,35 +228,35 @@ export default function EditorTabs({
             className="block w-full px-3 py-1.5 text-left text-xs whitespace-nowrap hover:bg-[var(--color-bg-alt)]"
             onClick={() => runMenuAction(() => onCloseTab(contextTabId))}
           >
-            Close
+            {t('editor.close')}
           </button>
           <button
             className="block w-full px-3 py-1.5 text-left text-xs whitespace-nowrap hover:bg-[var(--color-bg-alt)] disabled:opacity-40 disabled:cursor-not-allowed"
             onClick={() => runMenuAction(() => onCloseOtherTabs(contextTabId))}
             disabled={!canCloseOthers}
           >
-            Close Others
+            {t('editor.closeOthers')}
           </button>
           <button
             className="block w-full px-3 py-1.5 text-left text-xs whitespace-nowrap hover:bg-[var(--color-bg-alt)] disabled:opacity-40 disabled:cursor-not-allowed"
             onClick={() => runMenuAction(() => onCloseTabsToRight(contextTabId))}
             disabled={!canCloseRight}
           >
-            Close to the Right
+            {t('editor.closeRight')}
           </button>
           <button
             className="block w-full px-3 py-1.5 text-left text-xs whitespace-nowrap hover:bg-[var(--color-bg-alt)] disabled:opacity-40 disabled:cursor-not-allowed"
             onClick={() => runMenuAction(() => onCloseTabsToLeft(contextTabId))}
             disabled={!canCloseLeft}
           >
-            Close to the Left
+            {t('editor.closeLeft')}
           </button>
           <div className="my-1 border-t border-[var(--color-border-light)]" />
           <button
             className="block w-full px-3 py-1.5 text-left text-xs whitespace-nowrap hover:bg-[var(--color-bg-alt)]"
             onClick={() => runMenuAction(onCloseAllTabs)}
           >
-            Close All
+            {t('editor.closeAll')}
           </button>
         </div>,
         document.body,

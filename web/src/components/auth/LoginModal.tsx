@@ -3,6 +3,7 @@ import { Icon } from '@iconify/react'
 import { IconEye, IconEyeOff, IconLock } from '../../lib/icons'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
+import { useI18n } from '../../hooks/useI18n'
 import type { LoginRequest } from '../../lib/types'
 
 interface LoginModalProps {
@@ -10,6 +11,7 @@ interface LoginModalProps {
 }
 
 export function LoginModal({ onSubmit }: LoginModalProps) {
+  const { t } = useI18n()
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
@@ -62,9 +64,9 @@ export function LoginModal({ onSubmit }: LoginModalProps) {
       if (err && typeof err === 'object' && 'error' in err && err.error === 'too_many_requests') {
         const lockMinutes = 5
         setLockUntil(Date.now() + lockMinutes * 60 * 1000)
-        setError(`操作过于频繁，请 ${lockMinutes} 分钟后再试`)
+        setError(t('login.tooFrequent', { minutes: lockMinutes }))
       } else {
-        setError('密码错误')
+        setError(t('login.wrongPassword'))
       }
 
       // 清空输入框并抖动
@@ -79,7 +81,7 @@ export function LoginModal({ onSubmit }: LoginModalProps) {
       if (newFailCount >= 5) {
         const lockMinutes = 5
         setLockUntil(Date.now() + lockMinutes * 60 * 1000)
-        setError(`连续 5 次密码错误，请 ${lockMinutes} 分钟后再试`)
+        setError(t('login.tooManyAttempts', { minutes: lockMinutes }))
       }
     } finally {
       setLoading(false)
@@ -105,9 +107,9 @@ export function LoginModal({ onSubmit }: LoginModalProps) {
             <Icon icon={IconLock} width={20} />
           </div>
           <div>
-            <h2 className="text-base font-bold">登录</h2>
+            <h2 className="text-base font-bold">{t('login.title')}</h2>
             <p className="text-xs text-[var(--color-fg-muted)]">
-              输入密码以访问 0xMux
+              {t('login.subtitle')}
             </p>
           </div>
         </div>
@@ -116,7 +118,7 @@ export function LoginModal({ onSubmit }: LoginModalProps) {
           {/* Password Input */}
           <div className="flex flex-col gap-1">
             <label className="text-xs font-bold text-[var(--color-fg-muted)]">
-              密码
+              {t('login.password')}
             </label>
             <div className="relative">
               <Input
@@ -124,7 +126,7 @@ export function LoginModal({ onSubmit }: LoginModalProps) {
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="请输入密码"
+                placeholder={t('login.placeholder')}
                 className="pr-10"
                 autoFocus
                 disabled={isLocked}
@@ -155,17 +157,17 @@ export function LoginModal({ onSubmit }: LoginModalProps) {
             disabled={!password || loading || isLocked}
           >
             {isLocked
-              ? `请等待 ${formatCountdown(countdown)}`
+              ? t('login.wait', { time: formatCountdown(countdown) })
               : loading
-                ? '登录中...'
-                : '登录'}
+                ? t('login.loading')
+                : t('login.submit')}
           </Button>
         </form>
 
         {/* Fail Count Indicator */}
         {failCount > 0 && failCount < 5 && (
           <div className="mt-3 text-[10px] text-[var(--color-fg-muted)] text-center">
-            已尝试 {failCount} 次
+            {t('login.attempts', { count: failCount })}
           </div>
         )}
       </div>

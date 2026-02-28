@@ -6,6 +6,7 @@ import {
 } from '../../lib/icons'
 import { SessionFolder } from './SessionFolder'
 import type { TmuxSession, TmuxWindow } from '../../lib/types'
+import { useI18n } from '../../hooks/useI18n'
 
 interface SessionSidebarProps {
   sessions: TmuxSession[]
@@ -38,6 +39,7 @@ export function SessionSidebar({
   isInSplitGroup,
   collapsed,
 }: SessionSidebarProps) {
+  const { t } = useI18n()
   const [search, setSearch] = useState('')
   const [expandedSessions, setExpandedSessions] = useState<Set<string>>(
     new Set(sessions.map((s) => s.name))
@@ -76,7 +78,7 @@ export function SessionSidebar({
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search..."
+              placeholder={t('session.search')}
               className="flex-1 bg-transparent outline-none text-xs placeholder:text-[var(--color-fg-faint)] min-w-0"
             />
           </div>
@@ -85,7 +87,7 @@ export function SessionSidebar({
             className="shrink-0 w-7 h-7 flex items-center justify-center border-[length:var(--border-w)] border-[var(--color-primary)]
               text-[var(--color-primary)] rounded-[var(--radius)] transition-colors cursor-pointer
               hover:bg-[var(--color-primary)] hover:text-[var(--color-primary-fg)]"
-            title="New session"
+            title={t('session.newSession')}
           >
             <Icon icon={IconPlus} width={14} height={14} />
           </button>
@@ -100,7 +102,7 @@ export function SessionSidebar({
             className="w-7 h-7 flex items-center justify-center border-[length:var(--border-w)] border-[var(--color-border)]
               rounded-[var(--radius)] transition-colors cursor-pointer
               hover:bg-[var(--color-primary)] hover:text-[var(--color-primary-fg)] hover:border-[var(--color-primary)]"
-            title="New session"
+            title={t('session.newSession')}
           >
             <Icon icon={IconPlus} width={14} height={14} />
           </button>
@@ -132,7 +134,7 @@ export function SessionSidebar({
           ) : (
             <div className="p-4 text-center">
               <p className="text-xs text-[var(--color-fg-faint)]">
-                {search ? 'No matching sessions' : 'No sessions yet'}
+                {search ? t('session.noMatch') : t('session.noSessions')}
               </p>
             </div>
           )}

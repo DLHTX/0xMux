@@ -69,7 +69,7 @@ export function SettingsModal({ open, onClose, onChangePassword, onLogout }: Set
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b-[length:var(--border-w)] border-[var(--color-border)]">
-          <h2 className="text-base font-bold">设置</h2>
+          <h2 className="text-base font-bold">{t('settings.title')}</h2>
           <button
             onClick={onClose}
             className="w-7 h-7 flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] transition-colors"
@@ -84,7 +84,7 @@ export function SettingsModal({ open, onClose, onChangePassword, onLogout }: Set
             tabs={[
               {
                 id: 'appearance',
-                label: '外观',
+                label: t('settings.appearance'),
                 content: <AppearanceTab
                   tokens={tokens}
                   preset={preset}
@@ -100,22 +100,22 @@ export function SettingsModal({ open, onClose, onChangePassword, onLogout }: Set
               },
               {
                 id: 'editor',
-                label: '编辑器',
+                label: t('settings.editor'),
                 content: <EditorTab settings={settings} updateSettings={updateSettings} />,
               },
               {
                 id: 'security',
-                label: '安全',
+                label: t('settings.security'),
                 content: <SecurityTab onChangePassword={onChangePassword} onLogout={onLogout} />,
               },
               {
                 id: 'external',
-                label: '网络',
+                label: t('settings.network'),
                 content: <ExternalAccessTab />,
               },
               {
                 id: 'about',
-                label: '关于',
+                label: t('settings.about'),
                 content: <AboutTab />,
               },
             ]}
@@ -328,21 +328,23 @@ function EditorTab({ settings, updateSettings }: {
   settings: UserSettings
   updateSettings: (partial: Partial<UserSettings>) => void
 }) {
+  const { t } = useI18n()
+  const BLUR_LABELS: Record<string, MessageKey> = { none: 'editorSettings.blurNone', sm: 'editorSettings.blurSm', md: 'editorSettings.blurMd', lg: 'editorSettings.blurLg' }
   return (
     <div className="flex flex-col gap-5">
       <div>
         <h3 className="text-sm font-bold mb-3 flex items-center gap-2">
           <Icon icon={IconCode} width={16} />
-          编辑器设置
+          {t('editorSettings.title')}
         </h3>
       </div>
 
       {/* @ Trigger Toggle */}
       <div className="flex items-center justify-between py-2">
         <div className="flex-1 min-w-0 mr-4">
-          <div className="text-xs font-bold">@ 快速打开文件</div>
+          <div className="text-xs font-bold">{t('editorSettings.quickFile')}</div>
           <div className="text-[10px] text-[var(--color-fg-muted)] mt-0.5">
-            在终端中输入 @ 时弹出快速文件搜索（Ctrl+P 始终可用）
+            {t('editorSettings.quickFileHint')}
           </div>
         </div>
         <button
@@ -362,13 +364,13 @@ function EditorTab({ settings, updateSettings }: {
       {/* Modal Blur */}
       <div className="flex items-center justify-between py-2">
         <div className="flex-1 min-w-0 mr-4">
-          <div className="text-xs font-bold">弹框背景模糊</div>
+          <div className="text-xs font-bold">{t('editorSettings.modalBlur')}</div>
           <div className="text-[10px] text-[var(--color-fg-muted)] mt-0.5">
-            弹框遮罩层的背景模糊强度
+            {t('editorSettings.modalBlurHint')}
           </div>
         </div>
         <div className="shrink-0 flex gap-1">
-          {([['none', '无'], ['sm', '低'], ['md', '中'], ['lg', '高']] as const).map(([value, label]) => (
+          {(['none', 'sm', 'md', 'lg'] as const).map((value) => (
             <button
               key={value}
               onClick={() => updateSettings({ modalBlur: value as ModalBlur })}
@@ -378,16 +380,16 @@ function EditorTab({ settings, updateSettings }: {
                   : 'border-[var(--color-border-light)] text-[var(--color-fg-muted)] hover:border-[var(--color-border)]'
               }`}
             >
-              {label}
+              {t(BLUR_LABELS[value])}
             </button>
           ))}
         </div>
       </div>
 
       <div className="pt-4 border-t-[length:var(--border-w)] border-[var(--color-border-light)]">
-        <div className="text-xs font-bold mb-2">编辑器皮肤</div>
+        <div className="text-xs font-bold mb-2">{t('editorSettings.skin')}</div>
         <div className="text-[10px] text-[var(--color-fg-muted)] mb-3">
-          Monaco 与 Markdown 共用同一套皮肤，自动跟随亮/暗模式切换
+          {t('editorSettings.skinHint')}
         </div>
         <div className="grid grid-cols-2 gap-2">
           {EDITOR_SKIN_KEYS.map((skin) => (
@@ -402,17 +404,17 @@ function EditorTab({ settings, updateSettings }: {
       </div>
 
       <div className="pt-4 border-t-[length:var(--border-w)] border-[var(--color-border-light)]">
-        <div className="text-xs font-bold mb-2">Markdown 编辑体验</div>
+        <div className="text-xs font-bold mb-2">{t('editorSettings.markdown')}</div>
         <div className="text-[10px] text-[var(--color-fg-muted)] mb-3">
-          Markdown 固定为「所见即所得」并隐藏顶部工具栏，只保留渲染编辑区
+          {t('editorSettings.markdownHint')}
         </div>
       </div>
 
       {/* Editor opacity */}
       <div className="pt-4 border-t-[length:var(--border-w)] border-[var(--color-border-light)]">
-        <div className="text-xs font-bold mb-2">编辑器窗口透明度</div>
+        <div className="text-xs font-bold mb-2">{t('editorSettings.opacity')}</div>
         <div className="text-[10px] text-[var(--color-fg-muted)] mb-3">
-          浮动编辑器窗口的背景透明度
+          {t('editorSettings.opacityHint')}
         </div>
         <div className="flex items-center gap-3">
           <Slider
@@ -436,6 +438,7 @@ function SecurityTab({ onChangePassword, onLogout }: {
   onChangePassword: (data: ChangePasswordRequest) => Promise<void>
   onLogout: () => void
 }) {
+  const { t } = useI18n()
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -452,12 +455,12 @@ function SecurityTab({ onChangePassword, onLogout }: {
     setSuccess(false)
 
     if (newPassword !== confirmPassword) {
-      setError('新密码与确认密码不一致')
+      setError(t('security.mismatch'))
       return
     }
 
     if (newPassword.length < 8) {
-      setError('新密码长度至少为8个字符')
+      setError(t('security.tooShort'))
       return
     }
 
@@ -474,7 +477,7 @@ function SecurityTab({ onChangePassword, onLogout }: {
       setConfirmPassword('')
       setTimeout(() => setSuccess(false), 3000)
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : '修改密码失败')
+      setError(err instanceof Error ? err.message : t('security.changeFailed'))
     } finally {
       setLoading(false)
     }
@@ -486,7 +489,7 @@ function SecurityTab({ onChangePassword, onLogout }: {
       <div>
         <h3 className="text-sm font-bold mb-3 flex items-center gap-2">
           <Icon icon={IconShield} width={16} />
-          修改密码
+          {t('security.changePassword')}
         </h3>
         <form onSubmit={handleChangePassword} className="flex flex-col gap-3">
           <div className="relative">
@@ -494,8 +497,8 @@ function SecurityTab({ onChangePassword, onLogout }: {
               type={showCurrent ? 'text' : 'password'}
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
-              placeholder="当前密码"
-              label="当前密码"
+              placeholder={t('security.currentPassword')}
+              label={t('security.currentPassword')}
               className="pr-10"
             />
             <button
@@ -512,8 +515,8 @@ function SecurityTab({ onChangePassword, onLogout }: {
               type={showNew ? 'text' : 'password'}
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="新密码（至少8个字符）"
-              label="新密码"
+              placeholder={t('security.newPasswordPlaceholder')}
+              label={t('security.newPassword')}
               className="pr-10"
             />
             <button
@@ -530,10 +533,10 @@ function SecurityTab({ onChangePassword, onLogout }: {
               type={showConfirm ? 'text' : 'password'}
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="确认新密码"
-              label="确认新密码"
+              placeholder={t('security.confirmPassword')}
+              label={t('security.confirmPassword')}
               className="pr-10"
-              error={confirmPassword && newPassword !== confirmPassword ? '密码不一致' : undefined}
+              error={confirmPassword && newPassword !== confirmPassword ? t('security.passwordMismatch') : undefined}
             />
             <button
               type="button"
@@ -552,7 +555,7 @@ function SecurityTab({ onChangePassword, onLogout }: {
 
           {success && (
             <div className="px-3 py-2 bg-[var(--color-success)]/10 border-[length:var(--border-w)] border-[var(--color-success)] rounded-[var(--radius)] text-xs text-[var(--color-success)]">
-              密码已修改
+              {t('security.changed')}
             </div>
           )}
 
@@ -561,7 +564,7 @@ function SecurityTab({ onChangePassword, onLogout }: {
             variant="primary"
             disabled={!currentPassword || !newPassword || !confirmPassword || loading}
           >
-            {loading ? '保存中...' : '保存'}
+            {loading ? t('security.saving') : t('security.save')}
           </Button>
         </form>
       </div>
@@ -570,14 +573,14 @@ function SecurityTab({ onChangePassword, onLogout }: {
       <div className="pt-4 border-t-[length:var(--border-w)] border-[var(--color-border-light)]">
         <h3 className="text-sm font-bold mb-3 flex items-center gap-2">
           <Icon icon={IconLogOut} width={16} />
-          会话管理
+          {t('security.sessionMgmt')}
         </h3>
         <Button
           variant="danger"
           onClick={onLogout}
           className="w-full"
         >
-          退出登录
+          {t('security.logout')}
         </Button>
       </div>
     </div>
@@ -587,6 +590,7 @@ function SecurityTab({ onChangePassword, onLogout }: {
 // ── 网络信息 Tab ──
 
 function ExternalAccessTab() {
+  const { t } = useI18n()
   const [serverInfo, setServerInfo] = useState<{ port: number; host: string; version: string; local_ips: string[] } | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
 
@@ -612,10 +616,10 @@ function ExternalAccessTab() {
       <div>
         <h3 className="text-sm font-bold flex items-center gap-2 mb-1">
           <Icon icon={IconGlobe} width={16} />
-          访问地址
+          {t('network.accessUrl')}
         </h3>
         <p className="text-xs text-[var(--color-fg-muted)]">
-          其他设备可通过局域网地址访问此终端
+          {t('network.accessHint')}
         </p>
       </div>
 
@@ -623,7 +627,7 @@ function ExternalAccessTab() {
       <div className="flex flex-col gap-2 text-xs">
         {/* Current / localhost */}
         <UrlRow
-          label="本机"
+          label={t('network.local')}
           url={currentUrl}
           copied={copied === currentUrl}
           onCopy={() => handleCopy(currentUrl)}
@@ -636,7 +640,7 @@ function ExternalAccessTab() {
           return (
             <UrlRow
               key={ip}
-              label="局域网"
+              label={t('network.lan')}
               url={lanUrl}
               copied={copied === lanUrl}
               onCopy={() => handleCopy(lanUrl)}
@@ -648,15 +652,15 @@ function ExternalAccessTab() {
       {/* Server info */}
       {serverInfo && (
         <div className="pt-4 border-t-[length:var(--border-w)] border-[var(--color-border-light)]">
-          <h4 className="text-xs font-bold text-[var(--color-fg-muted)] mb-2">服务器信息</h4>
+          <h4 className="text-xs font-bold text-[var(--color-fg-muted)] mb-2">{t('network.serverInfo')}</h4>
           <div className="flex flex-col gap-1.5 text-xs">
             <div className="flex items-center justify-between">
-              <span className="text-[var(--color-fg-muted)]">绑定地址</span>
+              <span className="text-[var(--color-fg-muted)]">{t('network.bindAddress')}</span>
               <code className="font-mono">{serverInfo.host}:{serverInfo.port}</code>
             </div>
             {serverInfo.local_ips.length > 0 && (
               <div className="flex items-center justify-between">
-                <span className="text-[var(--color-fg-muted)]">局域网 IP</span>
+                <span className="text-[var(--color-fg-muted)]">{t('network.lanIp')}</span>
                 <code className="font-mono">{serverInfo.local_ips.join(', ')}</code>
               </div>
             )}
@@ -679,6 +683,7 @@ type UpdateState =
   | { phase: 'error'; message: string }
 
 function AboutTab() {
+  const { t } = useI18n()
   const [version, setVersion] = useState<string | null>(null)
   const [updateState, setUpdateState] = useState<UpdateState>({ phase: 'idle' })
   const [clearing, setClearing] = useState(false)
@@ -699,7 +704,7 @@ function AboutTab() {
         setUpdateState({ phase: 'up_to_date', current: res.current })
       }
     } catch {
-      setUpdateState({ phase: 'error', message: '检查更新失败' })
+      setUpdateState({ phase: 'error', message: t('about.checkFailed') })
     }
   }
 
@@ -713,7 +718,7 @@ function AboutTab() {
         setUpdateState({ phase: 'error', message: res.message })
       }
     } catch {
-      setUpdateState({ phase: 'error', message: '更新失败' })
+      setUpdateState({ phase: 'error', message: t('about.updateFailed') })
     }
   }
 
@@ -725,14 +730,14 @@ function AboutTab() {
           0xMux
         </h3>
         <p className="text-xs text-[var(--color-fg-muted)]">
-          基于 Web 的 tmux 终端管理器
+          {t('about.description')}
         </p>
       </div>
 
       {/* Version & Update */}
       <div className="flex flex-col gap-1.5 text-xs">
         <div className="flex items-center justify-between">
-          <span className="text-[var(--color-fg-muted)]">当前版本</span>
+          <span className="text-[var(--color-fg-muted)]">{t('about.currentVersion')}</span>
           <div className="flex items-center gap-2">
             <code className="font-mono">v{version ?? '...'}</code>
             {updateState.phase === 'idle' && (
@@ -741,14 +746,14 @@ function AboutTab() {
                 className="px-2 py-0.5 text-[10px] font-bold border-[length:var(--border-w)] border-[var(--color-border-light)] rounded-[var(--radius)]
                   hover:border-[var(--color-primary)] hover:text-[var(--color-primary)] transition-colors cursor-pointer"
               >
-                检查更新
+                {t('about.checkUpdate')}
               </button>
             )}
             {updateState.phase === 'checking' && (
-              <span className="text-[var(--color-fg-muted)] text-[10px]">检查中...</span>
+              <span className="text-[var(--color-fg-muted)] text-[10px]">{t('about.checking')}</span>
             )}
             {updateState.phase === 'up_to_date' && (
-              <span className="text-[var(--color-success)] text-[10px] font-bold">已是最新版本</span>
+              <span className="text-[var(--color-success)] text-[10px] font-bold">{t('about.upToDate')}</span>
             )}
           </div>
         </div>
@@ -765,7 +770,7 @@ function AboutTab() {
             className="px-3 py-1 text-[10px] font-bold bg-[var(--color-primary)] text-[var(--color-primary-fg)] border-[length:var(--border-w)] border-[var(--color-primary)] rounded-[var(--radius)]
               hover:opacity-90 transition-opacity cursor-pointer"
           >
-            立即更新
+            {t('about.update')}
           </button>
         </div>
       )}
@@ -773,14 +778,14 @@ function AboutTab() {
       {/* Updating */}
       {updateState.phase === 'updating' && (
         <div className="px-3 py-2 bg-[var(--color-bg-alt)] border-[length:var(--border-w)] border-[var(--color-border-light)] rounded-[var(--radius)] text-xs text-[var(--color-fg-muted)]">
-          更新中，请稍候...
+          {t('about.updating')}
         </div>
       )}
 
       {/* Updated */}
       {updateState.phase === 'updated' && (
         <div className="px-3 py-2 bg-[var(--color-success)]/10 border-[length:var(--border-w)] border-[var(--color-success)] rounded-[var(--radius)] text-xs text-[var(--color-success)] font-bold">
-          更新完成，服务正在重启...
+          {t('about.updated')}
         </div>
       )}
 
@@ -793,7 +798,7 @@ function AboutTab() {
             className="px-2 py-0.5 text-[10px] font-bold border-[length:var(--border-w)] border-[var(--color-danger)] text-[var(--color-danger)] rounded-[var(--radius)]
               hover:opacity-80 transition-opacity cursor-pointer"
           >
-            重试
+            {t('about.retry')}
           </button>
         </div>
       )}
@@ -802,10 +807,10 @@ function AboutTab() {
       <div className="pt-4 border-t-[length:var(--border-w)] border-[var(--color-border-light)]">
         <h4 className="text-xs font-bold flex items-center gap-2 mb-1">
           <Icon icon={IconTrash} width={14} />
-          缓存管理
+          {t('about.cache')}
         </h4>
         <p className="text-[10px] text-[var(--color-fg-muted)] mb-3">
-          清除浏览器缓存并强制重新加载页面，解决页面不更新的问题
+          {t('about.cacheHint')}
         </p>
         <button
           onClick={async () => {
@@ -831,7 +836,7 @@ function AboutTab() {
           className="w-full py-2 text-xs font-bold text-[var(--color-fg-muted)] border-[length:var(--border-w)] border-[var(--color-border-light)] rounded-[var(--radius)]
             hover:border-[var(--color-danger)] hover:text-[var(--color-danger)] transition-colors disabled:opacity-40"
         >
-          {clearing ? '清除中...' : '清除缓存并刷新'}
+          {clearing ? t('about.clearing') : t('about.clearCache')}
         </button>
       </div>
     </div>

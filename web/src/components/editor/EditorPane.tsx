@@ -6,6 +6,7 @@ import type { UserSettings } from '../../lib/types.ts'
 import { useTheme } from '../../hooks/useTheme.ts'
 import { getEditorSkinPalette } from '../../lib/editor-skins.ts'
 import MarkdownVditorPane from './MarkdownVditorPane.tsx'
+import { useI18n } from '../../hooks/useI18n'
 
 // Configure monaco to use local assets served by @tomjs/vite-plugin-monaco-editor
 loader.config({ paths: { vs: '/npm/monaco-editor@0.55.1/min/vs' } })
@@ -104,12 +105,13 @@ const DIFF_OPTIONS: editor.IDiffEditorConstructionOptions = {
 }
 
 function LoadingFallback() {
+  const { t } = useI18n()
   return (
     <div
       className="flex items-center justify-center h-full text-xs font-mono"
       style={{ color: 'var(--color-fg-muted)', background: 'var(--color-bg)' }}
     >
-      Loading editor...
+      {t('editor.loading')}
     </div>
   )
 }
@@ -118,6 +120,7 @@ const MIN_SCALE = 0.1
 const MAX_SCALE = 10
 
 function ImagePreviewPane({ src, fileName }: { src: string; fileName: string }) {
+  const { t } = useI18n()
   const [scale, setScale] = useState(1)
   const [translate, setTranslate] = useState({ x: 0, y: 0 })
   const [imgSize, setImgSize] = useState({ w: 0, h: 0 })
@@ -204,7 +207,7 @@ function ImagePreviewPane({ src, fileName }: { src: string; fileName: string }) 
           className="px-1.5 py-0.5 text-xs font-mono hover:opacity-70"
           style={{ color: 'var(--color-fg-muted)' }}
         >
-          Fit
+          {t('editor.fit')}
         </button>
         <button
           onClick={() => { setScale(1); setTranslate({ x: 0, y: 0 }) }}

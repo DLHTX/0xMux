@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Icon } from '@iconify/react'
 import { IconPlus } from '../../lib/icons'
 import { VaultBoyIcon } from './VaultBoyIcon'
+import { useI18n } from '../../hooks/useI18n'
 
 interface EmptyStateProps {
   onQuickCreate: () => Promise<void>
@@ -9,6 +10,7 @@ interface EmptyStateProps {
 }
 
 export function EmptyState({ onQuickCreate, onCustomCreate }: EmptyStateProps) {
+  const { t } = useI18n()
   const [creating, setCreating] = useState(false)
 
   const handleQuickCreate = async () => {
@@ -42,7 +44,7 @@ export function EmptyState({ onQuickCreate, onCustomCreate }: EmptyStateProps) {
           <div className="flex items-center gap-1" style={{ fontFamily: 'var(--font-mono)' }}>
             <span className="text-[var(--color-success)] text-sm font-bold">{'>'}</span>
             <span className="text-sm text-[var(--color-fg)]">
-              Create your first tmux session...
+              {t('empty.prompt')}
             </span>
             <span
               className="inline-block w-[8px] h-[16px] bg-[var(--color-fg)] ml-0.5"
@@ -65,7 +67,7 @@ export function EmptyState({ onQuickCreate, onCustomCreate }: EmptyStateProps) {
             disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Icon icon={IconPlus} width={16} height={16} />
-          {creating ? 'Creating...' : 'New Session'}
+          {creating ? t('empty.creating') : t('empty.newSession')}
         </button>
 
         {/* Custom create link */}
@@ -73,7 +75,7 @@ export function EmptyState({ onQuickCreate, onCustomCreate }: EmptyStateProps) {
           onClick={onCustomCreate}
           className="text-xs text-[var(--color-fg-faint)] underline cursor-pointer hover:text-[var(--color-fg-muted)] transition-colors"
         >
-          Custom settings...
+          {t('empty.customSettings')}
         </button>
       </div>
 

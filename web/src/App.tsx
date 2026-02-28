@@ -280,7 +280,7 @@ function AppContent() {
       ids?: string[]
     }) => {
       if (providers.length === 0) {
-        addToast('未检测到可用的 Claude/Codex', 'error')
+        addToast(t('toast.noProvider'), 'error')
         return
       }
 
@@ -295,18 +295,18 @@ function AppContent() {
         setAiSyncResult(result)
         setAiUninstallResult(null)
         if (result.summary.failed > 0) {
-          addToast(`同步完成，但有 ${result.summary.failed} 项失败`, 'error')
+          addToast(t('toast.syncPartialFail', { count: result.summary.failed }), 'error')
         } else {
-          addToast('同步完成', 'success')
+          addToast(t('toast.syncDone'), 'success')
         }
         await refreshAiData()
       } catch {
-        addToast('同步失败，请检查后端日志', 'error')
+        addToast(t('toast.syncFailed'), 'error')
       } finally {
         setAiSyncing(false)
       }
     },
-    [addToast, refreshAiData]
+    [addToast, refreshAiData, t]
   )
 
   const runAiUninstall = useCallback(
@@ -322,7 +322,7 @@ function AppContent() {
       removeSource?: boolean
     }) => {
       if (providers.length === 0 && !removeSource) {
-        addToast('未检测到可用的 Claude/Codex', 'error')
+        addToast(t('toast.noProvider'), 'error')
         return
       }
 
@@ -332,18 +332,18 @@ function AppContent() {
         setAiUninstallResult(result)
         setAiSyncResult(null)
         if (result.summary.failed > 0) {
-          addToast(`卸载完成，但有 ${result.summary.failed} 项失败`, 'error')
+          addToast(t('toast.uninstallPartialFail', { count: result.summary.failed }), 'error')
         } else {
-          addToast('卸载完成', 'success')
+          addToast(t('toast.uninstallDone'), 'success')
         }
         await refreshAiData()
       } catch {
-        addToast('卸载失败，请检查后端日志', 'error')
+        addToast(t('toast.uninstallFailed'), 'error')
       } finally {
         setAiSyncing(false)
       }
     },
-    [addToast, refreshAiData]
+    [addToast, refreshAiData, t]
   )
 
   const handleSaveGlobalConfig = useCallback(async (content: string) => {
@@ -351,26 +351,26 @@ function AppContent() {
     try {
       const result = await saveGlobalConfigApi({ content })
       setGlobalConfig(result)
-      addToast('全局配置已保存', 'success')
+      addToast(t('toast.globalConfigSaved'), 'success')
     } catch {
-      addToast('保存全局配置失败', 'error')
+      addToast(t('toast.globalConfigSaveFailed'), 'error')
     } finally {
       setGlobalConfigSaving(false)
     }
-  }, [addToast])
+  }, [addToast, t])
 
   const handleSyncGlobalConfig = useCallback(async () => {
     setGlobalConfigSaving(true)
     try {
       const result = await syncGlobalConfigApi({})
       setGlobalConfig(result)
-      addToast('全局配置已同步到 Provider', 'success')
+      addToast(t('toast.globalConfigSynced'), 'success')
     } catch {
-      addToast('同步全局配置失败', 'error')
+      addToast(t('toast.globalConfigSyncFailed'), 'error')
     } finally {
       setGlobalConfigSaving(false)
     }
-  }, [addToast])
+  }, [addToast, t])
 
   // Enable image paste feature
   useImagePaste(activeTerminalRef)
@@ -632,7 +632,7 @@ function AppContent() {
         setSelectedWindow({ sessionName: session.name, windowIndex: firstWin.index })
       }
     } catch {
-      addToast(`Failed to create session "${name}"`, 'error')
+      addToast(t('toast.createSessionFailed', { name }), 'error')
     }
   }
 
@@ -648,9 +648,9 @@ function AppContent() {
       if (activePaneId) {
         assignWindow(activePaneId, sessionName, newWindow.index)
       }
-      addToast(`Created window ${newWindow.index}`, 'success')
+      addToast(t('toast.createdWindow', { index: newWindow.index }), 'success')
     } catch {
-      addToast(`Failed to create window in "${sessionName}"`, 'error')
+      addToast(t('toast.createWindowFailed', { name: sessionName }), 'error')
     }
   }
 
@@ -666,7 +666,7 @@ function AppContent() {
           next.delete(sessionName)
           return next
         })
-        addToast(`Deleted session "${sessionName}"`, 'success')
+        addToast(t('toast.deletedSession', { name: sessionName }), 'success')
         return
       }
 
@@ -679,7 +679,7 @@ function AppContent() {
         next.set(sessionName, updated)
         return next
       })
-      addToast(`Deleted window ${windowIndex}`, 'success')
+      addToast(t('toast.deletedWindow', { index: windowIndex }), 'success')
     } catch (error: unknown) {
       const isLastWindowError =
         typeof error === 'object' &&
@@ -695,9 +695,9 @@ function AppContent() {
           next.delete(sessionName)
           return next
         })
-        addToast(`Deleted session "${sessionName}"`, 'success')
+        addToast(t('toast.deletedSession', { name: sessionName }), 'success')
       } else {
-        addToast(`Failed to delete window ${windowIndex}`, 'error')
+        addToast(t('toast.deleteWindowFailed', { index: windowIndex }), 'error')
       }
     }
   }
@@ -710,9 +710,9 @@ function AppContent() {
         next.delete(sessionName)
         return next
       })
-      addToast(`Deleted session "${sessionName}"`, 'success')
+      addToast(t('toast.deletedSession', { name: sessionName }), 'success')
     } catch {
-      addToast(`Failed to delete session "${sessionName}"`, 'error')
+      addToast(t('toast.deleteSessionFailed', { name: sessionName }), 'error')
     }
   }
 

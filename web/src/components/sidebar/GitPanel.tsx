@@ -7,6 +7,7 @@ import { gitCommit, gitPush, gitStage, gitUnstage, gitUnstageAll, gitCheckout, g
 import type { GitChangedFile, WorkspaceContext } from '../../lib/types'
 import { getGitStatusBadge, getGitStatusColor } from '../../lib/gitDecorations'
 import { getErrorMessage } from '../../lib/error'
+import { useI18n } from '../../hooks/useI18n'
 
 interface GitPanelProps {
   onOpenDiff: (path: string, staged: boolean) => void
@@ -90,6 +91,7 @@ function SectionHeader({ title, count, open, onToggle, actions }: {
 
 export function GitPanel({ onOpenDiff, workspace, addToast, onChangeCount }: GitPanelProps) {
   const { status, commits, branches, loading, error, refresh } = useGitStatus(workspace)
+  const { t } = useI18n()
   const [showCommits, setShowCommits] = useState(false)
   const [showBranches, setShowBranches] = useState(false)
   const [stagedOpen, setStagedOpen] = useState(true)
@@ -106,22 +108,22 @@ export function GitPanel({ onOpenDiff, workspace, addToast, onChangeCount }: Git
 
   async function handleStage(paths: string[]) {
     setActionError(null)
-    try { await gitStage(paths, workspace); refresh() } catch (e) { setActionError(getErrorMessage(e, 'Stage failed')) }
+    try { await gitStage(paths, workspace); refresh() } catch (e) { setActionError(getErrorMessage(e, t('git.stageFailed'))) }
   }
 
   async function handleUnstage(paths: string[]) {
     setActionError(null)
-    try { await gitUnstage(paths, workspace); refresh() } catch (e) { setActionError(getErrorMessage(e, 'Unstage failed')) }
+    try { await gitUnstage(paths, workspace); refresh() } catch (e) { setActionError(getErrorMessage(e, t('git.unstageFailed'))) }
   }
 
   async function handleUnstageAll() {
     setActionError(null)
-    try { await gitUnstageAll(workspace); refresh() } catch (e) { setActionError(getErrorMessage(e, 'Unstage all failed')) }
+    try { await gitUnstageAll(workspace); refresh() } catch (e) { setActionError(getErrorMessage(e, t('git.unstageAllFailed'))) }
   }
 
   async function handleDiscard(paths: string[]) {
     setActionError(null)
-    try { await gitDiscard(paths, workspace); refresh() } catch (e) { setActionError(getErrorMessage(e, 'Discard failed')) }
+    try { await gitDiscard(paths, workspace); refresh() } catch (e) { setActionError(getErrorMessage(e, t('git.discardFailed'))) }
   }
 
   async function handleCheckout(branch: string) {
@@ -129,12 +131,12 @@ export function GitPanel({ onOpenDiff, workspace, addToast, onChangeCount }: Git
     setActionError(null)
     try {
       await gitCheckout(branch, workspace)
-      addToast(`Switched to ${branch}`, 'success')
+      addToast(t('git.switchedTo', { branch }), 'success')
       refresh()
     } catch (e) {
       const msg = getErrorMessage(e, 'Checkout failed')
       setActionError(msg)
-      addToast(`Checkout failed: ${msg}`, 'error')
+      addToast(t('git.checkoutFailed', { msg }), 'error')
     } finally { setCheckingOut(null) }
   }
 
@@ -145,12 +147,12 @@ export function GitPanel({ onOpenDiff, workspace, addToast, onChangeCount }: Git
     try {
       const result = await gitCommit(commitMsg.trim(), workspace)
       setCommitMsg('')
-      addToast(`Committed ${result.short_hash}`, 'success')
+      addToast(t('git.committed', { hash: result.short_hash }), 'success')
       refresh()
     } catch (e) {
       const msg = getErrorMessage(e, 'Commit failed')
       setActionError(msg)
-      addToast(`Commit failed: ${msg}`, 'error')
+      addToast(t('git.commitFailed', { msg }), 'error')
     } finally { setCommitting(false) }
   }
 
@@ -159,12 +161,12 @@ export function GitPanel({ onOpenDiff, workspace, addToast, onChangeCount }: Git
     setActionError(null)
     try {
       await gitPush(workspace)
-      addToast('Push completed', 'success')
+      addToast(t('git.pushCompleted'), 'success')
       refresh()
     } catch (e) {
       const msg = getErrorMessage(e, 'Push failed')
       setActionError(msg)
-      addToast(`Push failed: ${msg}`, 'error')
+      addToast(t('git.pushFailed', { msg }), 'error')
     } finally { setPushing(false) }
   }
 
@@ -186,7 +188,7 @@ export function GitPanel({ onOpenDiff, workspace, addToast, onChangeCount }: Git
           onClick={refresh}
           className="text-xs text-[var(--color-primary)] font-bold hover:underline"
         >
-          Retry
+          {t('git.retry')}
         </button>
       </div>
     )
@@ -195,7 +197,7 @@ export function GitPanel({ onOpenDiff, workspace, addToast, onChangeCount }: Git
   if (loading && !status) {
     return (
       <div className="flex items-center justify-center h-full">
-        <span className="text-xs text-[var(--color-fg-muted)] animate-pulse">Loading...</span>
+        <span className="text-xs text-[var(--color-fg-muted)] animate-pulse">{t('git.loading')}</span>
       </div>
     )
   }
@@ -222,7 +224,7 @@ export function GitPanel({ onOpenDiff, workspace, addToast, onChangeCount }: Git
         <button
           onClick={refresh}
           className={`shrink-0 w-5 h-5 flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] transition-colors ${loading ? 'animate-spin' : ''}`}
-          title="Refresh"
+          title={t('git.refresh')}
         >
           <Icon icon={IconRefreshCw} width={12} />
         </button>
@@ -235,7 +237,7 @@ export function GitPanel({ onOpenDiff, workspace, addToast, onChangeCount }: Git
           value={commitMsg}
           onChange={e => setCommitMsg(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') handleCommit() }}
-          placeholder="Commit message"
+          placeholder={t('git.commitPlaceholder')}
           className="w-full text-xs px-1.5 py-1 bg-[var(--color-bg)] border-[length:var(--border-w)] border-[var(--color-border)] text-[var(--color-fg)] placeholder:text-[var(--color-fg-muted)] outline-none focus:border-[var(--color-primary)]"
           disabled={committing}
         />
@@ -244,26 +246,26 @@ export function GitPanel({ onOpenDiff, workspace, addToast, onChangeCount }: Git
             onClick={handleCommit}
             disabled={!commitMsg.trim() || !hasStagedChanges || committing}
             className="flex-1 h-6 flex items-center justify-center gap-1 text-xs font-bold bg-[var(--color-primary)] text-[var(--color-bg)] border-[length:var(--border-w)] border-[var(--color-border)] hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-            title={!hasStagedChanges ? 'No staged changes' : 'Commit (Enter)'}
+            title={!hasStagedChanges ? t('git.noStagedChanges') : t('git.commitHint')}
           >
             {committing
               ? <Icon icon={IconRefreshCw} width={12} className="animate-spin" />
               : <Icon icon={IconCheck} width={12} />
             }
-            <span>{committing ? 'Committing...' : 'Commit'}</span>
+            <span>{committing ? t('git.committing') : t('git.commit')}</span>
           </button>
           {hasUnpushedCommits && (
             <button
               onClick={handlePush}
               disabled={pushing}
               className="flex-1 h-6 flex items-center justify-center gap-1 text-xs font-bold bg-[var(--color-bg-alt)] text-[var(--color-fg)] border-[length:var(--border-w)] border-[var(--color-border)] hover:bg-[var(--color-primary)] hover:text-[var(--color-bg)] transition-all disabled:opacity-40"
-              title={`Push ${status.ahead} commit(s) to remote`}
+              title={t('git.pushHint', { n: status.ahead })}
             >
               {pushing
                 ? <Icon icon={IconRefreshCw} width={12} className="animate-spin" />
                 : <Icon icon={IconArrowUp} width={12} />
               }
-              <span>{pushing ? 'Pushing...' : `Push ${status.ahead}`}</span>
+              <span>{pushing ? t('git.pushing') : t('git.push', { n: status.ahead })}</span>
             </button>
           )}
         </div>
@@ -278,7 +280,7 @@ export function GitPanel({ onOpenDiff, workspace, addToast, onChangeCount }: Git
         {staged.length > 0 && (
           <div>
             <SectionHeader
-              title="Staged Changes"
+              title={t('git.staged')}
               count={staged.length}
               open={stagedOpen}
               onToggle={() => setStagedOpen(!stagedOpen)}
@@ -286,7 +288,7 @@ export function GitPanel({ onOpenDiff, workspace, addToast, onChangeCount }: Git
                 <button
                   onClick={handleUnstageAll}
                   className="w-5 h-5 flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
-                  title="Unstage All"
+                  title={t('git.unstageAll')}
                 >
                   <Icon icon={IconMinus} width={12} />
                 </button>
@@ -299,7 +301,7 @@ export function GitPanel({ onOpenDiff, workspace, addToast, onChangeCount }: Git
                 onOpen={() => onOpenDiff(f.path, true)}
                 action={() => handleUnstage([f.path])}
                 actionIcon={IconMinus}
-                actionTitle="Unstage"
+                actionTitle={t('git.unstage')}
               />
             ))}
           </div>
@@ -309,7 +311,7 @@ export function GitPanel({ onOpenDiff, workspace, addToast, onChangeCount }: Git
         {unstaged.length > 0 && (
           <div>
             <SectionHeader
-              title="Changes"
+              title={t('git.unstaged')}
               count={unstaged.length}
               open={changesOpen}
               onToggle={() => setChangesOpen(!changesOpen)}
@@ -318,14 +320,14 @@ export function GitPanel({ onOpenDiff, workspace, addToast, onChangeCount }: Git
                   <button
                     onClick={() => handleDiscard(unstaged.map(f => f.path))}
                     className="w-5 h-5 flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-danger)]"
-                    title="Discard All Changes"
+                    title={t('git.discardAll')}
                   >
                     <Icon icon={IconUndo} width={12} />
                   </button>
                   <button
                     onClick={() => handleStage(unstaged.map(f => f.path))}
                     className="w-5 h-5 flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
-                    title="Stage All Changes"
+                    title={t('git.stageAll')}
                   >
                     <Icon icon={IconPlus} width={12} />
                   </button>
@@ -339,10 +341,10 @@ export function GitPanel({ onOpenDiff, workspace, addToast, onChangeCount }: Git
                 onOpen={() => onOpenDiff(f.path, false)}
                 action={() => handleStage([f.path])}
                 actionIcon={IconPlus}
-                actionTitle="Stage"
+                actionTitle={t('git.stage')}
                 secondaryAction={() => handleDiscard([f.path])}
                 secondaryIcon={IconUndo}
-                secondaryTitle="Discard"
+                secondaryTitle={t('git.discard')}
               />
             ))}
           </div>
@@ -352,7 +354,7 @@ export function GitPanel({ onOpenDiff, workspace, addToast, onChangeCount }: Git
         {untracked.length > 0 && (
           <div>
             <SectionHeader
-              title="Untracked"
+              title={t('git.untracked')}
               count={untracked.length}
               open={untrackedOpen}
               onToggle={() => setUntrackedOpen(!untrackedOpen)}
@@ -361,14 +363,14 @@ export function GitPanel({ onOpenDiff, workspace, addToast, onChangeCount }: Git
                   <button
                     onClick={() => handleDiscard(untracked.map(f => f.path))}
                     className="w-5 h-5 flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-danger)]"
-                    title="Discard All Untracked"
+                    title={t('git.discardAllUntracked')}
                   >
                     <Icon icon={IconUndo} width={12} />
                   </button>
                   <button
                     onClick={() => handleStage(untracked.map(f => f.path))}
                     className="w-5 h-5 flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
-                    title="Stage All Untracked"
+                    title={t('git.stageAllUntracked')}
                   >
                     <Icon icon={IconPlus} width={12} />
                   </button>
@@ -382,10 +384,10 @@ export function GitPanel({ onOpenDiff, workspace, addToast, onChangeCount }: Git
                 onOpen={() => onOpenDiff(f.path, false)}
                 action={() => handleStage([f.path])}
                 actionIcon={IconPlus}
-                actionTitle="Stage"
+                actionTitle={t('git.stage')}
                 secondaryAction={() => handleDiscard([f.path])}
                 secondaryIcon={IconUndo}
-                secondaryTitle="Discard"
+                secondaryTitle={t('git.discard')}
               />
             ))}
           </div>
@@ -398,7 +400,7 @@ export function GitPanel({ onOpenDiff, workspace, addToast, onChangeCount }: Git
             className="w-full flex items-center gap-1 px-2 py-1 text-xs font-bold text-[var(--color-fg)] hover:bg-[var(--color-bg-alt)] transition-colors"
           >
             <Icon icon={showCommits ? IconChevronDown : IconChevronRight} width={12} />
-            <span className="flex-1 text-left">Recent Commits</span>
+            <span className="flex-1 text-left">{t('git.commits')}</span>
             <span className="text-[var(--color-fg-muted)] text-[10px] tabular-nums">{commits.length}</span>
           </button>
           {showCommits && commits.map(c => (
@@ -416,7 +418,7 @@ export function GitPanel({ onOpenDiff, workspace, addToast, onChangeCount }: Git
             className="w-full flex items-center gap-1 px-2 py-1 text-xs font-bold text-[var(--color-fg)] hover:bg-[var(--color-bg-alt)] transition-colors"
           >
             <Icon icon={showBranches ? IconChevronDown : IconChevronRight} width={12} />
-            <span className="flex-1 text-left">Branches</span>
+            <span className="flex-1 text-left">{t('git.branches')}</span>
             <span className="text-[var(--color-fg-muted)] text-[10px] tabular-nums">{branches.length}</span>
           </button>
           {showBranches && branches.map(b => (
@@ -430,7 +432,7 @@ export function GitPanel({ onOpenDiff, workspace, addToast, onChangeCount }: Git
                   disabled={checkingOut !== null}
                   className="truncate text-[var(--color-fg-muted)] hover:text-[var(--color-primary)] hover:underline disabled:opacity-40 text-left"
                 >
-                  {checkingOut === b.name ? 'Switching...' : b.name}
+                  {checkingOut === b.name ? t('git.switching') : b.name}
                 </button>
               )}
               <span className="text-[10px] text-[var(--color-fg-muted)] font-mono">{b.short_hash}</span>

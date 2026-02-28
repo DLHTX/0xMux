@@ -907,7 +907,7 @@ export function FileExplorer({ onFileOpen, workspace }: FileExplorerProps) {
           onClick={handleRefresh}
           className="text-xs text-[var(--color-primary)] hover:underline cursor-pointer"
         >
-          Retry
+          {t('files.retry')}
         </button>
       </div>
     )
@@ -918,27 +918,27 @@ export function FileExplorer({ onFileOpen, workspace }: FileExplorerProps) {
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b-[length:var(--border-w)] border-[var(--color-border-light)]">
         <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-fg-muted)]">
-          Explorer
+          {t('files.title')}
         </span>
         <div className="flex items-center gap-0.5">
           <button
             onClick={expandAll}
             className="w-6 h-6 flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] transition-colors cursor-pointer rounded-[var(--radius)] hover:bg-[var(--color-bg-alt)]"
-            title="Expand all"
+            title={t('files.expandAll')}
           >
             <Icon icon={IconChevronsDown} width={14} height={14} />
           </button>
           <button
             onClick={collapseAll}
             className="w-6 h-6 flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] transition-colors cursor-pointer rounded-[var(--radius)] hover:bg-[var(--color-bg-alt)]"
-            title="Collapse all"
+            title={t('files.collapseAll')}
           >
             <Icon icon={IconChevronsUp} width={14} height={14} />
           </button>
           <button
             onClick={handleRefresh}
             className="w-6 h-6 flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] transition-colors cursor-pointer rounded-[var(--radius)] hover:bg-[var(--color-bg-alt)]"
-            title="Refresh"
+            title={t('files.refresh')}
           >
             <Icon icon={IconRefreshCw} width={14} height={14} />
           </button>
@@ -956,7 +956,7 @@ export function FileExplorer({ onFileOpen, workspace }: FileExplorerProps) {
       >
         {roots.length === 0 ? (
           <div className="p-4 text-center">
-            <p className="text-xs text-[var(--color-fg-muted)]">No files found</p>
+            <p className="text-xs text-[var(--color-fg-muted)]">{t('files.empty')}</p>
           </div>
         ) : (
           sortNodes(roots).map((node) => (

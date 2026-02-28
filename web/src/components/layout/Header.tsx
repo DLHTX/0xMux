@@ -4,6 +4,7 @@ import { IconPuzzle, IconSettings } from '../../lib/icons'
 import type { ConnectionStatus } from '../../lib/types'
 import { ThemeConfigurator } from '../settings/ThemeConfigurator'
 import { Logo } from './Logo'
+import { useI18n } from '../../hooks/useI18n'
 
 interface HeaderProps {
   connectionStatus: ConnectionStatus
@@ -20,12 +21,13 @@ export function Header({
   showPluginButton = false,
   onLogoClick,
 }: HeaderProps) {
+  const { t } = useI18n()
   const [showConfig, setShowConfig] = useState(false)
 
   const statusConfig: Record<ConnectionStatus, { dotClass: string; label: string }> = {
-    connected: { dotClass: 'bg-[var(--color-success)]', label: 'Connected' },
-    connecting: { dotClass: 'bg-[var(--color-warning)]', label: 'Connecting' },
-    disconnected: { dotClass: 'bg-[var(--color-danger)]', label: 'Offline' },
+    connected: { dotClass: 'bg-[var(--color-success)]', label: t('header.connected') },
+    connecting: { dotClass: 'bg-[var(--color-warning)]', label: t('header.connecting') },
+    disconnected: { dotClass: 'bg-[var(--color-danger)]', label: t('header.offline') },
   }
 
   const status = statusConfig[connectionStatus]
@@ -64,7 +66,7 @@ export function Header({
               className="w-8 h-8 flex items-center justify-center border-[length:var(--border-w)] border-[var(--color-border)]
                 rounded-[var(--radius)] transition-colors cursor-pointer
                 hover:bg-[var(--color-primary)] hover:text-[var(--color-primary-fg)] hover:border-[var(--color-primary)]"
-              aria-label="Plugins"
+              aria-label={t('header.plugins')}
             >
               <Icon icon={IconPuzzle} width={16} height={16} />
             </button>
@@ -76,7 +78,7 @@ export function Header({
             className="w-8 h-8 flex items-center justify-center border-[length:var(--border-w)] border-[var(--color-border)]
               rounded-[var(--radius)] transition-colors cursor-pointer
               hover:bg-[var(--color-primary)] hover:text-[var(--color-primary-fg)] hover:border-[var(--color-primary)]"
-            aria-label="Settings"
+            aria-label={t('header.settings')}
           >
             <Icon icon={IconSettings} width={16} height={16} />
           </button>

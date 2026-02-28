@@ -275,7 +275,7 @@ export function CreateSessionModal({
             <input
               value={dirSearch}
               onChange={(e) => setDirSearch(e.target.value)}
-              placeholder="搜索文件夹..."
+              placeholder={t('create.searchDir')}
               className="flex-1 bg-transparent outline-none text-[10px] placeholder:text-[var(--color-fg-faint)]"
             />
           </div>
@@ -284,7 +284,7 @@ export function CreateSessionModal({
           <div className="border border-[var(--color-border-light)] rounded-[var(--radius)] max-h-[200px] overflow-y-auto">
             {dirsLoading ? (
               <div className="p-3 text-center text-[10px] text-[var(--color-fg-faint)] animate-pulse">
-                Loading...
+                {t('create.loading')}
               </div>
             ) : filteredDirs.length === 0 ? (
               <div className="p-3 text-center text-[10px] text-[var(--color-fg-faint)]">
@@ -322,7 +322,7 @@ export function CreateSessionModal({
         {/* ── Session Name Input ── */}
         <div className="mb-3">
           <div className="text-[10px] text-[var(--color-success)] uppercase tracking-wider mb-1.5 font-bold border-l-2 border-[var(--color-success)] pl-2">
-            SESSION NAME
+            {t('create.sessionName')}
           </div>
           <div className="flex items-center gap-2">
             <span className="font-bold text-sm">{'>'}</span>
@@ -348,7 +348,7 @@ export function CreateSessionModal({
         {/* ── Init Command ── */}
         <div className="mb-3">
           <div className="text-[10px] text-[var(--color-success)] uppercase tracking-wider mb-1.5 font-bold border-l-2 border-[var(--color-success)] pl-2">
-            INIT COMMAND
+            {t('create.initCommand')}
           </div>
           <div className="flex items-center gap-2">
             <Icon icon={IconTerminal} width={14} className="text-[var(--color-fg-muted)] shrink-0" />
@@ -359,7 +359,7 @@ export function CreateSessionModal({
                 if (e.key === 'Enter') handleSubmit()
                 if (e.key === 'Escape') onClose()
               }}
-              placeholder="e.g. claude, npm run dev ..."
+              placeholder={t('create.initPlaceholder')}
               className="flex-1 bg-transparent outline-none text-xs font-mono
                 border-b border-[var(--color-border-light)] focus:border-[var(--color-primary)] py-1
                 placeholder:text-[var(--color-fg-faint)]"

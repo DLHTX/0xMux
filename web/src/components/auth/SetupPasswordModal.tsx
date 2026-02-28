@@ -3,7 +3,9 @@ import { Icon } from '@iconify/react'
 import { IconEye, IconEyeOff, IconLock } from '../../lib/icons'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
-import { getPasswordStrength, getStrengthColor, getStrengthLabel } from '../../lib/password'
+import { useI18n } from '../../hooks/useI18n'
+import { getPasswordStrength, getStrengthColor } from '../../lib/password'
+import type { MessageKey } from '../../lib/i18n'
 import type { SetupPasswordRequest } from '../../lib/types'
 
 interface SetupPasswordModalProps {
@@ -11,7 +13,10 @@ interface SetupPasswordModalProps {
   onSkip: () => Promise<void>
 }
 
+const STRENGTH_KEYS: Record<string, MessageKey> = { weak: 'pwd.weak', medium: 'pwd.medium', strong: 'pwd.strong' }
+
 export function SetupPasswordModal({ onSubmit, onSkip }: SetupPasswordModalProps) {
+  const { t } = useI18n()
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -28,12 +33,12 @@ export function SetupPasswordModal({ onSubmit, onSkip }: SetupPasswordModalProps
     setError('')
 
     if (!passwordsMatch) {
-      setError('两次输入的密码不一致')
+      setError(t('setupPwd.mismatch'))
       return
     }
 
     if (password.length < 8) {
-      setError('密码长度至少为8个字符')
+      setError(t('setupPwd.tooShort'))
       return
     }
 
@@ -41,7 +46,7 @@ export function SetupPasswordModal({ onSubmit, onSkip }: SetupPasswordModalProps
     try {
       await onSubmit({ password, confirm })
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : '设置密码失败')
+      setError(err instanceof Error ? err.message : t('setupPwd.failed'))
     } finally {
       setLoading(false)
     }
@@ -53,7 +58,7 @@ export function SetupPasswordModal({ onSubmit, onSkip }: SetupPasswordModalProps
     try {
       await onSkip()
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : '跳过失败')
+      setError(err instanceof Error ? err.message : t('setupPwd.skipFailed'))
     } finally {
       setLoading(false)
     }
@@ -68,9 +73,9 @@ export function SetupPasswordModal({ onSubmit, onSkip }: SetupPasswordModalProps
             <Icon icon={IconLock} width={20} />
           </div>
           <div>
-            <h2 className="text-base font-bold">设置访问密码</h2>
+            <h2 className="text-base font-bold">{t('setupPwd.title')}</h2>
             <p className="text-xs text-[var(--color-fg-muted)]">
-              为 0xMux 设置密码以保护你的终端访问
+              {t('setupPwd.subtitle')}
             </p>
           </div>
         </div>
@@ -79,14 +84,14 @@ export function SetupPasswordModal({ onSubmit, onSkip }: SetupPasswordModalProps
           {/* Password Input */}
           <div className="flex flex-col gap-1">
             <label className="text-xs font-bold text-[var(--color-fg-muted)]">
-              密码
+              {t('setupPwd.password')}
             </label>
             <div className="relative">
               <Input
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="至少8个字符"
+                placeholder={t('setupPwd.placeholder')}
                 className="pr-10"
                 autoFocus
               />
@@ -114,7 +119,7 @@ export function SetupPasswordModal({ onSubmit, onSkip }: SetupPasswordModalProps
                   className="text-[10px] font-bold"
                   style={{ color: getStrengthColor(strength) }}
                 >
-                  {getStrengthLabel(strength)}
+                  {t(STRENGTH_KEYS[strength])}
                 </span>
               </div>
             )}
@@ -123,16 +128,16 @@ export function SetupPasswordModal({ onSubmit, onSkip }: SetupPasswordModalProps
           {/* Confirm Password Input */}
           <div className="flex flex-col gap-1">
             <label className="text-xs font-bold text-[var(--color-fg-muted)]">
-              确认密码
+              {t('setupPwd.confirm')}
             </label>
             <div className="relative">
               <Input
                 type={showConfirm ? 'text' : 'password'}
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
-                placeholder="再次输入密码"
+                placeholder={t('setupPwd.confirmPlaceholder')}
                 className="pr-10"
-                error={confirm && !passwordsMatch ? '密码不一致' : undefined}
+                error={confirm && !passwordsMatch ? t('setupPwd.mismatchShort') : undefined}
               />
               <button
                 type="button"
@@ -158,7 +163,7 @@ export function SetupPasswordModal({ onSubmit, onSkip }: SetupPasswordModalProps
             className="w-full mt-2 shadow-[2px_2px_0_var(--color-border-light)]"
             disabled={!canSubmit || loading}
           >
-            {loading ? '设置中...' : '设置密码'}
+            {loading ? t('setupPwd.setting') : t('setupPwd.submit')}
           </Button>
 
           {/* Skip Button */}
@@ -168,7 +173,7 @@ export function SetupPasswordModal({ onSubmit, onSkip }: SetupPasswordModalProps
             disabled={loading}
             className="w-full mt-2 px-4 py-2 text-xs text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? '跳过中...' : '暂时跳过（不设置密码）'}
+            {loading ? t('setupPwd.skipping') : t('setupPwd.skip')}
           </button>
         </form>
       </div>

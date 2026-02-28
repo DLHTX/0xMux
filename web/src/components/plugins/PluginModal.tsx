@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useI18n } from '../../hooks/useI18n'
 import { useCrtClose } from '../../hooks/useCrtClose'
 import { Icon } from '@iconify/react'
 import { IconPuzzle, IconRefreshCw, IconX, IconChevronDown, IconChevronUp } from '../../lib/icons'
@@ -55,6 +56,7 @@ export function PluginModal({
   onSaveGlobalConfig,
   onSyncGlobalConfig,
 }: PluginModalProps) {
+  const { t } = useI18n()
   const [search, setSearch] = useState('')
   const { visible, closing } = useCrtClose(open)
   if (!visible) return null
@@ -98,13 +100,13 @@ export function PluginModal({
 
   const handleUninstallAll = () => {
     if (!canOperate || syncing) return
-    if (!window.confirm('确认卸载全部 Skills + MCP？')) return
+    if (!window.confirm(t('plugin.confirmUninstallAll'))) return
     onUninstallAll(activeProviders)
   }
 
   const handleDeleteAll = () => {
     if (!canOperate || syncing) return
-    if (!window.confirm('确认彻底删除全部 Skills + MCP？此操作会删除源内容。')) return
+    if (!window.confirm(t('plugin.confirmDeleteAll'))) return
     onDeleteAll(activeProviders)
   }
 
@@ -123,7 +125,7 @@ export function PluginModal({
         <div className="flex items-center justify-between p-4 border-b-[length:var(--border-w)] border-[var(--color-border)]">
           <div className="flex items-center gap-2">
             <Icon icon={IconPuzzle} width={18} />
-            <h2 className="text-base font-bold">插件中心（技能 + MCP）</h2>
+            <h2 className="text-base font-bold">{t('plugin.title')}</h2>
           </div>
           <button
             onClick={onClose}
@@ -139,7 +141,7 @@ export function PluginModal({
               <div key={provider} className="px-2.5 py-1 rounded-[var(--radius)] border-[length:var(--border-w)] border-[var(--color-border-light)]">
                 <span className="font-bold mr-1">{providerMeta[provider].label}</span>
                 <span className={providerMeta[provider].installed ? 'text-[var(--color-success)]' : 'text-[var(--color-fg-muted)]'}>
-                  {providerMeta[provider].installed ? '已安装' : '未安装'}
+                  {providerMeta[provider].installed ? t('plugin.installed') : t('plugin.notInstalled')}
                 </span>
               </div>
             ))}
@@ -152,7 +154,7 @@ export function PluginModal({
               className="px-3 py-1.5 text-xs font-bold border-[length:var(--border-w)] border-[var(--color-border-light)] rounded-[var(--radius)] hover:border-[var(--color-border)] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
             >
               <Icon icon={IconRefreshCw} width={14} className={loading ? 'animate-spin' : ''} />
-              刷新
+              {t('plugin.refresh')}
             </button>
 
             <button
@@ -160,7 +162,7 @@ export function PluginModal({
               disabled={!canOperate || syncing}
               className="px-3 py-1.5 text-xs font-bold border-[length:var(--border-w)] border-[var(--color-primary)] text-[var(--color-primary)] rounded-[var(--radius)] hover:bg-[var(--color-primary)] hover:text-[var(--color-primary-fg)] disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {syncing ? '处理中...' : '同步全部'}
+              {syncing ? t('plugin.processing') : t('plugin.syncAll')}
             </button>
 
             <button
@@ -168,7 +170,7 @@ export function PluginModal({
               disabled={!canOperate || syncing}
               className="px-3 py-1.5 text-xs font-bold border-[length:var(--border-w)] border-[var(--color-danger)] text-[var(--color-danger)] rounded-[var(--radius)] hover:bg-[var(--color-danger)] hover:text-[var(--color-bg)] disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              卸载全部
+              {t('plugin.uninstallAll')}
             </button>
 
             <button
@@ -176,7 +178,7 @@ export function PluginModal({
               disabled={!canOperate || syncing}
               className="px-3 py-1.5 text-xs font-bold border-[length:var(--border-w)] border-[var(--color-danger)] text-[var(--color-danger)] rounded-[var(--radius)] hover:bg-[var(--color-danger)] hover:text-[var(--color-bg)] disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              彻底删除全部
+              {t('plugin.deleteAll')}
             </button>
           </div>
 
@@ -184,15 +186,15 @@ export function PluginModal({
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="搜索技能 / MCP"
+            placeholder={t('plugin.searchPlaceholder')}
             className="w-full px-3 py-2 text-sm border-[length:var(--border-w)] border-[var(--color-border-light)] rounded-[var(--radius)] bg-[var(--color-bg)] text-[var(--color-fg)] placeholder:text-[var(--color-fg-muted)] focus:outline-none focus:border-[var(--color-primary)]"
           />
 
           {!canOperate && (
-            <div className="text-xs text-[var(--color-warning)]">未检测到可用 Provider（Claude/Codex）。</div>
+            <div className="text-xs text-[var(--color-warning)]">{t('plugin.noProvider')}</div>
           )}
           <div className="text-xs text-[var(--color-fg-muted)] border-[length:var(--border-w)] border-[var(--color-border-light)] rounded-[var(--radius)] px-3 py-2">
-            同步说明：点击“同步”会把这里的技能和 MCP 分发到已安装的 Claude / Codex；“卸载”只从客户端移除；“彻底删除”会连同源内容一起删除。
+            {t('plugin.syncHint')}
           </div>
         </div>
 
@@ -206,13 +208,13 @@ export function PluginModal({
                   <>
                     {isEmpty && (
                       <div className="p-3 border-[length:var(--border-w)] border-[var(--color-border-light)] rounded-[var(--radius)] text-xs text-[var(--color-fg-muted)]">
-                        <div className="font-bold text-[var(--color-fg)] mb-1">暂无可管理内容</div>
-                        <div>可在设置里导入或添加技能后再同步。</div>
+                        <div className="font-bold text-[var(--color-fg)] mb-1">{t('plugin.emptyTitle')}</div>
+                        <div>{t('plugin.emptyHint')}</div>
                       </div>
                     )}
                     {noMatch && (
                       <div className="p-3 border-[length:var(--border-w)] border-[var(--color-border-light)] rounded-[var(--radius)] text-xs text-[var(--color-fg-muted)]">
-                        没有匹配 &quot;{search.trim()}&quot; 的结果。
+                        {t('plugin.noMatch', { keyword: search.trim() })}
                       </div>
                     )}
                     {!isEmpty && !noMatch && (
@@ -235,13 +237,13 @@ export function PluginModal({
                   <>
                     {isEmpty && (
                       <div className="p-3 border-[length:var(--border-w)] border-[var(--color-border-light)] rounded-[var(--radius)] text-xs text-[var(--color-fg-muted)]">
-                        <div className="font-bold text-[var(--color-fg)] mb-1">暂无可管理内容</div>
-                        <div>可在设置里导入或添加技能后再同步。</div>
+                        <div className="font-bold text-[var(--color-fg)] mb-1">{t('plugin.emptyTitle')}</div>
+                        <div>{t('plugin.emptyHint')}</div>
                       </div>
                     )}
                     {noMatch && (
                       <div className="p-3 border-[length:var(--border-w)] border-[var(--color-border-light)] rounded-[var(--radius)] text-xs text-[var(--color-fg-muted)]">
-                        没有匹配 &quot;{search.trim()}&quot; 的结果。
+                        {t('plugin.noMatch', { keyword: search.trim() })}
                       </div>
                     )}
                     {!isEmpty && !noMatch && (
@@ -259,7 +261,7 @@ export function PluginModal({
               },
               {
                 id: 'global-config',
-                label: '全局配置',
+                label: t('plugin.globalConfig'),
                 content: (
                   <GlobalConfigEditor
                     config={globalConfig}
@@ -299,8 +301,9 @@ function SkillList({
   onUninstallItem: (kind: AiSyncType, id: string, providers: AiProvider[]) => void
   onDeleteItem: (kind: AiSyncType, id: string, providers: AiProvider[]) => void
 }) {
+  const { t } = useI18n()
   if (items.length === 0) {
-    return <div className="text-xs text-[var(--color-fg-muted)]">暂无 Skills。</div>
+    return <div className="text-xs text-[var(--color-fg-muted)]">{t('plugin.noSkills')}</div>
   }
 
   return (
@@ -344,8 +347,9 @@ function McpList({
   onUninstallItem: (kind: AiSyncType, id: string, providers: AiProvider[]) => void
   onDeleteItem: (kind: AiSyncType, id: string, providers: AiProvider[]) => void
 }) {
+  const { t } = useI18n()
   if (items.length === 0) {
-    return <div className="text-xs text-[var(--color-fg-muted)]">暂无 MCP。</div>
+    return <div className="text-xs text-[var(--color-fg-muted)]">{t('plugin.noMcp')}</div>
   }
 
   return (
@@ -407,6 +411,7 @@ function ItemCard({
   onUninstallItem: (kind: AiSyncType, id: string, providers: AiProvider[]) => void
   onDeleteItem: (kind: AiSyncType, id: string, providers: AiProvider[]) => void
 }) {
+  const { t } = useI18n()
   const [expanded, setExpanded] = useState(false)
   const hasDescription = description.length > 0
   const highlighted = official || recommended
@@ -419,12 +424,12 @@ function ItemCard({
             {name}
             {official && (
               <span className="text-[10px] px-1.5 py-0.5 bg-[var(--color-primary)] text-[var(--color-primary-fg)] font-bold shrink-0">
-                官方
+                {t('plugin.official')}
               </span>
             )}
             {recommended && !official && (
               <span className="text-[10px] px-1.5 py-0.5 bg-[var(--color-warning)] text-[var(--color-bg)] font-bold shrink-0">
-                推荐
+                {t('plugin.recommended')}
               </span>
             )}
           </div>
@@ -440,24 +445,24 @@ function ItemCard({
             disabled={syncing || providers.length === 0}
             className="px-2 py-1 text-xs border-[length:var(--border-w)] border-[var(--color-primary)] text-[var(--color-primary)] rounded-[var(--radius)] disabled:opacity-50"
           >
-            同步
+            {t('plugin.sync')}
           </button>
           <button
             onClick={() => onUninstallItem(kind, id, providers)}
             disabled={syncing || providers.length === 0}
             className="px-2 py-1 text-xs border-[length:var(--border-w)] border-[var(--color-danger)] text-[var(--color-danger)] rounded-[var(--radius)] disabled:opacity-50"
           >
-            卸载
+            {t('plugin.uninstall')}
           </button>
           <button
             onClick={() => {
-              if (!window.confirm(`确认彻底删除 ${name}？此操作会删除源内容。`)) return
+              if (!window.confirm(t('plugin.confirmDeleteItem', { name }))) return
               onDeleteItem(kind, id, providers)
             }}
             disabled={syncing || providers.length === 0}
             className="px-2 py-1 text-xs border-[length:var(--border-w)] border-[var(--color-danger)] text-[var(--color-danger)] rounded-[var(--radius)] disabled:opacity-50"
           >
-            彻底删除
+            {t('plugin.delete')}
           </button>
         </div>
       </div>
@@ -469,7 +474,7 @@ function ItemCard({
             onClick={() => setExpanded(!expanded)}
             className="ml-auto flex items-center gap-0.5 text-[var(--color-primary)] hover:underline"
           >
-            {expanded ? '收起' : '详情'}
+            {expanded ? t('plugin.collapse') : t('plugin.details')}
             <Icon icon={expanded ? IconChevronUp : IconChevronDown} width={12} />
           </button>
         )}
@@ -484,9 +489,10 @@ function ItemCard({
 }
 
 function StateTag({ state }: { state: ProviderSyncState }) {
-  if (!state.exists) return <span className="text-[var(--color-fg-muted)]">未配置</span>
-  if (state.in_sync) return <span className="text-[var(--color-success)]">已同步</span>
-  return <span className="text-[var(--color-warning)]">待同步</span>
+  const { t } = useI18n()
+  if (!state.exists) return <span className="text-[var(--color-fg-muted)]">{t('plugin.stateNotConfigured')}</span>
+  if (state.in_sync) return <span className="text-[var(--color-success)]">{t('plugin.stateSynced')}</span>
+  return <span className="text-[var(--color-warning)]">{t('plugin.statePending')}</span>
 }
 
 function GlobalConfigEditor({
@@ -500,6 +506,7 @@ function GlobalConfigEditor({
   onSave: (content: string) => void
   onSync: () => void
 }) {
+  const { t } = useI18n()
   const [draft, setDraft] = useState(config?.content ?? '')
   const [initialized, setInitialized] = useState(false)
 
@@ -514,14 +521,13 @@ function GlobalConfigEditor({
   return (
     <div className="space-y-3">
       <div className="text-xs text-[var(--color-fg-muted)] border-[length:var(--border-w)] border-[var(--color-border-light)] rounded-[var(--radius)] px-3 py-2">
-        编写全局指令（如 CLAUDE.md 内容），保存后可同步到 Claude CLI 和 Codex CLI。
-        目标文件中会用注释标记 0xMux 管理的区域，不会覆盖你手写的其他内容。
+        {t('plugin.globalConfigHint')}
       </div>
 
       <textarea
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
-        placeholder="在此输入全局指令..."
+        placeholder={t('plugin.globalConfigPlaceholder')}
         className="w-full h-48 px-3 py-2 text-sm font-mono border-[length:var(--border-w)] border-[var(--color-border-light)] rounded-[var(--radius)] bg-[var(--color-bg)] text-[var(--color-fg)] placeholder:text-[var(--color-fg-muted)] focus:outline-none focus:border-[var(--color-primary)] resize-y"
       />
 
@@ -531,16 +537,16 @@ function GlobalConfigEditor({
           disabled={saving || !isDirty}
           className="px-3 py-1.5 text-xs font-bold border-[length:var(--border-w)] border-[var(--color-primary)] text-[var(--color-primary)] rounded-[var(--radius)] hover:bg-[var(--color-primary)] hover:text-[var(--color-primary-fg)] disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {saving ? '保存中...' : '保存'}
+          {saving ? t('plugin.saving') : t('plugin.save')}
         </button>
 
         <button
           onClick={onSync}
           disabled={saving || isDirty}
           className="px-3 py-1.5 text-xs font-bold border-[length:var(--border-w)] border-[var(--color-border-light)] rounded-[var(--radius)] hover:border-[var(--color-border)] disabled:opacity-50 disabled:cursor-not-allowed"
-          title={isDirty ? '请先保存再同步' : '同步到已安装的 Provider'}
+          title={isDirty ? t('plugin.saveFirst') : t('plugin.syncToProviderTitle')}
         >
-          同步到 Provider
+          {t('plugin.syncToProvider')}
         </button>
 
         {config && (

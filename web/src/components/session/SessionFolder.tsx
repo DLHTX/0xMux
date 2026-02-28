@@ -2,6 +2,7 @@ import { Icon } from '@iconify/react'
 import { IconChevronRight, IconTrash, IconPlus } from '../../lib/icons'
 import type { TmuxSession, TmuxWindow } from '../../lib/types'
 import { WindowItem } from './WindowItem'
+import { useI18n } from '../../hooks/useI18n'
 
 interface SessionFolderProps {
   session: TmuxSession
@@ -34,6 +35,8 @@ export function SessionFolder({
   collapsed,
   onToggle,
 }: SessionFolderProps) {
+  const { t } = useI18n()
+
   const handleHeaderClick = () => {
     if (!isSelected) {
       // Switch to this session's workspace + auto-expand
@@ -107,7 +110,7 @@ export function SessionFolder({
             shrink-0 w-5 h-5 flex items-center justify-center transition-colors
             text-[var(--color-border-light)] hover:text-[var(--color-success)]
           "
-          title="Create new window"
+          title={t('session.createWindow')}
         >
           <Icon icon={IconPlus} width={12} height={12} />
         </button>
@@ -120,7 +123,7 @@ export function SessionFolder({
             shrink-0 w-5 h-5 flex items-center justify-center transition-colors
             text-[var(--color-border-light)] hover:text-[var(--color-danger)]
           "
-          title="Delete session"
+          title={t('session.deleteSession')}
         >
           <Icon icon={IconTrash} width={12} height={12} />
         </button>

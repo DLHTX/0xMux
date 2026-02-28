@@ -7,6 +7,8 @@ import {
   IconBell,
 } from '../../lib/icons'
 import type { ActivityView } from '../../lib/types'
+import type { MessageKey } from '../../lib/i18n'
+import { useI18n } from '../../hooks/useI18n'
 
 interface ActivityBarProps {
   activeView: ActivityView | null
@@ -15,22 +17,23 @@ interface ActivityBarProps {
   gitChangeCount?: number
 }
 
-const items: { view: ActivityView; icon: typeof IconTerminal; label: string }[] = [
-  { view: 'sessions', icon: IconTerminal, label: 'Sessions' },
-  { view: 'files', icon: IconFolder, label: 'Files' },
-  { view: 'search', icon: IconSearch, label: 'Search' },
-  { view: 'git', icon: IconGitBranch, label: 'Git' },
-  { view: 'notifications', icon: IconBell, label: 'Notifications' },
+const items: { view: ActivityView; icon: typeof IconTerminal; labelKey: MessageKey }[] = [
+  { view: 'sessions', icon: IconTerminal, labelKey: 'activity.sessions' },
+  { view: 'files', icon: IconFolder, labelKey: 'activity.files' },
+  { view: 'search', icon: IconSearch, labelKey: 'activity.search' },
+  { view: 'git', icon: IconGitBranch, labelKey: 'activity.git' },
+  { view: 'notifications', icon: IconBell, labelKey: 'activity.notifications' },
 ]
 
 export function ActivityBar({ activeView, onViewChange, unreadCount = 0, gitChangeCount = 0 }: ActivityBarProps) {
+  const { t } = useI18n()
   return (
     <aside
       className="flex flex-col items-center shrink-0 bg-[var(--color-bg)] border-r border-r-[var(--color-border-light)]/10"
       style={{ width: 48 }}
     >
       <nav className="flex flex-col w-full flex-1">
-        {items.map(({ view, icon, label }) => {
+        {items.map(({ view, icon, labelKey }) => {
           const isActive = activeView === view
           const showBadge = (view === 'notifications' && unreadCount > 0) || (view === 'git' && gitChangeCount > 0)
           const badgeCount = view === 'git' ? gitChangeCount : unreadCount
@@ -46,7 +49,7 @@ export function ActivityBar({ activeView, onViewChange, unreadCount = 0, gitChan
                   : 'text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg-alt)]'
                 }
               `}
-              title={label}
+              title={t(labelKey)}
             >
               {/* Left border indicator */}
               {isActive && (

@@ -1,3 +1,5 @@
+import { useI18n } from '../../hooks/useI18n'
+
 export interface EditorStatusBarProps {
   language: string
   line: number
@@ -20,6 +22,7 @@ export default function EditorStatusBar({
   fileSize,
   encoding,
 }: EditorStatusBarProps) {
+  const { t } = useI18n()
   return (
     <div
       className="flex items-center justify-between px-3 text-[11px] font-mono shrink-0 select-none"
@@ -32,7 +35,7 @@ export default function EditorStatusBar({
     >
       <div className="flex items-center gap-3">
         <span>{language}</span>
-        <span>Ln {line}, Col {col}</span>
+        <span>{t('editor.ln', { line, col })}</span>
       </div>
       <div className="flex items-center gap-3">
         <span>{encoding}</span>
