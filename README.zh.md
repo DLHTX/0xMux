@@ -8,8 +8,9 @@
  ╚██████╔╝██╔╝ ██╗██║ ╚═╝ ██║╚██████╔╝██╔╝ ██╗
   ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝ ╚═════╝ ╚═╝  ╚═╝
 ```
+<img width="3822" height="2352" alt="ScreenShot_2026-03-05_202703_577" src="https://github.com/user-attachments/assets/331d9a90-4192-48fe-90f6-555fefb264b9" />
 
-**黑客级 tmux 会话管理器，自带 Web UI。**
+** tmux 会话管理器，自带 Web UI。**
 
 0xMux 是一个自托管的 Web 应用，让你在浏览器中管理和操作 tmux 会话。通过 WebSocket 实时访问终端，支持桌面和移动端。一个二进制文件，零配置启动。
 
