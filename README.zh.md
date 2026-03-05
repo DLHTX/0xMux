@@ -8,9 +8,22 @@
  ╚██████╔╝██╔╝ ██╗██║ ╚═╝ ██║╚██████╔╝██╔╝ ██╗
   ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝ ╚═════╝ ╚═╝  ╚═╝
 ```
-<img width="3822" height="2352" alt="ScreenShot_2026-03-05_202703_577" src="https://github.com/user-attachments/assets/331d9a90-4192-48fe-90f6-555fefb264b9" />
 
-** tmux 会话管理器，自带 Web UI。**
+<p align="center">
+  <a href="https://www.npmjs.com/package/0xmux"><img src="https://img.shields.io/npm/v/0xmux?style=flat-square&color=cb3837&label=npm" alt="npm version" /></a>
+  <a href="https://www.npmjs.com/package/0xmux"><img src="https://img.shields.io/npm/dm/0xmux?style=flat-square&color=cb3837&label=downloads" alt="npm downloads" /></a>
+  <a href="https://github.com/DLHTX/0xmux"><img src="https://img.shields.io/github/stars/DLHTX/0xmux?style=flat-square&color=ffdd00&label=stars" alt="GitHub stars" /></a>
+  <a href="https://github.com/DLHTX/0xmux/blob/main/LICENSE"><img src="https://img.shields.io/github/license/DLHTX/0xmux?style=flat-square&color=blue" alt="License" /></a>
+  <img src="https://img.shields.io/badge/rust-stable-orange?style=flat-square&logo=rust" alt="Rust" />
+  <img src="https://img.shields.io/badge/react-19-61dafb?style=flat-square&logo=react" alt="React 19" />
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey?style=flat-square" alt="Platform" />
+</p>
+
+<p align="center">
+  <img width="3822" height="2352" alt="0xMux Screenshot" src="https://github.com/user-attachments/assets/331d9a90-4192-48fe-90f6-555fefb264b9" style="border-radius:12px;" />
+</p>
+
+**tmux 会话管理器，自带 Web UI。**
 
 0xMux 是一个自托管的 Web 应用，让你在浏览器中管理和操作 tmux 会话。通过 WebSocket 实时访问终端，支持桌面和移动端。一个二进制文件，零配置启动。
 

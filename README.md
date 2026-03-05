@@ -8,7 +8,20 @@
  ╚██████╔╝██╔╝ ██╗██║ ╚═╝ ██║╚██████╔╝██╔╝ ██╗
   ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝ ╚═════╝ ╚═╝  ╚═╝
 ```
-<img width="2184" height="1478" alt="ScreenShot_2026-03-05_205535_285" src="https://github.com/user-attachments/assets/459e34d9-c00e-4b53-8f78-7c57a3b5d29b" />
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/0xmux"><img src="https://img.shields.io/npm/v/0xmux?style=flat-square&color=cb3837&label=npm" alt="npm version" /></a>
+  <a href="https://www.npmjs.com/package/0xmux"><img src="https://img.shields.io/npm/dm/0xmux?style=flat-square&color=cb3837&label=downloads" alt="npm downloads" /></a>
+  <a href="https://github.com/DLHTX/0xmux"><img src="https://img.shields.io/github/stars/DLHTX/0xmux?style=flat-square&color=ffdd00&label=stars" alt="GitHub stars" /></a>
+  <a href="https://github.com/DLHTX/0xmux/blob/main/LICENSE"><img src="https://img.shields.io/github/license/DLHTX/0xmux?style=flat-square&color=blue" alt="License" /></a>
+  <img src="https://img.shields.io/badge/rust-stable-orange?style=flat-square&logo=rust" alt="Rust" />
+  <img src="https://img.shields.io/badge/react-19-61dafb?style=flat-square&logo=react" alt="React 19" />
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey?style=flat-square" alt="Platform" />
+</p>
+
+<p align="center">
+  <img width="2184" height="1478" alt="0xMux Screenshot" src="https://github.com/user-attachments/assets/459e34d9-c00e-4b53-8f78-7c57a3b5d29b" style="border-radius:12px;" />
+</p>
 
 **Hacker-grade tmux session manager with web UI.**
 
