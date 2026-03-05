@@ -71,6 +71,13 @@ Then open `http://localhost:1234` in your browser.
 - Session-based auth with token middleware
 - Setup wizard on first launch — set a password or skip
 
+### Mobile Access
+- Full terminal access from your phone or tablet
+- Responsive layout — adapts to any screen size
+- Virtual keyboard bar with common shortcuts (Tab, Ctrl, Esc, arrows, etc.)
+- Swipe navigation between sessions, files, and terminal views
+- Compact UI mode for narrow screens
+
 ### Desktop & Browser Automation (Agent Module)
 - Remote desktop control — screenshot, click, type, drag
 - Browser automation — navigate, click elements, manage tabs
@@ -78,7 +85,6 @@ Then open `http://localhost:1234` in your browser.
 - UI accessibility tree inspection
 
 ### Other
-- Mobile-friendly UI with virtual keyboard bar and swipe navigation
 - Notification system with in-app alerts
 - Layout persistence — your panel arrangement is saved and restored
 - Auto-update checker with one-click update
