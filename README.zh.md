@@ -20,7 +20,7 @@
 </p>
 
 <p align="center">
-  <img width="3822" height="2352" alt="0xMux Screenshot" src="https://github.com/user-attachments/assets/331d9a90-4192-48fe-90f6-555fefb264b9" style="border-radius:12px;" />
+  <img width="3822" height="2352" alt="0xMux Screenshot" src=".github/screenshot_zh.png" />
 </p>
 
 **tmux 会话管理器，自带 Web UI。**

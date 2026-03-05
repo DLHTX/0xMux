@@ -20,7 +20,7 @@
 </p>
 
 <p align="center">
-  <img width="2184" height="1478" alt="0xMux Screenshot" src="https://github.com/user-attachments/assets/459e34d9-c00e-4b53-8f78-7c57a3b5d29b" style="border-radius:12px;" />
+  <img width="2184" height="1478" alt="0xMux Screenshot" src=".github/screenshot_en.png" />
 </p>
 
 **Hacker-grade tmux session manager with web UI.**
