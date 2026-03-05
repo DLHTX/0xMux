@@ -8,7 +8,7 @@
  ╚██████╔╝██╔╝ ██╗██║ ╚═╝ ██║╚██████╔╝██╔╝ ██╗
   ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝ ╚═════╝ ╚═╝  ╚═╝
 ```
-<img width="3822" height="2352" alt="ScreenShot_2026-03-05_202703_577" src="https://github.com/user-attachments/assets/331d9a90-4192-48fe-90f6-555fefb264b9" />
+<img width="2184" height="1478" alt="ScreenShot_2026-03-05_205535_285" src="https://github.com/user-attachments/assets/459e34d9-c00e-4b53-8f78-7c57a3b5d29b" />
 
 **Hacker-grade tmux session manager with web UI.**
 
