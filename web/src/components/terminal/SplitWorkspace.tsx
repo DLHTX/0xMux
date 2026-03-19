@@ -13,6 +13,7 @@ import {
   IconX,
   IconReplace,
   IconTerminal,
+  IconPlus,
 } from '../../lib/icons'
 import type { SplitLayout, SplitDirection } from '../../lib/types'
 import { useState, useCallback, useMemo, useSyncExternalStore, useEffect } from 'react'
@@ -104,6 +105,10 @@ interface SplitWorkspaceProps {
   onFileClick?: (path: string, line?: number, workspace?: import('../../lib/types').WorkspaceContext) => void
   /** Called when an image link is clicked in terminal output */
   onImageClick?: (imageUrl: string) => void
+  /** Called to create a new window in the given session and attach to current pane */
+  onCreateAndAttachWindow?: (sessionName: string) => void
+  /** Called to create a new window and attach to a specific pane (for empty panes) */
+  onCreateWindowForPane?: (paneId: string) => void
 }
 
 function ResizeHandle({ direction }: { direction: 'horizontal' | 'vertical' }) {
@@ -134,6 +139,7 @@ function EmptyPaneSlot({
   onClose,
   onPaneFocus,
   onDropWindow,
+  onCreateWindowForPane,
 }: {
   nodeId: string
   canSplit: boolean
@@ -144,6 +150,7 @@ function EmptyPaneSlot({
   onClose: (nodeId: string) => void
   onPaneFocus: (nodeId: string) => void
   onDropWindow?: (paneId: string, sessionName: string, windowIndex: number) => void
+  onCreateWindowForPane?: (paneId: string) => void
 }) {
   const [isDropOver, setIsDropOver] = useState(false)
 
@@ -215,13 +222,21 @@ function EmptyPaneSlot({
         )}
       </div>
 
-      {/* Empty state prompt */}
+      {/* Empty state prompt — clickable to create a new window */}
       <div className="flex-1 min-h-0 relative flex items-center justify-center">
-        <div className="flex flex-col items-center gap-2 text-[var(--color-fg-muted)] select-none pointer-events-none">
-          <Icon icon={IconTerminal} width={28} className="text-[var(--color-border-light)]" />
-          <span className="text-xs font-bold">Select a window</span>
-          <span className="text-[10px] text-[var(--color-fg-faint)]">Click a window in the sidebar</span>
-        </div>
+        <button
+          className="flex flex-col items-center gap-2 text-[var(--color-fg-muted)] select-none cursor-pointer
+            hover:text-[var(--color-fg)] transition-colors group/empty"
+          onClick={(e) => {
+            e.stopPropagation()
+            onCreateWindowForPane?.(nodeId)
+          }}
+          disabled={!onCreateWindowForPane}
+        >
+          <Icon icon={IconPlus} width={28} className="text-[var(--color-border-light)] group-hover/empty:text-[var(--color-primary)] transition-colors" />
+          <span className="text-xs font-bold">New window</span>
+          <span className="text-[10px] text-[var(--color-fg-faint)]">Click to create, or drag from sidebar</span>
+        </button>
 
         {/* Drag overlay for empty pane */}
         {isDragging && (
@@ -256,6 +271,7 @@ function PaneSlot({
   onPaneFocus,
   onDropWindow,
   onSplitDrop,
+  onCreateAndAttachWindow,
 }: {
   nodeId: string
   sessionContainers: Map<string, HTMLDivElement>
@@ -269,6 +285,7 @@ function PaneSlot({
   onPaneFocus: (nodeId: string) => void
   onDropWindow?: (paneId: string, sessionName: string, windowIndex: number) => void
   onSplitDrop?: (paneId: string, zone: 'left' | 'right' | 'top' | 'bottom', sessionName: string, windowIndex: number) => void
+  onCreateAndAttachWindow?: (sessionName: string) => void
 }) {
   const [dropZone, setDropZone] = useState<DropZone>(null)
 
@@ -413,6 +430,20 @@ function PaneSlot({
         )}
         <div className="flex-1" />
         <div className="flex items-center gap-1 pr-0.5">
+          {onCreateAndAttachWindow && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                const colonIdx = windowKey.lastIndexOf(':')
+                const sessionName = windowKey.substring(0, colonIdx)
+                if (sessionName) onCreateAndAttachWindow(sessionName)
+              }}
+              className="p-0.5 text-[var(--color-fg-muted)] hover:text-[var(--color-primary)] transition-colors cursor-pointer"
+              title="New window"
+            >
+              <Icon icon={IconPlus} width={14} />
+            </button>
+          )}
           <span className="text-[10px] font-mono text-[var(--color-fg-muted)]">{windowKey}</span>
         </div>
       </div>
@@ -485,6 +516,7 @@ function renderLayoutStructure(
           onClose={props.onClose}
           onPaneFocus={props.onPaneFocus}
           onDropWindow={props.onDropWindow}
+          onCreateWindowForPane={props.onCreateWindowForPane}
         />
       )
     }
@@ -505,6 +537,7 @@ function renderLayoutStructure(
         onPaneFocus={props.onPaneFocus}
         onDropWindow={props.onDropWindow}
         onSplitDrop={props.onSplitDrop}
+        onCreateAndAttachWindow={props.onCreateAndAttachWindow}
       />
     )
   }

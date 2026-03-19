@@ -36,7 +36,7 @@ pub fn resolve_repo_root(path: &Path) -> Option<PathBuf> {
     }
 }
 
-/// Get git repository status.
+/// Get git repository status with line change statistics.
 pub fn get_status(repo_path: &Path) -> Result<GitStatusResponse, AppError> {
     let output = git_cmd(repo_path)
         .args(["status", "--porcelain=v2", "--branch"])
@@ -51,7 +51,63 @@ pub fn get_status(repo_path: &Path) -> Result<GitStatusResponse, AppError> {
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    parse_status(&stdout)
+    let mut response = parse_status(&stdout)?;
+
+    // Enrich with line change statistics (additions/deletions)
+    let numstat = get_numstat(repo_path);
+    for file in &mut response.files {
+        if let Some((add, del)) = numstat.get(&(file.path.clone(), file.staged)) {
+            file.additions = Some(*add);
+            file.deletions = Some(*del);
+        }
+    }
+
+    Ok(response)
+}
+
+/// Get line change statistics using `git diff --numstat`.
+/// Returns a map of (path, staged) -> (additions, deletions).
+fn get_numstat(repo_path: &Path) -> std::collections::HashMap<(String, bool), (i32, i32)> {
+    let mut stats = std::collections::HashMap::new();
+
+    // Unstaged changes
+    if let Ok(output) = git_cmd(repo_path).args(["diff", "--numstat"]).output() {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for line in stdout.lines() {
+                if let Some((path, add, del)) = parse_numstat_line(line) {
+                    stats.insert((path, false), (add, del));
+                }
+            }
+        }
+    }
+
+    // Staged changes
+    if let Ok(output) = git_cmd(repo_path).args(["diff", "--numstat", "--cached"]).output() {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for line in stdout.lines() {
+                if let Some((path, add, del)) = parse_numstat_line(line) {
+                    stats.insert((path, true), (add, del));
+                }
+            }
+        }
+    }
+
+    stats
+}
+
+/// Parse a single line of `git diff --numstat` output.
+/// Format: `<additions>\t<deletions>\t<path>` (binary files show `-\t-\t<path>`)
+fn parse_numstat_line(line: &str) -> Option<(String, i32, i32)> {
+    let parts: Vec<&str> = line.splitn(3, '\t').collect();
+    if parts.len() < 3 {
+        return None;
+    }
+    let add = parts[0].parse::<i32>().ok()?;
+    let del = parts[1].parse::<i32>().ok()?;
+    let path = parts[2].to_string();
+    Some((path, add, del))
 }
 
 /// Parse `git status --porcelain=v2 --branch` output.
@@ -104,6 +160,8 @@ fn parse_status(output: &str) -> Result<GitStatusResponse, AppError> {
                         status: char_to_status(x),
                         staged: true,
                         old_path,
+                        additions: None,
+                        deletions: None,
                     });
                 }
 
@@ -120,6 +178,8 @@ fn parse_status(output: &str) -> Result<GitStatusResponse, AppError> {
                         status: char_to_status(y),
                         staged: false,
                         old_path: None,
+                        additions: None,
+                        deletions: None,
                     });
                 }
             }
@@ -130,6 +190,8 @@ fn parse_status(output: &str) -> Result<GitStatusResponse, AppError> {
                 status: "untracked".into(),
                 staged: false,
                 old_path: None,
+                additions: None,
+                deletions: None,
             });
         }
     }

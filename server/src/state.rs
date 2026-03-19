@@ -9,6 +9,7 @@ use tokio::sync::broadcast;
 pub struct AppState {
     pub session_tx: broadcast::Sender<String>,
     pub notification_tx: broadcast::Sender<String>,
+    pub file_change_tx: broadcast::Sender<String>,
     pub config: Arc<ServerConfig>,
     pub install_manager: Arc<InstallManager>,
     pub auth_service: Arc<AuthService>,

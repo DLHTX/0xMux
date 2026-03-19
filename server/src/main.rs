@@ -57,8 +57,15 @@ async fn main() {
 
     let (session_tx, _) = broadcast::channel::<String>(64);
     let (notification_tx, _) = broadcast::channel::<String>(64);
+    let (file_change_tx, _) = broadcast::channel::<String>(128);
     spawn_session_watcher(session_tx.clone());
     spawn_group_gc();
+
+    // Start file watcher for the server's working directory
+    let _file_watcher = {
+        let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+        ws::file_watcher::spawn_file_watcher(cwd, file_change_tx.clone())
+    };
 
     // 初始化通知服务
     let notification_service = Arc::new(NotificationService::new());
@@ -89,6 +96,7 @@ async fn main() {
     let state = AppState {
         session_tx,
         notification_tx,
+        file_change_tx,
         config: Arc::new(config),
         install_manager: InstallManager::new(),
         auth_service,

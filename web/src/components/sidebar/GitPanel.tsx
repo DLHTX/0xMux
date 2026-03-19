@@ -44,6 +44,17 @@ function FileItem({ file, onOpen, action, actionIcon, actionTitle, secondaryActi
         <span className="truncate text-[var(--color-fg)]">{filename}</span>
         {dir && <span className="truncate text-[var(--color-fg-muted)] text-[10px]">{dir}</span>}
       </button>
+      {/* Line change stats */}
+      {(file.additions != null || file.deletions != null) && (
+        <div className="shrink-0 flex items-center gap-0.5 mr-1 text-[10px] font-mono tabular-nums">
+          {file.additions != null && file.additions > 0 && (
+            <span className="text-[var(--color-success)]">+{file.additions}</span>
+          )}
+          {file.deletions != null && file.deletions > 0 && (
+            <span className="text-[var(--color-danger)]">-{file.deletions}</span>
+          )}
+        </div>
+      )}
       <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity mr-1">
         {secondaryAction && secondaryIcon && (
           <button

@@ -292,6 +292,8 @@ export interface SplitLayoutBranch {
 
 export type SplitLayout = SplitLayoutLeaf | SplitLayoutBranch
 
+export type RightPanelTab = 'files' | 'changes' | 'search'
+
 export interface UserSettings {
   fontSize: number
   accentColor: string
@@ -308,6 +310,12 @@ export interface UserSettings {
   modalBlur: ModalBlur
   /** Floating editor window opacity (0.3–1.0) */
   editorOpacity: number
+  /** Right panel width in px */
+  rightPanelWidth: number
+  /** Right panel active tab */
+  rightPanelTab: RightPanelTab
+  /** Right panel collapsed state */
+  rightPanelCollapsed: boolean
 }
 
 export interface CreateWindowRequest {
@@ -363,8 +371,6 @@ export interface LayoutStore {
 }
 
 // ── Spec 3: Floating Editor + Git Panel ──
-
-export type ActivityView = 'sessions' | 'files' | 'search' | 'git' | 'notifications'
 
 // ── Notifications ──
 
@@ -461,6 +467,8 @@ export interface GitChangedFile {
   status: GitFileStatus
   staged: boolean
   old_path?: string
+  additions?: number
+  deletions?: number
 }
 
 export interface GitStatus {

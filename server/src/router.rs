@@ -170,6 +170,10 @@ pub fn build(state: AppState) -> Router {
             "/api/files/reveal",
             post(handlers::files::reveal_handler),
         )
+        .route(
+            "/api/files/open-in",
+            post(handlers::files::open_in_app_handler),
+        )
         .route("/api/files/search", get(handlers::files::search_handler))
         // Git API
         .route("/api/git/status", get(handlers::git::status_handler))

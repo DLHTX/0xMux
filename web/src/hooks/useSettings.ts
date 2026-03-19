@@ -29,6 +29,9 @@ const DEFAULT_SETTINGS: UserSettings = {
   markdownRenderMode: 'wysiwyg',
   modalBlur: 'sm',
   editorOpacity: 1.0,
+  rightPanelWidth: 280,
+  rightPanelTab: 'files',
+  rightPanelCollapsed: false,
 }
 
 function loadSettings(): UserSettings {

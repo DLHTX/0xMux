@@ -29,6 +29,11 @@ export interface OpenChannelOptions {
   onScrollState?: (state: { history: number; position: number }) => void
 }
 
+export interface FileChangeData {
+  paths: string[]
+  dirs: string[]
+}
+
 export interface UseMuxSocketReturn {
   /** WebSocket connection status */
   status: ConnectionStatus
@@ -40,6 +45,8 @@ export interface UseMuxSocketReturn {
   onWindowsUpdate(cb: (windows: Record<string, TmuxWindow[]>) => void): () => void
   /** Subscribe to notification pushes. Returns unsubscribe function. */
   onNotification(cb: (notification: Notification) => void): () => void
+  /** Subscribe to file system change events. Returns unsubscribe function. */
+  onFileChange(cb: (data: FileChangeData) => void): () => void
 }
 
 // ── Internal types ──
@@ -68,6 +75,7 @@ export function useMuxSocket(): UseMuxSocketReturn {
   const sessionListenersRef = useRef(new Set<(sessions: TmuxSession[]) => void>())
   const windowListenersRef = useRef(new Set<(windows: Record<string, TmuxWindow[]>) => void>())
   const notificationListenersRef = useRef(new Set<(notification: Notification) => void>())
+  const fileChangeListenersRef = useRef(new Set<(data: FileChangeData) => void>())
   const latestSessionsRef = useRef<TmuxSession[] | null>(null)
   const latestWindowsRef = useRef<Record<string, TmuxWindow[]> | null>(null)
 
@@ -276,6 +284,15 @@ export function useMuxSocket(): UseMuxSocketReturn {
           }
           break
         }
+        case 'file_change': {
+          const data = msg.data as FileChangeData | undefined
+          if (data) {
+            for (const cb of fileChangeListenersRef.current) {
+              cb(data)
+            }
+          }
+          break
+        }
         case 'pong':
           break // heartbeat reply, nothing to do
         case 'scroll_state': {
@@ -410,5 +427,15 @@ export function useMuxSocket(): UseMuxSocketReturn {
     []
   )
 
-  return { status, openChannel, onSessionsUpdate, onWindowsUpdate, onNotification }
+  const onFileChange = useCallback(
+    (cb: (data: FileChangeData) => void): (() => void) => {
+      fileChangeListenersRef.current.add(cb)
+      return () => {
+        fileChangeListenersRef.current.delete(cb)
+      }
+    },
+    []
+  )
+
+  return { status, openChannel, onSessionsUpdate, onWindowsUpdate, onNotification, onFileChange }
 }

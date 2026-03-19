@@ -24,6 +24,7 @@ import {
   revealInFileManager,
   resolveAbsoluteFilePath,
   uploadFiles,
+  openInApp,
 } from '../../lib/api'
 import type { FileTreeNode, GitFileStatus, WorkspaceContext } from '../../lib/types'
 import { getFileIcon } from '../../lib/file-icons'
@@ -34,6 +35,7 @@ import type { ContextMenuEntry } from '../terminal/ContextMenu'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { useI18n } from '../../hooks/useI18n'
+import { useMux } from '../../contexts/MuxContext'
 
 const DELETE_SKIP_CONFIRM_KEY = '0xmux-delete-skip-confirm'
 const UNDO_STACK_MAX = 50
@@ -187,6 +189,73 @@ interface TreeNodeProps {
   externalDropDir: string | null
 }
 
+const OPEN_IN_APPS = [
+  { id: 'finder', label: 'Finder' },
+  { id: 'cursor', label: 'Cursor' },
+  { id: 'vscode', label: 'VS Code' },
+  { id: 'xcode', label: 'Xcode' },
+  { id: 'warp', label: 'Warp' },
+  { id: 'terminal', label: 'Terminal' },
+]
+
+function OpenInMenu({ path, workspace, onCopyPath }: {
+  path: string
+  workspace?: WorkspaceContext
+  onCopyPath: (path: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    const timer = setTimeout(() => document.addEventListener('mousedown', handler), 0)
+    return () => { clearTimeout(timer); document.removeEventListener('mousedown', handler) }
+  }, [open])
+
+  return (
+    <div ref={ref} className="relative shrink-0">
+      <button
+        onClick={(e) => { e.stopPropagation(); setOpen(prev => !prev) }}
+        className="w-5 h-5 flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] transition-colors"
+        title="Open in..."
+      >
+        <Icon icon={IconChevronDown} width={10} />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-0.5 z-50 bg-[var(--color-bg)] border border-[var(--color-border-light)] shadow-lg py-1 min-w-[120px]">
+          {OPEN_IN_APPS.map(({ id, label }) => (
+            <button
+              key={id}
+              onClick={(e) => {
+                e.stopPropagation()
+                setOpen(false)
+                openInApp(path, id, workspace).catch(() => {})
+              }}
+              className="w-full text-left px-3 py-1 text-[11px] text-[var(--color-fg)] hover:bg-[var(--color-bg-alt)] transition-colors"
+            >
+              {label}
+            </button>
+          ))}
+          <div className="border-t border-[var(--color-border-light)]/30 my-0.5" />
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              setOpen(false)
+              onCopyPath(path)
+            }}
+            className="w-full text-left px-3 py-1 text-[11px] text-[var(--color-fg)] hover:bg-[var(--color-bg-alt)] transition-colors"
+          >
+            Copy path
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function TreeNode({
   node,
   depth,
@@ -262,7 +331,7 @@ function TreeNode({
         data-path={node.path}
         data-node-type={node.type}
         className={`
-          flex items-center gap-1 h-7 cursor-pointer select-none
+          group/node flex items-center gap-1 h-7 cursor-pointer select-none
           text-xs transition-colors
           ${isDropTarget
             ? 'bg-[var(--color-accent)]/20 outline outline-1 outline-[var(--color-accent)]/60'
@@ -304,6 +373,14 @@ function TreeNode({
         <span className="truncate min-w-0 flex-1" style={{ color: nameColor }}>
           {node.name}
         </span>
+        {/* Open in... menu (hover only) */}
+        <div className="shrink-0 opacity-0 group-hover/node:opacity-100 transition-opacity">
+          <OpenInMenu
+            path={node.path}
+            workspace={workspace}
+            onCopyPath={(p) => navigator.clipboard.writeText(p).catch(() => {})}
+          />
+        </div>
         {fileStatus && (
           <span
             className="shrink-0 mr-3 text-[10px] tabular-nums font-bold"
@@ -442,6 +519,40 @@ export function FileExplorer({ onFileOpen, workspace }: FileExplorerProps) {
   const handleRefresh = useCallback(() => {
     void loadRoot(true)
   }, [loadRoot])
+
+  // Real-time file system change listener via WebSocket
+  const mux = useMux()
+  useEffect(() => {
+    return mux.onFileChange((data) => {
+      // Reload directories that have changed and are currently expanded (or root)
+      const dirsToReload = data.dirs.filter(
+        (dir) => dir === '.' || expanded.has(dir) || loadedDirs.current.has(dir)
+      )
+      if (dirsToReload.length === 0) return
+
+      // If root directory changed, reload everything
+      if (dirsToReload.includes('.')) {
+        void loadRoot(true)
+        return
+      }
+
+      // Incrementally reload only the affected directories
+      for (const dir of dirsToReload) {
+        loadedDirs.current.delete(dir) // Force re-fetch
+        getFileTree(dir, workspace)
+          .then((res) => {
+            setRoots((prev) => insertChildren(prev, dir, sortNodes(res.children)))
+            loadedDirs.current.add(dir)
+          })
+          .catch(() => {}) // Silently ignore errors
+      }
+
+      // Also refresh git status
+      getGitStatus(workspace)
+        .then((gitRes) => setGitStatusByPath(buildGitStatusMap(gitRes.files)))
+        .catch(() => {})
+    })
+  }, [mux, expanded, workspace, loadRoot])
 
   const loadChildren = useCallback(async (dirPath: string) => {
     if (loadedDirs.current.has(dirPath)) return

@@ -8,12 +8,12 @@ import { SetupPasswordModal, LoginModal, SettingsModal } from './components/auth
 import { PluginModal } from './components/plugins'
 import { ToastContainer } from './components/ui/Toast'
 import { ImageViewer } from './components/ui/ImageViewer'
-import { ActivityBar } from './components/sidebar/ActivityBar'
-import { SidebarContainer } from './components/sidebar/SidebarContainer'
+import { RightPanel } from './components/sidebar/RightPanel'
 import { FileExplorer } from './components/sidebar/FileExplorer'
 import { SearchPanel } from './components/sidebar/SearchPanel'
 import { GitPanel } from './components/sidebar/GitPanel'
 import { NotificationPanel } from './components/sidebar/NotificationPanel'
+import { NotificationPopover } from './components/layout/NotificationPopover'
 import FloatingWindow from './components/editor/FloatingWindow'
 import EditorPane from './components/editor/EditorPane'
 import EditorTabs from './components/editor/EditorTabs'
@@ -41,7 +41,7 @@ import { IconTerminal, IconChevronLeft, IconChevronRight, IconPlus, IconTrash, I
 import type { Terminal } from '@xterm/xterm'
 import type {
   TmuxWindow,
-  ActivityView,
+  RightPanelTab,
   WorkspaceContext,
   AiStatusResponse,
   AiCatalogResponse,
@@ -54,20 +54,7 @@ import type {
 import { getWindows, createWindow, deleteWindow, getAiStatus, getAiCatalog, syncAi, uninstallAi, getGlobalConfig, saveGlobalConfig as saveGlobalConfigApi, syncGlobalConfig as syncGlobalConfigApi } from './lib/api'
 import { setInitCommand, markWindowPending } from './lib/init-commands'
 
-const DESKTOP_ACTIVE_VIEW_STORAGE_KEY = '0xmux-desktop-active-view'
 const LAST_WINDOW_STORAGE_PREFIX = '0xmux-last-window'
-
-function loadPersistedActiveView(): ActivityView | null {
-  try {
-    const raw = localStorage.getItem(DESKTOP_ACTIVE_VIEW_STORAGE_KEY)
-    if (raw === 'sessions' || raw === 'files' || raw === 'search' || raw === 'git' || raw === 'notifications') {
-      return raw
-    }
-    return null
-  } catch {
-    return null
-  }
-}
 
 function getLastWindowStorageKey(isMobile: boolean): string {
   return `${LAST_WINDOW_STORAGE_PREFIX}:${isMobile ? 'mobile' : 'desktop'}`
@@ -160,9 +147,8 @@ function AppContent() {
   const [showPluginCenter, setShowPluginCenter] = useState(false)
   const [showQuickFile, setShowQuickFile] = useState(false)
   const [selectedWindow, setSelectedWindow] = useState<{ sessionName: string; windowIndex: number } | null>(null)
-  const [activeView, setActiveView] = useState<ActivityView | null>(
-    () => loadPersistedActiveView() ?? 'sessions'
-  )
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [showNotifications, setShowNotifications] = useState(false)
   const [mobileView, setMobileView] = useState<MobileView>('sessions')
   const [windows, setWindows] = useState<Map<string, TmuxWindow[]>>(new Map())
   const [aiStatus, setAiStatus] = useState<AiStatusResponse | null>(null)
@@ -177,19 +163,6 @@ function AppContent() {
   const activeTerminalRef = useRef<Terminal | null>(null)
   const pendingWindowRestoreRef = useRef(loadPersistedWindow(isMobile))
   const windowRestoreDoneRef = useRef(false)
-
-  useEffect(() => {
-    if (isMobile) return
-    try {
-      if (activeView) {
-        localStorage.setItem(DESKTOP_ACTIVE_VIEW_STORAGE_KEY, activeView)
-      } else {
-        localStorage.removeItem(DESKTOP_ACTIVE_VIEW_STORAGE_KEY)
-      }
-    } catch {
-      // Ignore storage errors
-    }
-  }, [activeView, isMobile])
 
   useEffect(() => {
     try {
@@ -392,7 +365,7 @@ function AppContent() {
 
   // Auto-collapse sidebar on compact screens (foldables / small tablets)
   useEffect(() => {
-    if (isCompact) setActiveView(null)
+    if (isCompact) setSidebarCollapsed(true)
   }, [isCompact])
 
   useEffect(() => {
@@ -552,24 +525,30 @@ function AppContent() {
         return
       }
 
-      // Ctrl+B — toggle sidebar
+      // Ctrl+B — toggle left sidebar (sessions)
       if (e.ctrlKey && e.key === 'b') {
         e.preventDefault()
-        setActiveView(prev => prev ? null : 'sessions')
+        setSidebarCollapsed(prev => !prev)
         return
       }
 
-      // Ctrl+E — toggle file explorer
+      // Ctrl+E — toggle right panel / focus files tab
       if (e.ctrlKey && e.key === 'e') {
         e.preventDefault()
-        setActiveView(prev => prev === 'files' ? null : 'files')
+        if (settings.rightPanelCollapsed) {
+          updateSettings({ rightPanelCollapsed: false, rightPanelTab: 'files' })
+        } else if (settings.rightPanelTab !== 'files') {
+          updateSettings({ rightPanelTab: 'files' })
+        } else {
+          updateSettings({ rightPanelCollapsed: true })
+        }
         return
       }
 
-      // Ctrl+Shift+F — toggle search panel
+      // Ctrl+Shift+F — focus search tab in right panel
       if (e.ctrlKey && e.shiftKey && e.key === 'F') {
         e.preventDefault()
-        setActiveView(prev => prev === 'search' ? null : 'search')
+        updateSettings({ rightPanelCollapsed: false, rightPanelTab: 'search' })
         return
       }
 
@@ -789,10 +768,51 @@ function AppContent() {
     setMobileView('sessions')
   }, [])
 
-  // Activity Bar view change: click same = collapse, click different = switch
-  const handleViewChange = useCallback((view: ActivityView) => {
-    setActiveView(prev => prev === view ? null : view)
-  }, [])
+  const handleRightPanelTabChange = useCallback((tab: RightPanelTab) => {
+    updateSettings({ rightPanelTab: tab })
+  }, [updateSettings])
+
+  const handleRightPanelWidthChange = useCallback((nextWidth: number) => {
+    updateSettings({ rightPanelWidth: nextWidth })
+  }, [updateSettings])
+
+  const handleRightPanelCollapsedChange = useCallback((collapsed: boolean) => {
+    updateSettings({ rightPanelCollapsed: collapsed })
+  }, [updateSettings])
+
+  /** Create a new window in the given session and attach it to the active pane */
+  const handleCreateAndAttachWindow = useCallback(async (sessionName: string) => {
+    try {
+      const newWindow = await createWindow(sessionName)
+      markWindowPending(sessionName, newWindow.index)
+      const wins = await getWindows(sessionName)
+      setWindows((prev) => new Map(prev).set(sessionName, wins))
+      if (activePaneId) {
+        assignWindow(activePaneId, sessionName, newWindow.index)
+      }
+      setSelectedWindow({ sessionName, windowIndex: newWindow.index })
+      addToast(t('toast.createdWindow', { index: newWindow.index }), 'success')
+    } catch {
+      addToast(t('toast.createWindowFailed', { name: sessionName }), 'error')
+    }
+  }, [activePaneId, assignWindow, addToast, t])
+
+  /** Create a new window and attach to a specific pane (used by empty pane placeholder) */
+  const handleCreateWindowForPane = useCallback(async (paneId: string) => {
+    if (!primarySession) return
+    try {
+      const newWindow = await createWindow(primarySession)
+      markWindowPending(primarySession, newWindow.index)
+      const wins = await getWindows(primarySession)
+      setWindows((prev) => new Map(prev).set(primarySession, wins))
+      assignWindow(paneId, primarySession, newWindow.index)
+      setActivePaneId(paneId)
+      setSelectedWindow({ sessionName: primarySession, windowIndex: newWindow.index })
+      addToast(t('toast.createdWindow', { index: newWindow.index }), 'success')
+    } catch {
+      addToast(t('toast.createWindowFailed', { name: primarySession }), 'error')
+    }
+  }, [primarySession, assignWindow, setActivePaneId, addToast, t])
 
   const activeWorkspace: WorkspaceContext | undefined = selectedWindow
     ? {
@@ -1022,6 +1042,14 @@ function AppContent() {
         onPluginClick={() => setShowPluginCenter(true)}
         showPluginButton={aiStatus?.show_plugin_button ?? false}
         onSettingsClick={() => setShowSettings(true)}
+        unreadCount={unreadCount}
+        showNotifications={showNotifications}
+        onToggleNotifications={() => setShowNotifications(prev => !prev)}
+        notifications={notifications}
+        onMarkAllRead={markAllNotificationsRead}
+        onMarkRead={markNotificationRead}
+        onDismissNotification={dismissNotification}
+        onImageClick={(url) => setImageViewerSrc(url)}
       />
 
       {/* Main area */}
@@ -1247,19 +1275,18 @@ function AppContent() {
           )}
         </div>
       ) : (
-        /* Desktop layout: ActivityBar + SidebarContainer + workspace */
+        /* Desktop layout: SessionSidebar + Workspace + RightPanel */
         <div className="flex-1 flex overflow-hidden relative bg-[var(--color-bg)]">
-          {/* Activity Bar (always visible, 48px) */}
-          <ActivityBar activeView={activeView} onViewChange={handleViewChange} unreadCount={unreadCount} gitChangeCount={gitChangeCount} />
-
-          {/* Sidebar panels */}
-          <SidebarContainer
-            activeView={activeView}
-            width={settings.sidebarWidth}
-            onWidthChange={handleSidebarWidthChange}
+          {/* Left: Sessions sidebar (reuses SidebarContainer-style resize) */}
+          <div
+            className="relative shrink-0 overflow-hidden flex flex-col bg-[var(--color-bg)] border-r border-r-[var(--color-border-light)]/30"
+            style={{
+              width: sidebarCollapsed ? 0 : settings.sidebarWidth,
+              transition: 'width 200ms ease',
+            }}
           >
-            {{
-              sessions: (
+            {!sidebarCollapsed && (
+              <>
                 <SessionSidebar
                   sessions={sessions}
                   windows={windows}
@@ -1275,23 +1302,31 @@ function AppContent() {
                   isInSplitGroup={isInSplitGroup}
                   collapsed={false}
                 />
-              ),
-              files: <FileExplorer onFileOpen={handleOpenFile} workspace={activeWorkspace} />,
-              search: <SearchPanel onOpenFile={handleOpenFile} workspace={activeWorkspace} />,
-              git: <GitPanel onOpenDiff={handleOpenDiff} workspace={activeWorkspace} addToast={addToast} onChangeCount={setGitChangeCount} />,
-              notifications: (
-                <NotificationPanel
-                  notifications={notifications}
-                  onMarkAllRead={markAllNotificationsRead}
-                  onMarkRead={markNotificationRead}
-                  onDismiss={dismissNotification}
-                  onImageClick={(url) => setImageViewerSrc(url)}
+                {/* Right-edge resize handle */}
+                <div
+                  className="absolute top-0 right-0 h-full w-1 cursor-col-resize z-10 hover:bg-[var(--color-primary)]/15"
+                  onMouseDown={(e) => {
+                    e.preventDefault()
+                    const startX = e.clientX
+                    const startW = settings.sidebarWidth
+                    const onMove = (ev: MouseEvent) => {
+                      const w = Math.max(220, Math.min(520, startW + ev.clientX - startX))
+                      handleSidebarWidthChange(w)
+                    }
+                    const onUp = () => {
+                      window.removeEventListener('mousemove', onMove)
+                      window.removeEventListener('mouseup', onUp)
+                    }
+                    window.addEventListener('mousemove', onMove)
+                    window.addEventListener('mouseup', onUp)
+                  }}
+                  title="Resize sidebar"
                 />
-              ),
-            }}
-          </SidebarContainer>
+              </>
+            )}
+          </div>
 
-          {/* Workspace */}
+          {/* Center: Workspace */}
           <main className="flex-1 flex flex-col min-h-0 min-w-0 bg-[var(--color-bg)]">
             {selectedWindow || Object.keys(paneWindowMap).length > 0 ? (
               <div className="flex-1 flex flex-col min-h-0">
@@ -1314,6 +1349,8 @@ function AppContent() {
                     atTriggerEnabled={settings.quickFileTrigger}
                     onFileClick={handleTerminalFileClick}
                     onImageClick={handleTerminalImageClick}
+                    onCreateAndAttachWindow={handleCreateAndAttachWindow}
+                    onCreateWindowForPane={handleCreateWindowForPane}
                   />
               </div>
             ) : (
@@ -1379,6 +1416,7 @@ function AppContent() {
                             editorSettings={settings}
                             diffOriginal={activeTab.diffOriginal}
                             imageUrl={activeTab.imageUrl}
+                            onSave={() => floatingEditor.saveCurrentFile()}
                             onChange={(value: string) => {
                               floatingEditor.updateTabContent(activeTab.id, value)
                             }}
@@ -1414,6 +1452,23 @@ function AppContent() {
               </FloatingWindow>
             )}
           </main>
+
+          {/* Right: File/Changes/Search panel */}
+          <RightPanel
+            activeTab={settings.rightPanelTab}
+            onTabChange={handleRightPanelTabChange}
+            width={settings.rightPanelWidth}
+            onWidthChange={handleRightPanelWidthChange}
+            collapsed={settings.rightPanelCollapsed}
+            onCollapsedChange={handleRightPanelCollapsedChange}
+            gitChangeCount={gitChangeCount}
+          >
+            {{
+              files: <FileExplorer onFileOpen={handleOpenFile} workspace={activeWorkspace} />,
+              changes: <GitPanel onOpenDiff={handleOpenDiff} workspace={activeWorkspace} addToast={addToast} onChangeCount={setGitChangeCount} />,
+              search: <SearchPanel onOpenFile={handleOpenFile} workspace={activeWorkspace} />,
+            }}
+          </RightPanel>
         </div>
       )}
 

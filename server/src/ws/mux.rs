@@ -161,6 +161,9 @@ async fn handle_mux_socket(socket: WebSocket, state: AppState) {
     // Subscribe to notification broadcasts
     let mut notification_rx = state.notification_tx.subscribe();
 
+    // Subscribe to file change broadcasts
+    let mut file_change_rx = state.file_change_tx.subscribe();
+
     // Active channels
     let mut channels: HashMap<u16, PtyChannel> = HashMap::new();
 
@@ -271,6 +274,11 @@ async fn handle_mux_socket(socket: WebSocket, state: AppState) {
 
             // Notification broadcasts (forward as-is, already JSON)
             Ok(msg) = notification_rx.recv() => {
+                let _ = out_tx.send(Message::Text(msg.into()));
+            }
+
+            // File change broadcasts (forward as-is, already JSON)
+            Ok(msg) = file_change_rx.recv() => {
                 let _ = out_tx.send(Message::Text(msg.into()));
             }
 

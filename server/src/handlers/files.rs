@@ -11,7 +11,7 @@ use serde_json::json;
 use crate::error::AppError;
 use crate::models::files::{
     FileCreateRequest, FileDeleteRequest, FileRevealRequest, FileRenameRequest,
-    FileWriteRequest, SearchQuery,
+    FileWriteRequest, OpenInAppRequest, SearchQuery,
 };
 use crate::services::{fs, git, search, workspace};
 
@@ -183,6 +183,74 @@ pub async fn reveal_handler(
     let root = workspace::resolve_workspace_root(body.session.as_deref(), body.window)?;
     fs::reveal_in_file_manager(&root, &body.path)?;
     Ok(Json(json!({ "success": true })))
+}
+
+// ── POST /api/files/open-in ─────────────────────────────────────────
+
+pub async fn open_in_app_handler(
+    Json(body): Json<OpenInAppRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let root = workspace::resolve_workspace_root(body.session.as_deref(), body.window)?;
+    let target = fs::validate_path(&root, &body.path)?;
+
+    let result = match body.app.as_str() {
+        "finder" => {
+            std::process::Command::new("open")
+                .arg("-R")
+                .arg(&target)
+                .spawn()
+        }
+        "vscode" => {
+            std::process::Command::new("code")
+                .arg(&target)
+                .spawn()
+        }
+        "cursor" => {
+            std::process::Command::new("cursor")
+                .arg(&target)
+                .spawn()
+        }
+        "xcode" => {
+            std::process::Command::new("open")
+                .arg("-a")
+                .arg("Xcode")
+                .arg(&target)
+                .spawn()
+        }
+        "warp" => {
+            // Open the directory containing the file in Warp
+            let dir = if target.is_file() {
+                target.parent().unwrap_or(&target)
+            } else {
+                &target
+            };
+            std::process::Command::new("open")
+                .arg("-a")
+                .arg("Warp")
+                .arg(dir)
+                .spawn()
+        }
+        "terminal" => {
+            let dir = if target.is_file() {
+                target.parent().unwrap_or(&target)
+            } else {
+                &target
+            };
+            std::process::Command::new("open")
+                .arg("-a")
+                .arg("Terminal")
+                .arg(dir)
+                .spawn()
+        }
+        _ => {
+            return Err(AppError::BadRequest(format!("Unknown app: {}", body.app)));
+        }
+    };
+
+    match result {
+        Ok(_) => Ok(Json(json!({ "success": true }))),
+        Err(e) => Err(AppError::Internal(format!("Failed to open {}: {e}", body.app))),
+    }
 }
 
 // ── GET /api/files/search?query=&regex=&case=&glob=&max= ────────────

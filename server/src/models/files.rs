@@ -96,6 +96,16 @@ pub struct FileRevealRequest {
     pub window: Option<u32>,
 }
 
+/// Open file/directory in external app request
+#[derive(Deserialize)]
+pub struct OpenInAppRequest {
+    pub path: String,
+    /// App identifier: "finder", "vscode", "cursor", "xcode", "warp", "terminal"
+    pub app: String,
+    pub session: Option<String>,
+    pub window: Option<u32>,
+}
+
 /// Single search match
 #[derive(Serialize)]
 pub struct SearchMatch {

@@ -438,6 +438,22 @@ export async function revealInFileManager(
   })
 }
 
+export async function openInApp(
+  path: string,
+  app: string,
+  workspace?: WorkspaceContext
+): Promise<{ success: boolean }> {
+  return request('/files/open-in', {
+    method: 'POST',
+    body: JSON.stringify({
+      path,
+      app,
+      session: workspace?.session,
+      window: workspace?.window,
+    }),
+  })
+}
+
 // ── File Upload API ──
 
 export interface FileUploadResult {

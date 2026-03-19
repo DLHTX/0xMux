@@ -18,6 +18,10 @@ pub struct GitChangedFile {
     pub staged: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub old_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub additions: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deletions: Option<i32>,
 }
 
 /// Git diff content for Monaco DiffEditor

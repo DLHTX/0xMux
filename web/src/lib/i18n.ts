@@ -111,6 +111,14 @@ const en = {
   'activity.git': 'Git',
   'activity.notifications': 'Notifications',
 
+  // Right Panel
+  'rightPanel.files': 'Files',
+  'rightPanel.changes': 'Changes',
+  'rightPanel.search': 'Search',
+  'rightPanel.collapse': 'Collapse panel',
+  'rightPanel.expand': 'Expand panel',
+  'rightPanel.newWindow': 'New window',
+
   // Notifications
   'notification.markAllRead': 'Mark all read',
   'notification.empty': 'No notifications',
@@ -484,6 +492,13 @@ const zh: { [K in keyof typeof en]: string } = {
   'activity.search': '搜索',
   'activity.git': 'Git',
   'activity.notifications': '通知',
+
+  'rightPanel.files': '文件',
+  'rightPanel.changes': '变更',
+  'rightPanel.search': '搜索',
+  'rightPanel.collapse': '折叠面板',
+  'rightPanel.expand': '展开面板',
+  'rightPanel.newWindow': '新建窗口',
 
   'notification.markAllRead': '全部已读',
   'notification.empty': '暂无通知',

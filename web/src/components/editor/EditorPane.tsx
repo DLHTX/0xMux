@@ -75,6 +75,7 @@ export interface EditorPaneProps {
   filePath: string
   language: string
   content: string
+  onSave?: () => void
   mode: 'edit' | 'diff'
   editorSettings: Pick<
     UserSettings,
@@ -279,10 +280,13 @@ export default function EditorPane({
   diffOriginal,
   imageUrl,
   onChange,
+  onSave,
   onCursorChange,
 }: EditorPaneProps) {
   const { mode: themeMode } = useTheme()
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null)
+  const onSaveRef = useRef(onSave)
+  onSaveRef.current = onSave
   const isImage = language === 'image' && imageUrl
   const isMarkdown = language === 'markdown' || filePath.toLowerCase().endsWith('.md')
   const useVditor = mode === 'edit' && isMarkdown
@@ -305,6 +309,13 @@ export default function EditorPane({
       editorRef.current = editorInstance
       defineFloatingTheme(monaco, themeConfig)
       monaco.editor.setTheme(THEME_NAME)
+      // Ctrl+S — save file (prevents browser default "Save Page" dialog)
+      editorInstance.addAction({
+        id: '0xmux-save',
+        label: 'Save File',
+        keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS],
+        run: () => { onSaveRef.current?.() },
+      })
       // Force one layout pass after mount so flex-based parents always get measured correctly.
       editorInstance.layout()
       requestAnimationFrame(() => editorInstance.layout())
