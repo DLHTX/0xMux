@@ -391,6 +391,11 @@ export function useTerminal(options: UseTerminalOptions = {}) {
     })
 
     terminal.onData((data) => {
+      // Auto-scroll to bottom when user types — prevents "lost focus" feeling
+      // when the viewport is scrolled up viewing history
+      if (terminal.buffer.active.viewportY < terminal.buffer.active.baseY) {
+        terminal.scrollToBottom()
+      }
       options.onData?.(data)
     })
 

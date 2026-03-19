@@ -594,6 +594,45 @@ export async function gitDiscardAll(workspace?: WorkspaceContext): Promise<void>
   return request('/git/discard-all', { method: 'POST', body: JSON.stringify(body) })
 }
 
+// ── Worktree API ──
+
+import type { WorktreeInfo } from './types'
+
+export async function listWorktrees(workspace?: WorkspaceContext): Promise<{ worktrees: WorktreeInfo[] }> {
+  const params = new URLSearchParams()
+  if (workspace) {
+    params.set('session', workspace.session)
+    params.set('window', String(workspace.window))
+  }
+  const qs = params.toString()
+  return request(`/git/worktrees${qs ? `?${qs}` : ''}`)
+}
+
+export async function createWorktree(
+  baseBranch: string,
+  newBranch: string,
+  dirName: string,
+  workspace?: WorkspaceContext,
+): Promise<{ ok: boolean; path: string; branch: string }> {
+  const body: Record<string, unknown> = {
+    base_branch: baseBranch,
+    new_branch: newBranch,
+    dir_name: dirName,
+  }
+  if (workspace) { body.session = workspace.session; body.window = workspace.window }
+  return request('/git/worktrees', { method: 'POST', body: JSON.stringify(body) })
+}
+
+export async function removeWorktree(
+  path: string,
+  force = false,
+  workspace?: WorkspaceContext,
+): Promise<void> {
+  const body: Record<string, unknown> = { path, force }
+  if (workspace) { body.session = workspace.session; body.window = workspace.window }
+  return request('/git/worktrees', { method: 'DELETE', body: JSON.stringify(body) })
+}
+
 // ── Image API ──
 
 export async function deleteImage(filename: string): Promise<void> {

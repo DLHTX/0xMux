@@ -111,6 +111,32 @@ const en = {
   'activity.git': 'Git',
   'activity.notifications': 'Notifications',
 
+  // Status Bar
+  'statusBar.changed': '{n} changed',
+  'statusBar.worktree': 'worktree',
+  'statusBar.switchBranch': 'Switch branch',
+
+  // Branch Switcher
+  'branch.search': 'Search branches...',
+  'branch.local': 'Local branches',
+  'branch.remote': 'Remote branches',
+  'branch.current': 'current',
+  'branch.newWorktree': 'New Worktree...',
+  'branch.switching': 'Switching...',
+  'branch.switchFailed': 'Branch switch failed: {msg}',
+
+  // Worktree
+  'worktree.title': 'Create Worktree',
+  'worktree.baseBranch': 'Base branch',
+  'worktree.newBranch': 'New branch name',
+  'worktree.dirName': 'Directory name',
+  'worktree.create': 'Create',
+  'worktree.creating': 'Creating...',
+  'worktree.created': 'Worktree created: {branch}',
+  'worktree.createFailed': 'Failed to create worktree: {msg}',
+  'worktree.deleteConfirm': 'Also delete worktree directory?',
+  'worktree.deleted': 'Worktree removed',
+
   // Right Panel
   'rightPanel.files': 'Files',
   'rightPanel.changes': 'Changes',
@@ -492,6 +518,29 @@ const zh: { [K in keyof typeof en]: string } = {
   'activity.search': '搜索',
   'activity.git': 'Git',
   'activity.notifications': '通知',
+
+  'statusBar.changed': '{n} 个变更',
+  'statusBar.worktree': 'worktree',
+  'statusBar.switchBranch': '切换分支',
+
+  'branch.search': '搜索分支...',
+  'branch.local': '本地分支',
+  'branch.remote': '远程分支',
+  'branch.current': '当前',
+  'branch.newWorktree': '新建 Worktree...',
+  'branch.switching': '切换中...',
+  'branch.switchFailed': '切换分支失败：{msg}',
+
+  'worktree.title': '创建 Worktree',
+  'worktree.baseBranch': '基于分支',
+  'worktree.newBranch': '新分支名',
+  'worktree.dirName': '目录名',
+  'worktree.create': '创建',
+  'worktree.creating': '创建中...',
+  'worktree.created': 'Worktree 已创建：{branch}',
+  'worktree.createFailed': '创建 Worktree 失败：{msg}',
+  'worktree.deleteConfirm': '是否同时删除 worktree 目录？',
+  'worktree.deleted': 'Worktree 已删除',
 
   'rightPanel.files': '文件',
   'rightPanel.changes': '变更',

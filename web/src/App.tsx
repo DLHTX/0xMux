@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Header, EmptyState, MobileNav, type MobileView } from './components/layout'
 import { SessionSidebar, CreateSessionModal } from './components/session'
 import { SplitWorkspace, TerminalPane } from './components/terminal'
@@ -8,6 +8,9 @@ import { SetupPasswordModal, LoginModal, SettingsModal } from './components/auth
 import { PluginModal } from './components/plugins'
 import { ToastContainer } from './components/ui/Toast'
 import { ImageViewer } from './components/ui/ImageViewer'
+import { StatusBar } from './components/layout/StatusBar'
+import { BranchSwitcher } from './components/layout/BranchSwitcher'
+import { WorktreeCreateModal } from './components/session/WorktreeCreateModal'
 import { RightPanel } from './components/sidebar/RightPanel'
 import { FileExplorer } from './components/sidebar/FileExplorer'
 import { SearchPanel } from './components/sidebar/SearchPanel'
@@ -33,7 +36,7 @@ import { ThemeProvider, useTheme } from './hooks/useTheme'
 import { I18nProvider, useI18n } from './hooks/useI18n'
 import { MuxProvider, useMux } from './contexts/MuxContext'
 import { FUSION_PIXEL_FONT, SILKSCREEN_FONT } from './lib/theme'
-import { getGitDiff, getGitStatus, uploadFiles } from './lib/api'
+import { getGitDiff, getGitStatus, getGitBranches, gitCheckout, uploadFiles, createWorktree } from './lib/api'
 import { isTerminalFileDrag } from './lib/terminalFileDrag'
 import { useImageSync } from './hooks/useImageSync'
 import { Icon } from '@iconify/react'
@@ -41,6 +44,7 @@ import { IconTerminal, IconChevronLeft, IconChevronRight, IconPlus, IconTrash, I
 import type { Terminal } from '@xterm/xterm'
 import type {
   TmuxWindow,
+  GitBranch,
   RightPanelTab,
   WorkspaceContext,
   AiStatusResponse,
@@ -780,6 +784,59 @@ function AppContent() {
     updateSettings({ rightPanelCollapsed: collapsed })
   }, [updateSettings])
 
+  // Branch switcher: open popover and fetch branches
+  const handleBranchClick = useCallback(() => {
+    setShowBranchSwitcher(prev => !prev)
+    getGitBranches(activeWorkspace)
+      .then(res => setGitBranches(res.branches))
+      .catch(() => {})
+  }, [activeWorkspace])
+
+  // Branch checkout
+  const handleBranchCheckout = useCallback(async (branch: string) => {
+    setBranchSwitching(true)
+    try {
+      await gitCheckout(branch, activeWorkspace)
+      setShowBranchSwitcher(false)
+      refreshGitInfo()
+      addToast(t('git.switchedTo', { branch }), 'success')
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      addToast(t('branch.switchFailed', { msg }), 'error')
+    } finally {
+      setBranchSwitching(false)
+    }
+  }, [activeWorkspace, refreshGitInfo, addToast, t])
+
+  // Changes click → open right panel changes tab
+  const handleChangesClick = useCallback(() => {
+    updateSettings({ rightPanelCollapsed: false, rightPanelTab: 'changes' })
+  }, [updateSettings])
+
+  // Worktree creation
+  const handleWorktreeCreate = useCallback(async (baseBranch: string, newBranch: string, dirName: string) => {
+    setWorktreeCreating(true)
+    try {
+      const result = await createWorktree(baseBranch, newBranch, dirName, activeWorkspace)
+      setShowWorktreeCreate(false)
+      addToast(t('worktree.created', { branch: result.branch }), 'success')
+      // Create a session in the new worktree directory
+      await handleCreate(newBranch, result.path)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      addToast(t('worktree.createFailed', { msg }), 'error')
+    } finally {
+      setWorktreeCreating(false)
+    }
+  }, [activeWorkspace, addToast, t])
+
+  // Project name for worktree directory naming
+  const projectName = useMemo(() => {
+    // Derive from workspace root or current directory
+    if (activeWorkspace?.session) return activeWorkspace.session.split('/').pop() ?? '0xmux'
+    return '0xmux'
+  }, [activeWorkspace])
+
   /** Create a new window in the given session and attach it to the active pane */
   const handleCreateAndAttachWindow = useCallback(async (sessionName: string) => {
     try {
@@ -821,17 +878,41 @@ function AppContent() {
       }
     : undefined
 
-  // Git change count for activity bar badge — fetch once on workspace change,
-  // then kept in sync by GitPanel's onChangeCount callback on every refresh/action.
+  // Git state — branch info + change count
   const [gitChangeCount, setGitChangeCount] = useState(0)
+  const [gitBranch, setGitBranch] = useState('—')
+  const [gitAhead, setGitAhead] = useState(0)
+  const [gitBehind, setGitBehind] = useState(0)
+  const [gitIsWorktree, setGitIsWorktree] = useState(false)
+  const [gitBranches, setGitBranches] = useState<GitBranch[]>([])
+  const [showBranchSwitcher, setShowBranchSwitcher] = useState(false)
+  const [showWorktreeCreate, setShowWorktreeCreate] = useState(false)
+  const [branchSwitching, setBranchSwitching] = useState(false)
+  const [worktreeCreating, setWorktreeCreating] = useState(false)
+
+  // Fetch git status (branch, ahead/behind, changes, worktree)
+  const refreshGitInfo = useCallback(() => {
+    getGitStatus(activeWorkspace)
+      .then(s => {
+        setGitChangeCount(s.files.length)
+        setGitBranch(s.branch)
+        setGitAhead(s.ahead)
+        setGitBehind(s.behind)
+        setGitIsWorktree(s.is_worktree ?? false)
+      })
+      .catch(() => {})
+  }, [activeWorkspace])
 
   useEffect(() => {
-    let cancelled = false
-    getGitStatus(activeWorkspace)
-      .then(s => { if (!cancelled) setGitChangeCount(s.files.length) })
-      .catch(() => {})
-    return () => { cancelled = true }
-  }, [activeWorkspace?.session, activeWorkspace?.window])
+    refreshGitInfo()
+  }, [refreshGitInfo])
+
+  // Auto-refresh git info on file changes
+  useEffect(() => {
+    return mux.onFileChange(() => {
+      refreshGitInfo()
+    })
+  }, [mux, refreshGitInfo])
 
   // Open file in floating editor from file explorer / search results
   const handleOpenFile = useCallback((path: string, line?: number) => {
@@ -1275,7 +1356,8 @@ function AppContent() {
           )}
         </div>
       ) : (
-        /* Desktop layout: SessionSidebar + Workspace + RightPanel */
+        /* Desktop layout: SessionSidebar + Workspace + RightPanel + StatusBar */
+        <>
         <div className="flex-1 flex overflow-hidden relative bg-[var(--color-bg)]">
           {/* Left: Sessions sidebar (reuses SidebarContainer-style resize) */}
           <div
@@ -1470,6 +1552,30 @@ function AppContent() {
             }}
           </RightPanel>
         </div>
+
+        {/* Bottom status bar */}
+        <div className="relative">
+          <StatusBar
+            branch={gitBranch}
+            ahead={gitAhead}
+            behind={gitBehind}
+            changeCount={gitChangeCount}
+            isWorktree={gitIsWorktree}
+            connectionStatus={connectionStatus}
+            onBranchClick={handleBranchClick}
+            onChangesClick={handleChangesClick}
+          />
+          <BranchSwitcher
+            open={showBranchSwitcher}
+            onClose={() => setShowBranchSwitcher(false)}
+            branches={gitBranches}
+            currentBranch={gitBranch}
+            onCheckout={handleBranchCheckout}
+            onNewWorktree={() => { setShowBranchSwitcher(false); setShowWorktreeCreate(true) }}
+            loading={branchSwitching}
+          />
+        </div>
+        </>
       )}
 
       {/* Create session modal */}
@@ -1477,6 +1583,17 @@ function AppContent() {
         open={showCreate}
         onClose={() => setShowCreate(false)}
         onSubmit={handleCreate}
+      />
+
+      {/* Worktree create modal */}
+      <WorktreeCreateModal
+        open={showWorktreeCreate}
+        onClose={() => setShowWorktreeCreate(false)}
+        branches={gitBranches}
+        currentBranch={gitBranch}
+        projectName={projectName}
+        onSubmit={handleWorktreeCreate}
+        loading={worktreeCreating}
       />
 
       {/* Plugin center modal */}

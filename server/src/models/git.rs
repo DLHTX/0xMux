@@ -8,6 +8,8 @@ pub struct GitStatusResponse {
     pub ahead: i32,
     pub behind: i32,
     pub files: Vec<GitChangedFile>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_worktree: Option<bool>,
 }
 
 /// A file with git changes
@@ -84,6 +86,39 @@ pub struct GitPushRequest {
 pub struct GitPushResponse {
     pub success: bool,
     pub message: String,
+}
+
+/// Worktree info
+#[derive(Serialize)]
+pub struct WorktreeInfo {
+    pub path: String,
+    pub branch: Option<String>,
+    pub head: String,
+    pub is_main: bool,
+}
+
+/// Worktree create request
+#[derive(Deserialize)]
+pub struct WorktreeCreateRequest {
+    /// Base branch to create from
+    pub base_branch: String,
+    /// New branch name
+    pub new_branch: String,
+    /// Directory name (relative to parent of repo root)
+    pub dir_name: String,
+    pub session: Option<String>,
+    pub window: Option<u32>,
+}
+
+/// Worktree remove request
+#[derive(Deserialize)]
+pub struct WorktreeRemoveRequest {
+    /// Worktree directory path
+    pub path: String,
+    #[serde(default)]
+    pub force: bool,
+    pub session: Option<String>,
+    pub window: Option<u32>,
 }
 
 /// Git stage/unstage request

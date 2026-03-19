@@ -2,7 +2,7 @@ use axum::{Json, extract::Query, response::IntoResponse};
 use serde::Deserialize;
 
 use crate::error::AppError;
-use crate::models::git::{GitCheckoutRequest, GitCommitRequest, GitPushRequest, GitStageAllRequest, GitStageRequest};
+use crate::models::git::{GitCheckoutRequest, GitCommitRequest, GitPushRequest, GitStageAllRequest, GitStageRequest, WorktreeCreateRequest, WorktreeRemoveRequest};
 use crate::services::{git, workspace};
 use serde_json::json;
 
@@ -150,6 +150,55 @@ pub async fn discard_handler(
 ) -> Result<impl IntoResponse, AppError> {
     let root = workspace::resolve_workspace_root(body.session.as_deref(), body.window)?;
     git::discard(&root, &body.paths)?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+// ── GET /api/git/worktrees ───────────────────────────────────────
+
+pub async fn worktree_list_handler(
+    Query(q): Query<WorkspaceQuery>,
+) -> Result<impl IntoResponse, AppError> {
+    let root = workspace::resolve_workspace_root(q.session.as_deref(), q.window)?;
+    let worktrees = git::list_worktrees(&root)?;
+    Ok(Json(json!({ "worktrees": worktrees })))
+}
+
+// ── POST /api/git/worktrees ─────────────────────────────────────
+
+pub async fn worktree_create_handler(
+    Json(body): Json<WorktreeCreateRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let root = workspace::resolve_workspace_root(body.session.as_deref(), body.window)?;
+
+    // Worktree directory: parent of repo root / dir_name
+    let parent = root.parent().ok_or_else(|| {
+        AppError::Internal("Cannot determine parent directory".into())
+    })?;
+    let worktree_path = parent.join(&body.dir_name);
+
+    if worktree_path.exists() {
+        return Err(AppError::BadRequest(format!(
+            "Directory already exists: {}",
+            worktree_path.display()
+        )));
+    }
+
+    git::create_worktree(&root, &worktree_path, &body.new_branch, &body.base_branch)?;
+
+    Ok(Json(json!({
+        "ok": true,
+        "path": worktree_path.to_string_lossy(),
+        "branch": body.new_branch,
+    })))
+}
+
+// ── DELETE /api/git/worktrees ───────────────────────────────────
+
+pub async fn worktree_remove_handler(
+    Json(body): Json<WorktreeRemoveRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let root = workspace::resolve_workspace_root(body.session.as_deref(), body.window)?;
+    git::remove_worktree(&root, &body.path, body.force)?;
     Ok(Json(json!({ "ok": true })))
 }
 

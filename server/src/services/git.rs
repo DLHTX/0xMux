@@ -1,7 +1,7 @@
 use crate::error::AppError;
 use crate::models::git::{
     GitBranchInfo, GitChangedFile, GitCommitResponse, GitDiffResponse, GitLogEntry,
-    GitPushResponse, GitStatusResponse,
+    GitPushResponse, GitStatusResponse, WorktreeInfo,
 };
 use crate::services::fs::detect_language;
 use std::path::{Path, PathBuf};
@@ -61,6 +61,9 @@ pub fn get_status(repo_path: &Path) -> Result<GitStatusResponse, AppError> {
             file.deletions = Some(*del);
         }
     }
+
+    // Check if current directory is a worktree (not the main repo)
+    response.is_worktree = Some(is_worktree(repo_path));
 
     Ok(response)
 }
@@ -202,6 +205,7 @@ fn parse_status(output: &str) -> Result<GitStatusResponse, AppError> {
         ahead,
         behind,
         files,
+        is_worktree: None,
     })
 }
 
@@ -621,6 +625,120 @@ pub fn discard(repo_path: &Path, paths: &[String]) -> Result<(), AppError> {
             )));
         }
     }
+
+    Ok(())
+}
+
+/// Check if the given path is a git worktree (not the main repo).
+pub fn is_worktree(repo_path: &Path) -> bool {
+    let git_path = repo_path.join(".git");
+    // In a worktree, .git is a file (not a directory) containing "gitdir: ..."
+    git_path.is_file()
+}
+
+/// List all worktrees for the repository.
+pub fn list_worktrees(repo_path: &Path) -> Result<Vec<WorktreeInfo>, AppError> {
+    let output = git_cmd(repo_path)
+        .args(["worktree", "list", "--porcelain"])
+        .output()
+        .map_err(|e| AppError::Internal(format!("git worktree list failed: {e}")))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(AppError::BadRequest(format!("git worktree error: {stderr}")));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut worktrees = Vec::new();
+    let mut current_path = String::new();
+    let mut current_head = String::new();
+    let mut current_branch: Option<String> = None;
+    let mut is_first = true;
+
+    for line in stdout.lines() {
+        if let Some(rest) = line.strip_prefix("worktree ") {
+            // Save previous entry
+            if !current_path.is_empty() {
+                worktrees.push(WorktreeInfo {
+                    path: current_path.clone(),
+                    branch: current_branch.take(),
+                    head: current_head.clone(),
+                    is_main: is_first,
+                });
+                is_first = false;
+            } else {
+                is_first = true;
+            }
+            current_path = rest.to_string();
+            current_head.clear();
+            current_branch = None;
+        } else if let Some(rest) = line.strip_prefix("HEAD ") {
+            current_head = rest.chars().take(7).collect();
+        } else if let Some(rest) = line.strip_prefix("branch ") {
+            // refs/heads/main -> main
+            current_branch = Some(
+                rest.strip_prefix("refs/heads/").unwrap_or(rest).to_string()
+            );
+        }
+    }
+    // Push last entry
+    if !current_path.is_empty() {
+        worktrees.push(WorktreeInfo {
+            path: current_path,
+            branch: current_branch,
+            head: current_head,
+            is_main: is_first,
+        });
+    }
+
+    Ok(worktrees)
+}
+
+/// Create a new worktree with a new branch.
+pub fn create_worktree(
+    repo_path: &Path,
+    worktree_path: &Path,
+    new_branch: &str,
+    base_branch: &str,
+) -> Result<(), AppError> {
+    let output = git_cmd(repo_path)
+        .args([
+            "worktree", "add",
+            "-b", new_branch,
+            &worktree_path.to_string_lossy(),
+            base_branch,
+        ])
+        .output()
+        .map_err(|e| AppError::Internal(format!("git worktree add failed: {e}")))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(AppError::BadRequest(format!("git worktree add error: {stderr}")));
+    }
+
+    Ok(())
+}
+
+/// Remove a worktree.
+pub fn remove_worktree(repo_path: &Path, worktree_path: &str, force: bool) -> Result<(), AppError> {
+    let mut cmd = git_cmd(repo_path);
+    cmd.args(["worktree", "remove"]);
+    if force {
+        cmd.arg("--force");
+    }
+    cmd.arg(worktree_path);
+
+    let output = cmd
+        .output()
+        .map_err(|e| AppError::Internal(format!("git worktree remove failed: {e}")))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(AppError::BadRequest(format!("git worktree remove error: {stderr}")));
+    }
+
+    // Prune stale worktree references
+    let _ = git_cmd(repo_path).args(["worktree", "prune"]).output();
 
     Ok(())
 }

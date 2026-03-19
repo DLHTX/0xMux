@@ -477,6 +477,7 @@ export interface GitStatus {
   ahead: number
   behind: number
   files: GitChangedFile[]
+  is_worktree?: boolean
 }
 
 export interface GitCommit {
@@ -495,6 +496,13 @@ export interface GitBranch {
   upstream?: string
   is_current: boolean
   is_remote: boolean
+}
+
+export interface WorktreeInfo {
+  path: string
+  branch: string | null
+  head: string
+  is_main: boolean
 }
 
 export interface GitDiffContent {

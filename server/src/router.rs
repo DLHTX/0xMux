@@ -189,6 +189,7 @@ pub fn build(state: AppState) -> Router {
         .route("/api/git/checkout", post(handlers::git::checkout_handler))
         .route("/api/git/discard", post(handlers::git::discard_handler))
         .route("/api/git/discard-all", post(handlers::git::discard_all_handler))
+        .route("/api/git/worktrees", get(handlers::git::worktree_list_handler).post(handlers::git::worktree_create_handler).delete(handlers::git::worktree_remove_handler))
         .route(
             "/api/sessions/{name}/windows",
             get(handlers::window::list_windows_handler)
