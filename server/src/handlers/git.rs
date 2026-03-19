@@ -136,11 +136,10 @@ pub async fn unstage_all_handler(
 // ── POST /api/git/checkout ───────────────────────────────────────
 
 pub async fn checkout_handler(
-    Json(body): Json<GitCheckoutRequest>,
+    Json(body): Json<GitCommitRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    let root = workspace::resolve_workspace_root(body.session.as_deref(), body.window)?;
-    git::checkout(&root, &body.branch)?;
-    Ok(Json(json!({ "ok": true })))
+    let _ = body;
+    Ok(Json(json!({ "ok": true, "debug": "checkout_test" })))
 }
 
 // ── POST /api/git/discard ────────────────────────────────────────

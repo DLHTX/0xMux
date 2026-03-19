@@ -174,24 +174,30 @@ pub fn build(state: AppState) -> Router {
             "/api/files/open-in",
             post(handlers::files::open_in_app_handler),
         )
-        .route("/api/files/search", get(handlers::files::search_handler))
-        // Git API
-        .route("/api/git/status", get(handlers::git::status_handler))
-        .route("/api/git/diff", get(handlers::git::diff_handler))
-        .route("/api/git/log", get(handlers::git::log_handler))
-        .route("/api/git/branches", get(handlers::git::branches_handler))
-        .route("/api/git/commit", post(handlers::git::commit_handler))
-        .route("/api/git/push", post(handlers::git::push_handler))
-        .route("/api/git/stage", post(handlers::git::stage_handler))
-        .route("/api/git/unstage", post(handlers::git::unstage_handler))
-        .route("/api/git/stage-all", post(handlers::git::stage_all_handler))
-        .route("/api/git/unstage-all", post(handlers::git::unstage_all_handler))
-        .route("/api/git/checkout", post(handlers::git::checkout_handler))
-        .route("/api/git/discard", post(handlers::git::discard_handler))
-        .route("/api/git/discard-all", post(handlers::git::discard_all_handler))
-        .route("/api/git/worktree-list", get(handlers::git::worktree_list_handler))
-        .route("/api/git/worktree-create", post(handlers::git::worktree_create_handler))
-        .route("/api/git/worktree-remove", post(handlers::git::worktree_remove_handler))
+        .route("/api/files/search", get(handlers::files::search_handler));
+
+    // Git API — nested under /api/git to use separate route table
+    let git_routes = Router::new()
+        .route("/status", get(handlers::git::status_handler))
+        .route("/diff", get(handlers::git::diff_handler))
+        .route("/log", get(handlers::git::log_handler))
+        .route("/branches", get(handlers::git::branches_handler))
+        .route("/do-checkout", post(handlers::git::checkout_handler))
+        .route("/commit", post(handlers::git::commit_handler))
+        .route("/push", post(handlers::git::push_handler))
+        .route("/stage", post(handlers::git::stage_handler))
+        .route("/unstage", post(handlers::git::unstage_handler))
+        .route("/stage-all", post(handlers::git::stage_all_handler))
+        .route("/unstage-all", post(handlers::git::unstage_all_handler))
+        .route("/discard", post(handlers::git::discard_handler))
+        .route("/discard-all", post(handlers::git::discard_all_handler))
+        .route("/worktree-list", get(handlers::git::worktree_list_handler))
+        .route("/worktree-create", post(handlers::git::worktree_create_handler))
+        .route("/worktree-remove", post(handlers::git::worktree_remove_handler));
+
+    let app = app
+        .nest("/api/git", git_routes)
+        .route("/api/checkout-test", post(handlers::git::checkout_handler))
         .route(
             "/api/sessions/{name}/windows",
             get(handlers::window::list_windows_handler)
@@ -246,8 +252,7 @@ pub fn build(state: AppState) -> Router {
         .route(
             "/ws/install/{task_id}",
             get(ws::install::ws_install_handler),
-        )
-        ;
+        );
 
     // Agent desktop automation API (feature-gated)
     #[cfg(feature = "agent")]

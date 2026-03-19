@@ -62,9 +62,11 @@ export function Header({
       <header
         className="flex items-center justify-between px-3 md:px-4 border-b-[length:var(--border-w)] border-b-[var(--color-border-light)] bg-[var(--color-bg)] shrink-0 h-10 md:h-12"
       >
-        {/* Left: Logo */}
+        {/* Left: Logo + dev build number */}
         <div className="flex items-center gap-2">
           <Logo onClick={onLogoClick} className="hidden md:block" />
+          {/* Dev build indicator — remove before release */}
+          {/*<span className="text-[9px] text-[var(--color-fg-muted)] font-mono opacity-50">dev</span>*/}
         </div>
 
         {/* Right: status + notifications + plugins + settings */}

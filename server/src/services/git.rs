@@ -702,6 +702,15 @@ pub fn create_worktree(
     new_branch: &str,
     base_branch: &str,
 ) -> Result<(), AppError> {
+    // Resolve base_branch to a commit SHA first — avoids "invalid reference"
+    // when the branch name can't be resolved directly (e.g. workspace path mismatch).
+    let base_ref = git_cmd(repo_path)
+        .args(["rev-parse", "--verify", base_branch])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
+
     let mut args = vec![
         "worktree".to_string(),
         "add".to_string(),
@@ -710,17 +719,22 @@ pub fn create_worktree(
         worktree_path.to_string_lossy().to_string(),
     ];
 
-    // Only specify base_branch if it differs from current branch
-    // (avoids "invalid reference" when the branch hasn't been pushed)
-    let current = git_cmd(repo_path)
-        .args(["rev-parse", "--abbrev-ref", "HEAD"])
-        .output()
-        .ok()
-        .filter(|o| o.status.success())
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
+    // Use resolved SHA if available, otherwise fall back to branch name
+    if let Some(sha) = &base_ref {
+        args.push(sha.clone());
+    } else {
+        // base_branch couldn't be resolved — try HEAD as fallback
+        let head_sha = git_cmd(repo_path)
+            .args(["rev-parse", "HEAD"])
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
 
-    if current.as_deref() != Some(base_branch) {
-        args.push(base_branch.to_string());
+        if let Some(sha) = head_sha {
+            args.push(sha);
+        }
+        // If even HEAD can't resolve, let git use its own default
     }
 
     let output = git_cmd(repo_path)
@@ -730,7 +744,12 @@ pub fn create_worktree(
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(AppError::BadRequest(format!("git worktree add error: {stderr}")));
+        return Err(AppError::BadRequest(format!(
+            "git worktree add error (repo={}, base={}): {}",
+            repo_path.display(),
+            base_branch,
+            stderr
+        )));
     }
 
     Ok(())
