@@ -73,8 +73,9 @@ export function WorktreeCreateModal({
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={t('worktree.title')}>
+    <Modal open={open} onClose={onClose}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-3 p-4">
+        <h3 className="text-sm font-black text-[var(--color-fg)]">{t('worktree.title')}</h3>
         {/* Base branch */}
         <div>
           <label className="text-[10px] font-bold text-[var(--color-fg-muted)] uppercase tracking-wider block mb-1">

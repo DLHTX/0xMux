@@ -12,7 +12,6 @@ import {
   IconSplitVertical,
   IconX,
   IconReplace,
-  IconTerminal,
   IconPlus,
 } from '../../lib/icons'
 import type { SplitLayout, SplitDirection } from '../../lib/types'

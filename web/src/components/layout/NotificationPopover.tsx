@@ -63,7 +63,7 @@ export function NotificationPopover({
         onMarkAllRead={onMarkAllRead}
         onMarkRead={onMarkRead}
         onDismiss={onDismiss}
-        onImageClick={onImageClick}
+        onImageClick={onImageClick ?? (() => {})}
       />
     </div>
   )
