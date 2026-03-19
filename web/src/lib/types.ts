@@ -4,6 +4,7 @@ export interface TmuxSession {
   created: string
   attached: boolean
   start_directory: string
+  is_worktree?: boolean
 }
 
 export interface Dependency {

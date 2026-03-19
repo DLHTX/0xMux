@@ -163,12 +163,21 @@ pub fn list_sessions() -> Result<Vec<TmuxSession>, AppError> {
                         if name.starts_with("_0xmux_") {
                             return None;
                         }
+                        let dir = parts.get(4).unwrap_or(&"").to_string();
+                        // A git worktree has a .git FILE (not directory) pointing to the main repo
+                        let is_worktree = if !dir.is_empty() {
+                            let dot_git = std::path::Path::new(&dir).join(".git");
+                            dot_git.is_file()
+                        } else {
+                            false
+                        };
                         Some(TmuxSession {
                             name,
                             windows: parts[1].parse().unwrap_or(0),
                             created: parts[2].to_string(),
                             attached: parts[3] == "1",
-                            start_directory: parts.get(4).unwrap_or(&"").to_string(),
+                            start_directory: dir,
+                            is_worktree,
                         })
                     } else {
                         None

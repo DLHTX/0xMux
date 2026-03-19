@@ -418,7 +418,10 @@ const en = {
   'toast.createdWindow': 'Created window {index}',
   'toast.createWindowFailed': 'Failed to create window in "{name}"',
   'toast.deletedSession': 'Deleted session "{name}"',
+  'toast.deletedSessionAndWorktree': 'Deleted session "{name}" and its worktree',
+  'toast.removeWorktreeFailed': 'Failed to remove worktree at {path}',
   'toast.deleteSessionFailed': 'Failed to delete session "{name}"',
+  'session.deleteWorktreeConfirm': 'This session is a git worktree ({path}). Also remove the worktree?',
   'toast.deletedWindow': 'Deleted window {index}',
   'toast.deleteWindowFailed': 'Failed to delete window {index}',
 
@@ -806,7 +809,10 @@ const zh: { [K in keyof typeof en]: string } = {
   'toast.createdWindow': '已创建窗口 {index}',
   'toast.createWindowFailed': '在 "{name}" 中创建窗口失败',
   'toast.deletedSession': '已删除会话 "{name}"',
+  'toast.deletedSessionAndWorktree': '已删除会话 "{name}" 及其 worktree',
+  'toast.removeWorktreeFailed': '删除 worktree {path} 失败',
   'toast.deleteSessionFailed': '删除会话 "{name}" 失败',
+  'session.deleteWorktreeConfirm': '该会话是一个 git worktree ({path})，是否同时删除该 worktree？',
   'toast.deletedWindow': '已删除窗口 {index}',
   'toast.deleteWindowFailed': '删除窗口 {index} 失败',
 

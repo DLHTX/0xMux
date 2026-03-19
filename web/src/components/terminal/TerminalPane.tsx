@@ -188,7 +188,8 @@ export function TerminalPane({
   } = useTerminal({
     fontSize,
     // Keep local history so wheel/touch scroll works inside terminal.
-    scrollback: isMobile ? 3000 : 5000,
+    // 20k lines provides ample smooth scrollback without excessive memory.
+    scrollback: isMobile ? 3000 : 20000,
     workspace: { session: sessionName, window: windowIndex ?? 0 },
     onFileClick: (path, line, _col) => {
       handleFileLinkClickRef.current(path, line)

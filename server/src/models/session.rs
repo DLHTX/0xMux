@@ -7,6 +7,9 @@ pub struct TmuxSession {
     pub created: String,
     pub attached: bool,
     pub start_directory: String,
+    /// Whether the session's working directory is a git worktree
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub is_worktree: bool,
 }
 
 #[derive(Deserialize)]

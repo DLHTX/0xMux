@@ -59,6 +59,8 @@ export function useTerminal(options: UseTerminalOptions = {}) {
       allowProposedApi: true,
       // Keep local scrollback enabled so wheel/touch can scroll terminal history.
       scrollback: options.scrollback ?? 5000,
+      // Smooth animated scrolling (ms) — makes line-based scrolling feel fluid
+      smoothScrollDuration: 100,
     })
 
     const fitAddon = new FitAddon()
@@ -318,8 +320,16 @@ export function useTerminal(options: UseTerminalOptions = {}) {
         const rawLines = event.deltaMode === 1 ? event.deltaY : event.deltaY / 12
         if (Math.abs(rawLines) < 0.2) return
         const lines = (rawLines < 0 ? -1 : 1) * Math.max(1, Math.min(45, Math.round(Math.abs(rawLines))))
-        // For wheel, 'throttled' is truthy — still prevents native scroll bounce
-        if (scrollByDelta(lines) || requestRemoteScroll(lines, 'wheel')) {
+
+        // Try local scrollback first
+        if (scrollByDelta(lines)) {
+          event.preventDefault()
+          event.stopPropagation()
+          return
+        }
+
+        // Local scrollback exhausted — try remote tmux scroll
+        if (requestRemoteScroll(lines, 'wheel')) {
           event.preventDefault()
         }
       }
@@ -398,8 +408,15 @@ export function useTerminal(options: UseTerminalOptions = {}) {
       options.onResize?.(cols, rows)
     })
 
-    // ResizeObserver for auto-fit
-    const ro = new ResizeObserver(() => {
+    // ResizeObserver for auto-fit — only refit when container size actually changes
+    let lastW = 0, lastH = 0
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0]
+      if (!entry) return
+      const { width, height } = entry.contentRect
+      if (Math.abs(width - lastW) < 1 && Math.abs(height - lastH) < 1) return
+      lastW = width
+      lastH = height
       requestAnimationFrame(() => {
         try {
           fitAddon.fit()

@@ -36,7 +36,7 @@ import { ThemeProvider, useTheme } from './hooks/useTheme'
 import { I18nProvider, useI18n } from './hooks/useI18n'
 import { MuxProvider, useMux } from './contexts/MuxContext'
 import { FUSION_PIXEL_FONT, SILKSCREEN_FONT } from './lib/theme'
-import { getGitDiff, getGitStatus, getGitBranches, gitCheckout, uploadFiles, createWorktree, listWorktrees } from './lib/api'
+import { getGitDiff, getGitStatus, getGitBranches, gitCheckout, uploadFiles, createWorktree, listWorktrees, removeWorktree } from './lib/api'
 import { isTerminalFileDrag } from './lib/terminalFileDrag'
 import { useImageSync } from './hooks/useImageSync'
 import { Icon } from '@iconify/react'
@@ -688,13 +688,36 @@ function AppContent() {
 
   const handleDeleteSession = async (sessionName: string) => {
     try {
+      const session = sessions.find((s) => s.name === sessionName)
+      const isWorktree = session?.is_worktree ?? false
+      const worktreePath = session?.start_directory ?? ''
+
+      // If this session is a worktree, ask if user wants to also remove the worktree
+      let alsoRemoveWorktree = false
+      if (isWorktree && worktreePath) {
+        alsoRemoveWorktree = window.confirm(
+          t('session.deleteWorktreeConfirm', { path: worktreePath })
+        )
+      }
+
       await deleteSession(sessionName)
       setWindows((prev) => {
         const next = new Map(prev)
         next.delete(sessionName)
         return next
       })
-      addToast(t('toast.deletedSession', { name: sessionName }), 'success')
+
+      if (alsoRemoveWorktree && worktreePath) {
+        try {
+          await removeWorktree(worktreePath, true)
+          addToast(t('toast.deletedSessionAndWorktree', { name: sessionName }), 'success')
+        } catch {
+          addToast(t('toast.deletedSession', { name: sessionName }), 'success')
+          addToast(t('toast.removeWorktreeFailed', { path: worktreePath }), 'error')
+        }
+      } else {
+        addToast(t('toast.deletedSession', { name: sessionName }), 'success')
+      }
     } catch {
       addToast(t('toast.deleteSessionFailed', { name: sessionName }), 'error')
     }
