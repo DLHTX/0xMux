@@ -113,7 +113,10 @@ const en = {
 
   // Status Bar
   'statusBar.changed': '{n} changed',
+  'statusBar.noChanges': 'clean',
   'statusBar.worktree': 'worktree',
+  'statusBar.inWorktree': 'in worktree',
+  'statusBar.worktreeList': 'Worktree list',
   'statusBar.switchBranch': 'Switch branch',
 
   // Branch Switcher
@@ -520,7 +523,10 @@ const zh: { [K in keyof typeof en]: string } = {
   'activity.notifications': '通知',
 
   'statusBar.changed': '{n} 个变更',
+  'statusBar.noChanges': '无变更',
   'statusBar.worktree': 'worktree',
+  'statusBar.inWorktree': '在 worktree 中',
+  'statusBar.worktreeList': 'Worktree 列表',
   'statusBar.switchBranch': '切换分支',
 
   'branch.search': '搜索分支...',

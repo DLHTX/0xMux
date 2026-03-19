@@ -36,7 +36,7 @@ import { ThemeProvider, useTheme } from './hooks/useTheme'
 import { I18nProvider, useI18n } from './hooks/useI18n'
 import { MuxProvider, useMux } from './contexts/MuxContext'
 import { FUSION_PIXEL_FONT, SILKSCREEN_FONT } from './lib/theme'
-import { getGitDiff, getGitStatus, getGitBranches, gitCheckout, uploadFiles, createWorktree } from './lib/api'
+import { getGitDiff, getGitStatus, getGitBranches, gitCheckout, uploadFiles, createWorktree, listWorktrees } from './lib/api'
 import { isTerminalFileDrag } from './lib/terminalFileDrag'
 import { useImageSync } from './hooks/useImageSync'
 import { Icon } from '@iconify/react'
@@ -45,6 +45,7 @@ import type { Terminal } from '@xterm/xterm'
 import type {
   TmuxWindow,
   GitBranch,
+  WorktreeInfo,
   RightPanelTab,
   WorkspaceContext,
   AiStatusResponse,
@@ -784,58 +785,10 @@ function AppContent() {
     updateSettings({ rightPanelCollapsed: collapsed })
   }, [updateSettings])
 
-  // Branch switcher: open popover and fetch branches
-  const handleBranchClick = useCallback(() => {
-    setShowBranchSwitcher(prev => !prev)
-    getGitBranches(activeWorkspace)
-      .then(res => setGitBranches(res.branches))
-      .catch(() => {})
-  }, [activeWorkspace])
-
-  // Branch checkout
-  const handleBranchCheckout = useCallback(async (branch: string) => {
-    setBranchSwitching(true)
-    try {
-      await gitCheckout(branch, activeWorkspace)
-      setShowBranchSwitcher(false)
-      refreshGitInfo()
-      addToast(t('git.switchedTo', { branch }), 'success')
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      addToast(t('branch.switchFailed', { msg }), 'error')
-    } finally {
-      setBranchSwitching(false)
-    }
-  }, [activeWorkspace, refreshGitInfo, addToast, t])
-
   // Changes click → open right panel changes tab
   const handleChangesClick = useCallback(() => {
     updateSettings({ rightPanelCollapsed: false, rightPanelTab: 'changes' })
   }, [updateSettings])
-
-  // Worktree creation
-  const handleWorktreeCreate = useCallback(async (baseBranch: string, newBranch: string, dirName: string) => {
-    setWorktreeCreating(true)
-    try {
-      const result = await createWorktree(baseBranch, newBranch, dirName, activeWorkspace)
-      setShowWorktreeCreate(false)
-      addToast(t('worktree.created', { branch: result.branch }), 'success')
-      // Create a session in the new worktree directory
-      await handleCreate(newBranch, result.path)
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      addToast(t('worktree.createFailed', { msg }), 'error')
-    } finally {
-      setWorktreeCreating(false)
-    }
-  }, [activeWorkspace, addToast, t])
-
-  // Project name for worktree directory naming
-  const projectName = useMemo(() => {
-    // Derive from workspace root or current directory
-    if (activeWorkspace?.session) return activeWorkspace.session.split('/').pop() ?? '0xmux'
-    return '0xmux'
-  }, [activeWorkspace])
 
   /** Create a new window in the given session and attach it to the active pane */
   const handleCreateAndAttachWindow = useCallback(async (sessionName: string) => {
@@ -871,12 +824,12 @@ function AppContent() {
     }
   }, [primarySession, assignWindow, setActivePaneId, addToast, t])
 
-  const activeWorkspace: WorkspaceContext | undefined = selectedWindow
-    ? {
-        session: selectedWindow.sessionName,
-        window: selectedWindow.windowIndex,
-      }
-    : undefined
+  const activeWorkspace: WorkspaceContext | undefined = useMemo(
+    () => selectedWindow
+      ? { session: selectedWindow.sessionName, window: selectedWindow.windowIndex }
+      : undefined,
+    [selectedWindow?.sessionName, selectedWindow?.windowIndex]
+  )
 
   // Git state — branch info + change count
   const [gitChangeCount, setGitChangeCount] = useState(0)
@@ -885,13 +838,15 @@ function AppContent() {
   const [gitBehind, setGitBehind] = useState(0)
   const [gitIsWorktree, setGitIsWorktree] = useState(false)
   const [gitBranches, setGitBranches] = useState<GitBranch[]>([])
+  const [gitWorktrees, setGitWorktrees] = useState<WorktreeInfo[]>([])
   const [showBranchSwitcher, setShowBranchSwitcher] = useState(false)
   const [showWorktreeCreate, setShowWorktreeCreate] = useState(false)
+  const [worktreeTargetSession, setWorktreeTargetSession] = useState<string | null>(null)
   const [branchSwitching, setBranchSwitching] = useState(false)
   const [worktreeCreating, setWorktreeCreating] = useState(false)
 
   // Fetch git status (branch, ahead/behind, changes, worktree)
-  const refreshGitInfo = useCallback(() => {
+  const refreshGitStatus = useCallback(() => {
     getGitStatus(activeWorkspace)
       .then(s => {
         setGitChangeCount(s.files.length)
@@ -903,16 +858,78 @@ function AppContent() {
       .catch(() => {})
   }, [activeWorkspace])
 
+  // Full refresh including worktree list (expensive, don't call on every file change)
+  const refreshGitInfo = useCallback(() => {
+    refreshGitStatus()
+    listWorktrees(activeWorkspace)
+      .then(res => setGitWorktrees(res.worktrees))
+      .catch(() => {})
+  }, [activeWorkspace, refreshGitStatus])
+
   useEffect(() => {
     refreshGitInfo()
   }, [refreshGitInfo])
 
-  // Auto-refresh git info on file changes
+  // Auto-refresh git status on file changes (debounced, no worktree list)
+  const refreshGitStatusRef = useRef(refreshGitStatus)
+  refreshGitStatusRef.current = refreshGitStatus
+  const fileChangeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
     return mux.onFileChange(() => {
-      refreshGitInfo()
+      if (fileChangeTimerRef.current) clearTimeout(fileChangeTimerRef.current)
+      fileChangeTimerRef.current = setTimeout(() => {
+        refreshGitStatusRef.current()
+      }, 2000)
     })
-  }, [mux, refreshGitInfo])
+  }, [mux]) // stable deps only — no re-subscribe on state changes
+
+  // Branch switcher: open popover and fetch branches
+  const handleBranchClick = useCallback(() => {
+    setShowBranchSwitcher(prev => !prev)
+    getGitBranches(activeWorkspace)
+      .then(res => setGitBranches(res.branches))
+      .catch(() => {})
+  }, [activeWorkspace])
+
+  // Branch checkout
+  const handleBranchCheckout = useCallback(async (branch: string) => {
+    setBranchSwitching(true)
+    try {
+      await gitCheckout(branch, activeWorkspace)
+      setShowBranchSwitcher(false)
+      refreshGitInfo()
+      addToast(t('git.switchedTo', { branch }), 'success')
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      addToast(t('branch.switchFailed', { msg }), 'error')
+    } finally {
+      setBranchSwitching(false)
+    }
+  }, [activeWorkspace, refreshGitInfo, addToast, t])
+
+  // Worktree creation — uses the session that was clicked, not the active one
+  const handleWorktreeCreate = useCallback(async (baseBranch: string, newBranch: string, dirName: string) => {
+    setWorktreeCreating(true)
+    const ws = worktreeTargetSession ? { session: worktreeTargetSession, window: 0 } : activeWorkspace
+    try {
+      const result = await createWorktree(baseBranch, newBranch, dirName, ws)
+      setShowWorktreeCreate(false)
+      addToast(t('worktree.created', { branch: result.branch }), 'success')
+      // Create a session in the new worktree directory
+      await handleCreate(newBranch, result.path)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      addToast(t('worktree.createFailed', { msg }), 'error')
+    } finally {
+      setWorktreeCreating(false)
+    }
+  }, [worktreeTargetSession, activeWorkspace, addToast, t])
+
+  // Project name for worktree directory naming
+  const projectName = useMemo(() => {
+    if (activeWorkspace?.session) return activeWorkspace.session.split('/').pop() ?? '0xmux'
+    return '0xmux'
+  }, [activeWorkspace])
 
   // Open file in floating editor from file explorer / search results
   const handleOpenFile = useCallback((path: string, line?: number) => {
@@ -1380,6 +1397,14 @@ function AppContent() {
                   onCreateWindow={handleCreateWindow}
                   onDeleteWindow={handleDeleteWindow}
                   onDeleteSession={handleDeleteSession}
+                  onCreateWorktree={(sessionName) => {
+                    setWorktreeTargetSession(sessionName)
+                    setShowWorktreeCreate(true)
+                    const ws = { session: sessionName, window: 0 }
+                    getGitBranches(ws)
+                      .then(res => setGitBranches(res.branches))
+                      .catch(() => {})
+                  }}
                   isWindowInUse={isWindowInUse}
                   isInSplitGroup={isInSplitGroup}
                   collapsed={false}
@@ -1561,9 +1586,17 @@ function AppContent() {
             behind={gitBehind}
             changeCount={gitChangeCount}
             isWorktree={gitIsWorktree}
+            worktrees={gitWorktrees}
             connectionStatus={connectionStatus}
             onBranchClick={handleBranchClick}
             onChangesClick={handleChangesClick}
+            onWorktreeListClick={() => {
+              setShowBranchSwitcher(false)
+              setShowWorktreeCreate(true)
+              getGitBranches(activeWorkspace)
+                .then(res => setGitBranches(res.branches))
+                .catch(() => {})
+            }}
           />
           <BranchSwitcher
             open={showBranchSwitcher}

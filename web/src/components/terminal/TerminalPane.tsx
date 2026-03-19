@@ -201,6 +201,13 @@ export function TerminalPane({
         onAtTriggerRef.current()
         return
       }
+      // Auto-scroll to bottom when user types while scrolled up in tmux history
+      const scrollState = tmuxScrollStateRef.current
+      if (scrollState && scrollState.position > 0) {
+        chRef.current?.scroll(scrollState.position)
+        setTmuxScrollState(null)
+        setTmuxScrollProgress(1)
+      }
       chRef.current?.send(data)
     },
     onResize: (cols, rows) => chRef.current?.resize(cols, rows),

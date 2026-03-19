@@ -695,19 +695,36 @@ pub fn list_worktrees(repo_path: &Path) -> Result<Vec<WorktreeInfo>, AppError> {
 }
 
 /// Create a new worktree with a new branch.
+/// If base_branch matches the current HEAD branch, omit it (use HEAD directly).
 pub fn create_worktree(
     repo_path: &Path,
     worktree_path: &Path,
     new_branch: &str,
     base_branch: &str,
 ) -> Result<(), AppError> {
+    let mut args = vec![
+        "worktree".to_string(),
+        "add".to_string(),
+        "-b".to_string(),
+        new_branch.to_string(),
+        worktree_path.to_string_lossy().to_string(),
+    ];
+
+    // Only specify base_branch if it differs from current branch
+    // (avoids "invalid reference" when the branch hasn't been pushed)
+    let current = git_cmd(repo_path)
+        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
+
+    if current.as_deref() != Some(base_branch) {
+        args.push(base_branch.to_string());
+    }
+
     let output = git_cmd(repo_path)
-        .args([
-            "worktree", "add",
-            "-b", new_branch,
-            &worktree_path.to_string_lossy(),
-            base_branch,
-        ])
+        .args(&args)
         .output()
         .map_err(|e| AppError::Internal(format!("git worktree add failed: {e}")))?;
 

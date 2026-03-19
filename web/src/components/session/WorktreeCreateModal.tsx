@@ -4,6 +4,16 @@ import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { useI18n } from '../../hooks/useI18n'
 
+/** Generate a random short branch name like "wt-a3f9" */
+function randomBranchName(): string {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
+  let suffix = ''
+  for (let i = 0; i < 4; i++) {
+    suffix += chars[Math.floor(Math.random() * chars.length)]
+  }
+  return `wt-${suffix}`
+}
+
 interface WorktreeCreateModalProps {
   open: boolean
   onClose: () => void
@@ -29,17 +39,18 @@ export function WorktreeCreateModal({
   const [dirName, setDirName] = useState('')
   const [dirManuallyEdited, setDirManuallyEdited] = useState(false)
 
-  // Reset form on open
+  // Reset form on open — auto-generate branch name
   useEffect(() => {
     if (open) {
+      const name = randomBranchName()
       setBaseBranch(currentBranch)
-      setNewBranch('')
-      setDirName('')
+      setNewBranch(name)
+      setDirName(`${projectName}-${name}`)
       setDirManuallyEdited(false)
     }
-  }, [open, currentBranch])
+  }, [open, currentBranch, projectName])
 
-  // Auto-generate dir name from new branch name
+  // Auto-update dir name when branch name changes (unless manually edited)
   useEffect(() => {
     if (!dirManuallyEdited && newBranch) {
       const sanitized = newBranch.replace(/[/\\]/g, '-').replace(/[^a-zA-Z0-9._-]/g, '')
@@ -80,7 +91,7 @@ export function WorktreeCreateModal({
           </select>
         </div>
 
-        {/* New branch name */}
+        {/* New branch name — pre-filled, editable */}
         <div>
           <label className="text-[10px] font-bold text-[var(--color-fg-muted)] uppercase tracking-wider block mb-1">
             {t('worktree.newBranch')}
@@ -89,13 +100,11 @@ export function WorktreeCreateModal({
             type="text"
             value={newBranch}
             onChange={(e) => setNewBranch(e.target.value)}
-            placeholder="fix-login"
-            className="w-full bg-[var(--color-bg-alt)] text-[var(--color-fg)] text-xs px-2 py-1.5 border border-[var(--color-border-light)] outline-none placeholder:text-[var(--color-fg-muted)]"
-            autoFocus
+            className="w-full bg-[var(--color-bg-alt)] text-[var(--color-fg)] text-xs px-2 py-1.5 border border-[var(--color-border-light)] outline-none"
           />
         </div>
 
-        {/* Directory name */}
+        {/* Directory name — auto-generated, editable */}
         <div>
           <label className="text-[10px] font-bold text-[var(--color-fg-muted)] uppercase tracking-wider block mb-1">
             {t('worktree.dirName')}
@@ -111,7 +120,7 @@ export function WorktreeCreateModal({
           </span>
         </div>
 
-        {/* Submit */}
+        {/* Submit — one click to create */}
         <div className="flex justify-end gap-2 mt-1">
           <Button variant="ghost" size="sm" onClick={onClose} type="button">
             {t('ctx.cancel')}

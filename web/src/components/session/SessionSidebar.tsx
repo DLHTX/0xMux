@@ -19,6 +19,7 @@ interface SessionSidebarProps {
   onCreateWindow: (sessionName: string) => void
   onDeleteWindow: (sessionName: string, windowIndex: number) => void
   onDeleteSession: (sessionName: string) => void
+  onCreateWorktree?: (sessionName: string) => void
   isWindowInUse?: (sessionName: string, windowIndex: number) => boolean
   isInSplitGroup?: (sessionName: string, windowIndex: number) => boolean
   collapsed: boolean
@@ -35,6 +36,7 @@ export function SessionSidebar({
   onCreateWindow,
   onDeleteWindow,
   onDeleteSession,
+  onCreateWorktree,
   isWindowInUse,
   isInSplitGroup,
   collapsed,
@@ -123,6 +125,7 @@ export function SessionSidebar({
                 onSelectSession={onSelectSession}
                 onSelectWindow={onSelectWindow}
                 onCreateWindow={onCreateWindow}
+                onCreateWorktree={onCreateWorktree}
                 onDeleteWindow={onDeleteWindow}
                 onDeleteSession={onDeleteSession}
                 isWindowInUse={isWindowInUse}

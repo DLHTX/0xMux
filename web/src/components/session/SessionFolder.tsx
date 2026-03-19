@@ -1,5 +1,5 @@
 import { Icon } from '@iconify/react'
-import { IconChevronRight, IconTrash, IconPlus } from '../../lib/icons'
+import { IconChevronRight, IconTrash, IconPlus, IconGitBranch } from '../../lib/icons'
 import type { TmuxSession, TmuxWindow } from '../../lib/types'
 import { WindowItem } from './WindowItem'
 import { useI18n } from '../../hooks/useI18n'
@@ -12,6 +12,7 @@ interface SessionFolderProps {
   onSelectSession: (sessionName: string) => void
   onSelectWindow: (sessionName: string, windowIndex: number) => void
   onCreateWindow: (sessionName: string) => void
+  onCreateWorktree?: (sessionName: string) => void
   onDeleteWindow: (sessionName: string, windowIndex: number) => void
   onDeleteSession: (sessionName: string) => void
   isWindowInUse?: (sessionName: string, windowIndex: number) => boolean
@@ -28,6 +29,7 @@ export function SessionFolder({
   onSelectSession,
   onSelectWindow,
   onCreateWindow,
+  onCreateWorktree,
   onDeleteWindow,
   onDeleteSession,
   isWindowInUse,
@@ -97,36 +99,35 @@ export function SessionFolder({
           <span className={`text-xs truncate block ${isSelected ? 'font-black' : 'font-bold'}`}>{session.name}</span>
         </div>
 
-        {/* Window count */}
-        <span className="text-[10px] text-[var(--color-fg-muted)] tabular-nums shrink-0">
-          {windows.length}w
-        </span>
-
-        {/* Create window button */}
-        <button
-          onClick={handleCreateWindow}
-          onMouseDown={(e) => e.stopPropagation()}
-          className="
-            shrink-0 w-5 h-5 flex items-center justify-center transition-colors
-            text-[var(--color-border-light)] hover:text-[var(--color-success)]
-          "
-          title={t('session.createWindow')}
-        >
-          <Icon icon={IconPlus} width={12} height={12} />
-        </button>
-
-        {/* Delete session button */}
-        <button
-          onClick={handleDeleteSession}
-          onMouseDown={(e) => e.stopPropagation()}
-          className="
-            shrink-0 w-5 h-5 flex items-center justify-center transition-colors
-            text-[var(--color-border-light)] hover:text-[var(--color-danger)]
-          "
-          title={t('session.deleteSession')}
-        >
-          <Icon icon={IconTrash} width={12} height={12} />
-        </button>
+        {/* Action buttons */}
+        <div className="flex items-center gap-0">
+          <button
+            onClick={handleCreateWindow}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="shrink-0 w-5 h-5 flex items-center justify-center transition-colors text-[var(--color-fg-muted)] hover:text-[var(--color-success)]"
+            title={t('session.createWindow')}
+          >
+            <Icon icon={IconPlus} width={12} height={12} />
+          </button>
+          {onCreateWorktree && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onCreateWorktree(session.name) }}
+              onMouseDown={(e) => e.stopPropagation()}
+              className="shrink-0 w-5 h-5 flex items-center justify-center transition-colors text-[var(--color-fg-muted)] hover:text-[var(--color-accent)]"
+              title={t('branch.newWorktree')}
+            >
+              <Icon icon={IconGitBranch} width={12} height={12} />
+            </button>
+          )}
+          <button
+            onClick={handleDeleteSession}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="shrink-0 w-5 h-5 flex items-center justify-center transition-colors text-[var(--color-fg-muted)] hover:text-[var(--color-danger)]"
+            title={t('session.deleteSession')}
+          >
+            <Icon icon={IconTrash} width={12} height={12} />
+          </button>
+        </div>
 
         {/* Breathing animation */}
         <style>{`
