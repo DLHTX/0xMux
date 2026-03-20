@@ -106,6 +106,9 @@ pub struct WorktreeCreateRequest {
     pub new_branch: String,
     /// Directory name (relative to parent of repo root)
     pub dir_name: String,
+    /// Untracked files/dirs to copy into the new worktree
+    #[serde(default)]
+    pub copy_paths: Vec<String>,
     pub session: Option<String>,
     pub window: Option<u32>,
 }

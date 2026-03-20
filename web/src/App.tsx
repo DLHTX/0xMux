@@ -35,7 +35,7 @@ import { ThemeProvider, useTheme } from './hooks/useTheme'
 import { I18nProvider, useI18n } from './hooks/useI18n'
 import { MuxProvider, useMux } from './contexts/MuxContext'
 import { FUSION_PIXEL_FONT, SILKSCREEN_FONT } from './lib/theme'
-import { getGitDiff, getGitStatus, getGitBranches, gitCheckout, uploadFiles, createWorktree, listWorktrees, removeWorktree } from './lib/api'
+import { getGitDiff, getGitStatus, getGitBranches, gitCheckout, uploadFiles, createWorktree, listWorktrees, removeWorktree, getUntrackedFiles } from './lib/api'
 import { isTerminalFileDrag } from './lib/terminalFileDrag'
 import { useImageSync } from './hooks/useImageSync'
 import { Icon } from '@iconify/react'
@@ -863,6 +863,7 @@ function AppContent() {
   const [gitWorktrees, setGitWorktrees] = useState<WorktreeInfo[]>([])
   const [showBranchSwitcher, setShowBranchSwitcher] = useState(false)
   const [showWorktreeCreate, setShowWorktreeCreate] = useState(false)
+  const [untrackedFiles, setUntrackedFiles] = useState<string[]>([])
   const [worktreeTargetSession, setWorktreeTargetSession] = useState<string | null>(null)
   const [branchSwitching, setBranchSwitching] = useState(false)
   const [worktreeCreating, setWorktreeCreating] = useState(false)
@@ -930,11 +931,11 @@ function AppContent() {
   }, [activeWorkspace, refreshGitInfo, addToast, t])
 
   // Worktree creation — uses the session that was clicked, not the active one
-  const handleWorktreeCreate = useCallback(async (baseBranch: string, newBranch: string, dirName: string) => {
+  const handleWorktreeCreate = useCallback(async (baseBranch: string, newBranch: string, dirName: string, copyPaths: string[]) => {
     setWorktreeCreating(true)
     const ws = worktreeTargetSession ? { session: worktreeTargetSession, window: 0 } : activeWorkspace
     try {
-      const result = await createWorktree(baseBranch, newBranch, dirName, ws)
+      const result = await createWorktree(baseBranch, newBranch, dirName, copyPaths, ws)
       setShowWorktreeCreate(false)
       addToast(t('worktree.created', { branch: result.branch }), 'success')
       // Create a session in the new worktree directory
@@ -1426,6 +1427,9 @@ function AppContent() {
                     getGitBranches(ws)
                       .then(res => setGitBranches(res.branches))
                       .catch(() => {})
+                    getUntrackedFiles(ws)
+                      .then(res => setUntrackedFiles(res.paths))
+                      .catch(() => setUntrackedFiles([]))
                   }}
                   isWindowInUse={isWindowInUse}
                   isInSplitGroup={isInSplitGroup}
@@ -1647,6 +1651,7 @@ function AppContent() {
         branches={gitBranches}
         currentBranch={gitBranch}
         projectName={projectName}
+        untrackedFiles={untrackedFiles}
         onSubmit={handleWorktreeCreate}
         loading={worktreeCreating}
       />

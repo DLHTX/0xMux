@@ -185,11 +185,26 @@ pub async fn worktree_create_handler(
 
     git::create_worktree(&root, &worktree_path, &body.new_branch, &body.base_branch)?;
 
+    // Copy selected untracked files/dirs to the new worktree
+    if !body.copy_paths.is_empty() {
+        git::copy_paths_to_worktree(&root, &worktree_path, &body.copy_paths)?;
+    }
+
     Ok(Json(json!({
         "ok": true,
         "path": worktree_path.to_string_lossy(),
         "branch": body.new_branch,
     })))
+}
+
+// ── GET /api/git/untracked ──────────────────────────────────────
+
+pub async fn untracked_handler(
+    Query(q): Query<WorkspaceQuery>,
+) -> Result<impl IntoResponse, AppError> {
+    let root = workspace::resolve_workspace_root(q.session.as_deref(), q.window)?;
+    let paths = git::list_untracked(&root)?;
+    Ok(Json(json!({ "paths": paths })))
 }
 
 // ── DELETE /api/git/worktrees ───────────────────────────────────

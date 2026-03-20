@@ -611,15 +611,27 @@ export async function createWorktree(
   baseBranch: string,
   newBranch: string,
   dirName: string,
+  copyPaths: string[] = [],
   workspace?: WorkspaceContext,
 ): Promise<{ ok: boolean; path: string; branch: string }> {
   const body: Record<string, unknown> = {
     base_branch: baseBranch,
     new_branch: newBranch,
     dir_name: dirName,
+    copy_paths: copyPaths,
   }
   if (workspace) { body.session = workspace.session; body.window = workspace.window }
   return request('/git/worktree-create', { method: 'POST', body: JSON.stringify(body) })
+}
+
+export async function getUntrackedFiles(workspace?: WorkspaceContext): Promise<{ paths: string[] }> {
+  const params = new URLSearchParams()
+  if (workspace) {
+    params.set('session', workspace.session)
+    params.set('window', String(workspace.window))
+  }
+  const qs = params.toString()
+  return request(`/git/untracked${qs ? `?${qs}` : ''}`)
 }
 
 export async function removeWorktree(

@@ -779,6 +779,76 @@ pub fn remove_worktree(repo_path: &Path, worktree_path: &str, force: bool) -> Re
     Ok(())
 }
 
+/// List untracked files and directories (top-level, including gitignored).
+pub fn list_untracked(repo_path: &Path) -> Result<Vec<String>, AppError> {
+    let output = git_cmd(repo_path)
+        .args(["ls-files", "--others", "--directory", "--no-empty-directory"])
+        .output()
+        .map_err(|e| AppError::Internal(format!("git ls-files failed: {e}")))?;
+
+    if !output.status.success() {
+        return Ok(vec![]);
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut paths: Vec<String> = stdout
+        .lines()
+        .filter(|l| !l.is_empty())
+        .filter(|l| *l != ".DS_Store" && *l != "node_modules/" && *l != "target/")
+        .map(|l| l.to_string())
+        .collect();
+    paths.sort();
+    Ok(paths)
+}
+
+/// Copy a list of files/directories from source to dest worktree.
+pub fn copy_paths_to_worktree(
+    source: &Path,
+    dest: &Path,
+    paths: &[String],
+) -> Result<(), AppError> {
+    for rel_path in paths {
+        let clean = rel_path.trim_end_matches('/');
+        let src = source.join(clean);
+        let dst = dest.join(clean);
+
+        if !src.exists() {
+            continue;
+        }
+
+        if src.is_dir() {
+            copy_dir_recursive(&src, &dst)?;
+        } else {
+            if let Some(parent) = dst.parent() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| AppError::Internal(format!("mkdir failed: {e}")))?;
+            }
+            std::fs::copy(&src, &dst)
+                .map_err(|e| AppError::Internal(format!("copy failed: {e}")))?;
+        }
+    }
+    Ok(())
+}
+
+fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), AppError> {
+    std::fs::create_dir_all(dst)
+        .map_err(|e| AppError::Internal(format!("mkdir failed: {e}")))?;
+    for entry in std::fs::read_dir(src)
+        .map_err(|e| AppError::Internal(format!("readdir failed: {e}")))?
+    {
+        let entry = entry.map_err(|e| AppError::Internal(format!("entry: {e}")))?;
+        let s = entry.path();
+        let d = dst.join(entry.file_name());
+        if s.is_dir() {
+            copy_dir_recursive(&s, &d)?;
+        } else {
+            std::fs::copy(&s, &d)
+                .map_err(|e| AppError::Internal(format!("copy: {e}")))?;
+        }
+    }
+    Ok(())
+}
+
 /// Discard all changes: `git checkout -- .` + `git clean -fd`
 pub fn discard_all(repo_path: &Path) -> Result<(), AppError> {
     let output = git_cmd(repo_path)

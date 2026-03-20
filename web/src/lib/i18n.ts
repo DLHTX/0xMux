@@ -139,6 +139,10 @@ const en = {
   'worktree.createFailed': 'Failed to create worktree: {msg}',
   'worktree.deleteConfirm': 'Also delete worktree directory?',
   'worktree.deleted': 'Worktree removed',
+  'worktree.copyFiles': 'Copy untracked files',
+  'worktree.selectAll': 'All',
+  'worktree.selectNone': 'None',
+  'worktree.copyHint': 'Selected files will be copied to the new worktree. Preferences are saved.',
 
   // Right Panel
   'rightPanel.files': 'Files',
@@ -550,6 +554,10 @@ const zh: { [K in keyof typeof en]: string } = {
   'worktree.createFailed': '创建 Worktree 失败：{msg}',
   'worktree.deleteConfirm': '是否同时删除 worktree 目录？',
   'worktree.deleted': 'Worktree 已删除',
+  'worktree.copyFiles': '复制未追踪文件',
+  'worktree.selectAll': '全选',
+  'worktree.selectNone': '取消',
+  'worktree.copyHint': '选中的文件将复制到新 worktree。选项会被保存。',
 
   'rightPanel.files': '文件',
   'rightPanel.changes': '变更',
