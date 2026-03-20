@@ -377,9 +377,10 @@ export interface ChangePasswordRequest {
 export interface LayoutState {
   layout: SplitLayout
   paneWindowMap: Record<string, PaneWindow>
-  /** Maps pane IDs to non-terminal content (files, editor, changes, search).
+  /** Maps pane IDs to non-terminal content (panel, editor).
    *  A pane with an entry here renders the corresponding panel instead of a terminal.
-   *  Terminal panes continue to use paneWindowMap. */
+   *  Terminal panes continue to use paneWindowMap.
+   *  Optional for backwards compat with saved layouts that predate this field. */
   paneContentMap?: Record<string, PaneContent>
   activePaneId: string | null
 }

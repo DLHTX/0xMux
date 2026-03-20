@@ -628,9 +628,7 @@ function ContentPaneSlot({
   const inSplit = paneCount > 1
 
   // Content type label for toolbar
-  const contentLabel = content.type === 'files' ? 'Files'
-    : content.type === 'changes' ? 'Changes'
-    : content.type === 'search' ? 'Search'
+  const contentLabel = content.type === 'panel' ? 'Panel'
     : content.type === 'editor' ? (content.filePath?.split('/').pop() ?? 'Editor')
     : content.type
 

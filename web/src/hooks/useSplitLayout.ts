@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { SplitLayout, SplitDirection, PaneWindow, PaneContent, LayoutStore } from '../lib/types'
+import type { SplitLayout, SplitDirection, PaneWindow, PaneContent, LayoutState, LayoutStore } from '../lib/types'
 import { createWindow, getLayouts, saveLayouts } from '../lib/api'
 import { markWindowPending } from '../lib/init-commands'
 import { generateUUID } from '../lib/uuid'
@@ -75,15 +75,6 @@ function closeNode(root: SplitLayout, nodeId: string): SplitLayout | null {
 export function getAllLeafIds(node: SplitLayout): string[] {
   if (node.type === 'leaf') return [node.id]
   return node.children.flatMap(getAllLeafIds)
-}
-
-// ── Layout history (per-session workspace snapshots) ──
-
-interface LayoutState {
-  layout: SplitLayout
-  paneWindowMap: Record<string, PaneWindow>
-  paneContentMap: Record<string, PaneContent>
-  activePaneId: string | null
 }
 
 // ── Hook ──
