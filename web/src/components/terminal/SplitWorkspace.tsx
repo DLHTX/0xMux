@@ -13,8 +13,9 @@ import {
   IconX,
   IconReplace,
   IconPlus,
+  IconGripVertical,
 } from '../../lib/icons'
-import type { SplitLayout, SplitDirection } from '../../lib/types'
+import type { SplitLayout, SplitDirection, PaneContent } from '../../lib/types'
 import { useState, useCallback, useMemo, useSyncExternalStore, useEffect } from 'react'
 import { getAllLeafIds } from '../../hooks/useSplitLayout'
 import { SPLIT_GROUP_COLOR } from '../../lib/session-utils'
@@ -89,8 +90,19 @@ interface SplitWorkspaceProps {
   onClose: (nodeId: string) => void
   onPaneFocus: (nodeId: string) => void
   paneWindowMap: Record<string, import('../../lib/types').PaneWindow>
+  /** Maps pane IDs to non-terminal content. Panes with entries here
+   *  render the corresponding panel instead of a terminal. */
+  paneContentMap?: Record<string, PaneContent>
+  /** Render function for non-terminal pane content */
+  renderPaneContent?: (content: PaneContent, paneId: string) => React.ReactNode
   onDropWindow?: (paneId: string, sessionName: string, windowIndex: number) => void
   onSplitDrop?: (paneId: string, zone: 'left' | 'right' | 'top' | 'bottom', sessionName: string, windowIndex: number) => void
+  /** Called when a pane-content drag is dropped on center */
+  onDropContent?: (paneId: string, content: PaneContent) => void
+  /** Called when a pane-content drag is dropped on an edge (split + assign) */
+  onSplitDropContent?: (paneId: string, zone: 'left' | 'right' | 'top' | 'bottom', content: PaneContent) => void
+  /** Called when a pane is dragged and dropped on another pane's center (swap) */
+  onSwapPanes?: (sourcePaneId: string, targetPaneId: string) => void
   isWindowInUse?: (sessionName: string, windowIndex: number) => boolean
   activeTerminalRef?: React.RefObject<import('@xterm/xterm').Terminal | null>
   /** Returns all window keys tracked by any pane or saved layout.
@@ -138,6 +150,8 @@ function EmptyPaneSlot({
   onClose,
   onPaneFocus,
   onDropWindow,
+  onDropContent,
+  onSwapPanes,
   onCreateWindowForPane,
 }: {
   nodeId: string
@@ -149,12 +163,18 @@ function EmptyPaneSlot({
   onClose: (nodeId: string) => void
   onPaneFocus: (nodeId: string) => void
   onDropWindow?: (paneId: string, sessionName: string, windowIndex: number) => void
+  onDropContent?: (paneId: string, content: PaneContent) => void
+  onSwapPanes?: (sourcePaneId: string, targetPaneId: string) => void
   onCreateWindowForPane?: (paneId: string) => void
 }) {
   const [isDropOver, setIsDropOver] = useState(false)
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    if (!e.dataTransfer.types.includes('text/window-key')) return
+    const types = e.dataTransfer.types
+    const hasWindowKey = types.includes('text/window-key')
+    const hasPaneContent = types.includes('text/pane-content')
+    const hasPaneDrag = types.includes('text/pane-drag')
+    if (!hasWindowKey && !hasPaneContent && !hasPaneDrag) return
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
     setIsDropOver(true)
@@ -163,12 +183,38 @@ function EmptyPaneSlot({
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
     setIsDropOver(false)
+
+    // Handle pane-to-pane drag (swap into empty)
+    const paneDragData = e.dataTransfer.getData('text/pane-drag')
+    if (paneDragData) {
+      try {
+        const { sourcePaneId } = JSON.parse(paneDragData) as { sourcePaneId: string }
+        if (sourcePaneId && sourcePaneId !== nodeId) {
+          onSwapPanes?.(sourcePaneId, nodeId)
+        }
+      } catch { /* ignore */ }
+      return
+    }
+
+    // Handle window key drops
     const windowKey = e.dataTransfer.getData('text/window-key')
-    if (!windowKey) return
-    const [sessionName, windowIndexStr] = windowKey.split(':')
-    const windowIndex = parseInt(windowIndexStr, 10)
-    if (sessionName && !isNaN(windowIndex)) {
-      onDropWindow?.(nodeId, sessionName, windowIndex)
+    if (windowKey) {
+      const [sessionName, windowIndexStr] = windowKey.split(':')
+      const windowIndex = parseInt(windowIndexStr, 10)
+      if (sessionName && !isNaN(windowIndex)) {
+        onDropWindow?.(nodeId, sessionName, windowIndex)
+      }
+      return
+    }
+
+    // Handle pane content drops
+    const paneContentData = e.dataTransfer.getData('text/pane-content')
+    if (paneContentData) {
+      try {
+        const content = JSON.parse(paneContentData) as PaneContent
+        onDropContent?.(nodeId, content)
+      } catch { /* ignore */ }
+      return
     }
   }
 
@@ -270,6 +316,9 @@ function PaneSlot({
   onPaneFocus,
   onDropWindow,
   onSplitDrop,
+  onDropContent,
+  onSplitDropContent,
+  onSwapPanes,
   onCreateAndAttachWindow,
 }: {
   nodeId: string
@@ -284,6 +333,9 @@ function PaneSlot({
   onPaneFocus: (nodeId: string) => void
   onDropWindow?: (paneId: string, sessionName: string, windowIndex: number) => void
   onSplitDrop?: (paneId: string, zone: 'left' | 'right' | 'top' | 'bottom', sessionName: string, windowIndex: number) => void
+  onDropContent?: (paneId: string, content: PaneContent) => void
+  onSplitDropContent?: (paneId: string, zone: 'left' | 'right' | 'top' | 'bottom', content: PaneContent) => void
+  onSwapPanes?: (sourcePaneId: string, targetPaneId: string) => void
   onCreateAndAttachWindow?: (sessionName: string) => void
 }) {
   const [dropZone, setDropZone] = useState<DropZone>(null)
@@ -315,7 +367,11 @@ function PaneSlot({
   }
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    if (!e.dataTransfer.types.includes('text/window-key')) return
+    const types = e.dataTransfer.types
+    const accepted = types.includes('text/window-key') ||
+                     types.includes('text/pane-content') ||
+                     types.includes('text/pane-drag')
+    if (!accepted) return
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
     const zone = detectZone(e)
@@ -328,26 +384,58 @@ function PaneSlot({
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
+    if (!dropZone) { setDropZone(null); return }
+
+    // Handle pane-to-pane drag (swap or split-move)
+    const paneDragData = e.dataTransfer.getData('text/pane-drag')
+    if (paneDragData) {
+      try {
+        const { sourcePaneId } = JSON.parse(paneDragData) as { sourcePaneId: string }
+        if (sourcePaneId && sourcePaneId !== nodeId) {
+          if (dropZone === 'center') {
+            onSwapPanes?.(sourcePaneId, nodeId)
+          } else {
+            // Edge: split target pane, then swap new pane with source
+            // For now, just swap on center. Edge splitting is complex.
+            onSwapPanes?.(sourcePaneId, nodeId)
+          }
+        }
+      } catch { /* ignore */ }
+      setDropZone(null)
+      return
+    }
+
+    // Handle window key drops (terminal)
     const droppedKey = e.dataTransfer.getData('text/window-key')
-    if (!droppedKey || !dropZone) {
+    if (droppedKey) {
+      const [droppedSession, droppedWindowStr] = droppedKey.split(':')
+      const droppedWindowIndex = parseInt(droppedWindowStr, 10)
+      if (droppedSession && !isNaN(droppedWindowIndex)) {
+        if (dropZone === 'center') {
+          onDropWindow?.(nodeId, droppedSession, droppedWindowIndex)
+        } else {
+          onSplitDrop?.(nodeId, dropZone, droppedSession, droppedWindowIndex)
+        }
+      }
       setDropZone(null)
       return
     }
 
-    const [droppedSession, droppedWindowStr] = droppedKey.split(':')
-    const droppedWindowIndex = parseInt(droppedWindowStr, 10)
-    if (!droppedSession || isNaN(droppedWindowIndex)) {
+    // Handle pane content drops
+    const paneContentData = e.dataTransfer.getData('text/pane-content')
+    if (paneContentData) {
+      try {
+        const droppedContent = JSON.parse(paneContentData) as PaneContent
+        if (dropZone === 'center') {
+          onDropContent?.(nodeId, droppedContent)
+        } else {
+          onSplitDropContent?.(nodeId, dropZone, droppedContent)
+        }
+      } catch { /* ignore invalid JSON */ }
       setDropZone(null)
       return
     }
 
-    if (dropZone === 'center') {
-      // Replace current pane's window
-      onDropWindow?.(nodeId, droppedSession, droppedWindowIndex)
-    } else {
-      // Edge drop — split the pane and assign the dropped window
-      onSplitDrop?.(nodeId, dropZone, droppedSession, droppedWindowIndex)
-    }
     setDropZone(null)
   }
 
@@ -402,6 +490,18 @@ function PaneSlot({
         bg-[var(--color-bg)] border-b border-b-[var(--color-border-light)]/15
         px-1 py-0.5"
       >
+        {/* Drag grip — drag this pane to swap with another */}
+        <div
+          draggable
+          onDragStart={(e) => {
+            e.dataTransfer.setData('text/pane-drag', JSON.stringify({ sourcePaneId: nodeId }))
+            e.dataTransfer.effectAllowed = 'move'
+          }}
+          className="p-0.5 text-[var(--color-fg-faint)] hover:text-[var(--color-fg-muted)] cursor-grab active:cursor-grabbing transition-colors"
+          title="Drag to swap"
+        >
+          <Icon icon={IconGripVertical} width={12} />
+        </div>
         <button
           onClick={(e) => { e.stopPropagation(); onSplit(nodeId, 'horizontal') }}
           disabled={!canSplit}
@@ -488,6 +588,251 @@ function PaneSlot({
 }
 
 // ---------------------------------------------------------------------------
+// ContentPaneSlot: renders non-terminal content (files, changes, search, editor)
+// ---------------------------------------------------------------------------
+
+function ContentPaneSlot({
+  nodeId,
+  content,
+  canSplit,
+  paneCount,
+  isDragging,
+  isActive,
+  onSplit,
+  onClose,
+  onPaneFocus,
+  onDropWindow,
+  onSplitDrop,
+  onDropContent,
+  onSplitDropContent,
+  onSwapPanes,
+  renderContent,
+}: {
+  nodeId: string
+  content: PaneContent
+  canSplit: boolean
+  paneCount: number
+  isDragging: boolean
+  isActive: boolean
+  onSplit: (nodeId: string, direction: SplitDirection) => void
+  onClose: (nodeId: string) => void
+  onPaneFocus: (nodeId: string) => void
+  onDropWindow?: (paneId: string, sessionName: string, windowIndex: number) => void
+  onSplitDrop?: (paneId: string, zone: 'left' | 'right' | 'top' | 'bottom', sessionName: string, windowIndex: number) => void
+  onDropContent?: (paneId: string, content: PaneContent) => void
+  onSplitDropContent?: (paneId: string, zone: 'left' | 'right' | 'top' | 'bottom', content: PaneContent) => void
+  onSwapPanes?: (sourcePaneId: string, targetPaneId: string) => void
+  renderContent?: (content: PaneContent, paneId: string) => React.ReactNode
+}) {
+  const [dropZone, setDropZone] = useState<DropZone>(null)
+  const inSplit = paneCount > 1
+
+  // Content type label for toolbar
+  const contentLabel = content.type === 'files' ? 'Files'
+    : content.type === 'changes' ? 'Changes'
+    : content.type === 'search' ? 'Search'
+    : content.type === 'editor' ? (content.filePath?.split('/').pop() ?? 'Editor')
+    : content.type
+
+  const detectZone = (e: React.DragEvent<HTMLDivElement>): DropZone => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    const fromLeft   = x / rect.width
+    const fromRight  = 1 - fromLeft
+    const fromTop    = y / rect.height
+    const fromBottom = 1 - fromTop
+    const minDist = Math.min(fromLeft, fromRight, fromTop, fromBottom)
+    if (minDist > 0.30) return 'center'
+    if (minDist === fromLeft)  return 'left'
+    if (minDist === fromRight) return 'right'
+    if (minDist === fromTop)   return 'top'
+    return 'bottom'
+  }
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    const types = e.dataTransfer.types
+    const accepted = types.includes('text/window-key') ||
+                     types.includes('text/pane-content') ||
+                     types.includes('text/pane-drag')
+    if (!accepted) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    const zone = detectZone(e)
+    if (zone !== 'center' && !canSplit) {
+      setDropZone('center')
+    } else {
+      setDropZone(zone)
+    }
+  }
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    if (!dropZone) { setDropZone(null); return }
+
+    // Handle pane-to-pane drag (swap)
+    const paneDragData = e.dataTransfer.getData('text/pane-drag')
+    if (paneDragData) {
+      try {
+        const { sourcePaneId } = JSON.parse(paneDragData) as { sourcePaneId: string }
+        if (sourcePaneId && sourcePaneId !== nodeId) {
+          onSwapPanes?.(sourcePaneId, nodeId)
+        }
+      } catch { /* ignore */ }
+      setDropZone(null)
+      return
+    }
+
+    // Handle window key drops (terminal)
+    const windowKey = e.dataTransfer.getData('text/window-key')
+    if (windowKey) {
+      const [droppedSession, droppedWindowStr] = windowKey.split(':')
+      const droppedWindowIndex = parseInt(droppedWindowStr, 10)
+      if (droppedSession && !isNaN(droppedWindowIndex)) {
+        if (dropZone === 'center') {
+          onDropWindow?.(nodeId, droppedSession, droppedWindowIndex)
+        } else {
+          onSplitDrop?.(nodeId, dropZone, droppedSession, droppedWindowIndex)
+        }
+      }
+      setDropZone(null)
+      return
+    }
+
+    // Handle pane content drops
+    const paneContentData = e.dataTransfer.getData('text/pane-content')
+    if (paneContentData) {
+      try {
+        const droppedContent = JSON.parse(paneContentData) as PaneContent
+        if (dropZone === 'center') {
+          onDropContent?.(nodeId, droppedContent)
+        } else {
+          onSplitDropContent?.(nodeId, dropZone, droppedContent)
+        }
+      } catch { /* ignore invalid JSON */ }
+      setDropZone(null)
+      return
+    }
+
+    setDropZone(null)
+  }
+
+  const edgeOverlayStyle: React.CSSProperties | null =
+    dropZone && dropZone !== 'center'
+      ? {
+          position: 'absolute',
+          top:    dropZone === 'bottom' ? '50%' : 0,
+          bottom: dropZone === 'top'    ? '50%' : 0,
+          left:   dropZone === 'right'  ? '50%' : 0,
+          right:  dropZone === 'left'   ? '50%' : 0,
+          zIndex: 25,
+          pointerEvents: 'none' as const,
+          transition: 'all 0.15s ease',
+        }
+      : null
+
+  return (
+    <div
+      className="group/pane relative flex flex-col h-full w-full"
+      onClick={() => onPaneFocus(nodeId)}
+    >
+      {/* Focus border overlay */}
+      {(isActive || inSplit) && (
+        <div
+          className="absolute inset-0 pointer-events-none z-10"
+          style={{
+            border: inSplit
+              ? `1px solid ${isActive ? SPLIT_GROUP_COLOR + '60' : SPLIT_GROUP_COLOR + '25'}`
+              : '1px solid color-mix(in srgb, var(--color-primary) 50%, transparent)',
+          }}
+        />
+      )}
+      {/* Top toolbar */}
+      <div className="shrink-0 flex items-center gap-0.5
+        bg-[var(--color-bg)] border-b border-b-[var(--color-border-light)]/15
+        px-1 py-0.5"
+      >
+        {/* Drag grip — drag this pane to swap with another */}
+        <div
+          draggable
+          onDragStart={(e) => {
+            e.dataTransfer.setData('text/pane-drag', JSON.stringify({ sourcePaneId: nodeId }))
+            e.dataTransfer.effectAllowed = 'move'
+          }}
+          className="p-0.5 text-[var(--color-fg-faint)] hover:text-[var(--color-fg-muted)] cursor-grab active:cursor-grabbing transition-colors"
+          title="Drag to swap"
+        >
+          <Icon icon={IconGripVertical} width={12} />
+        </div>
+        <button
+          onClick={(e) => { e.stopPropagation(); onSplit(nodeId, 'horizontal') }}
+          disabled={!canSplit}
+          className="p-0.5 text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] disabled:opacity-30 transition-colors cursor-pointer"
+          title="Split horizontal"
+        >
+          <Icon icon={IconSplitHorizontal} width={14} />
+        </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); onSplit(nodeId, 'vertical') }}
+          disabled={!canSplit}
+          className="p-0.5 text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] disabled:opacity-30 transition-colors cursor-pointer"
+          title="Split vertical"
+        >
+          <Icon icon={IconSplitVertical} width={14} />
+        </button>
+        {paneCount > 1 && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onClose(nodeId) }}
+            className="p-0.5 text-[var(--color-fg-muted)] hover:text-[var(--color-danger)] transition-colors cursor-pointer"
+            title="Close pane"
+          >
+            <Icon icon={IconX} width={14} />
+          </button>
+        )}
+        <div className="flex-1" />
+        <span className="text-[10px] font-mono font-bold text-[var(--color-fg-muted)] pr-0.5">{contentLabel}</span>
+      </div>
+
+      {/* Content area */}
+      <div className="flex-1 min-h-0 relative overflow-hidden">
+        {renderContent?.(content, nodeId)}
+
+        {/* Drag overlay */}
+        {isDragging && (
+          <div
+            className="absolute inset-0 z-20"
+            onDragOver={handleDragOver}
+            onDragLeave={() => setDropZone(null)}
+            onDrop={handleDrop}
+          />
+        )}
+
+        {/* Center drop indicator */}
+        {dropZone === 'center' && (
+          <>
+            <div className="absolute inset-0 z-25 bg-[var(--color-primary)]/15 border-2 border-dashed border-[var(--color-primary)]/50 pointer-events-none" />
+            <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none">
+              <div className="flex items-center gap-1.5 bg-[var(--color-bg)]/90 border-[length:var(--border-w)] border-[var(--color-primary)] px-3 py-1.5">
+                <Icon icon={IconReplace} width={14} className="text-[var(--color-primary)]" />
+                <span className="text-xs font-bold text-[var(--color-primary)]">Replace</span>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Edge drop indicator */}
+        {edgeOverlayStyle && (
+          <div
+            className="bg-[var(--color-primary)]/15 border-2 border-[var(--color-primary)]/40"
+            style={edgeOverlayStyle}
+          />
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Layout tree renderer
 // ---------------------------------------------------------------------------
 
@@ -499,7 +844,32 @@ function renderLayoutStructure(
 ): React.ReactNode {
   if (node.type === 'leaf') {
     const pw = props.paneWindowMap[node.id]
+    const content = props.paneContentMap?.[node.id]
     const isActive = props.activePaneId === node.id
+
+    // Non-terminal content pane (files, changes, search, editor)
+    if (content && content.type !== 'terminal') {
+      return (
+        <ContentPaneSlot
+          key={node.id}
+          nodeId={node.id}
+          content={content}
+          canSplit={props.canSplit}
+          paneCount={props.paneCount}
+          isDragging={isDragging}
+          isActive={isActive}
+          onSplit={props.onSplit}
+          onClose={props.onClose}
+          onPaneFocus={props.onPaneFocus}
+          onDropWindow={props.onDropWindow}
+          onSplitDrop={props.onSplitDrop}
+          onDropContent={props.onDropContent}
+          onSplitDropContent={props.onSplitDropContent}
+          onSwapPanes={props.onSwapPanes}
+          renderContent={props.renderPaneContent}
+        />
+      )
+    }
 
     // Unassigned pane — show empty state
     if (!pw) {
@@ -515,6 +885,8 @@ function renderLayoutStructure(
           onClose={props.onClose}
           onPaneFocus={props.onPaneFocus}
           onDropWindow={props.onDropWindow}
+          onDropContent={props.onDropContent}
+          onSwapPanes={props.onSwapPanes}
           onCreateWindowForPane={props.onCreateWindowForPane}
         />
       )
@@ -536,6 +908,9 @@ function renderLayoutStructure(
         onPaneFocus={props.onPaneFocus}
         onDropWindow={props.onDropWindow}
         onSplitDrop={props.onSplitDrop}
+        onDropContent={props.onDropContent}
+        onSplitDropContent={props.onSplitDropContent}
+        onSwapPanes={props.onSwapPanes}
         onCreateAndAttachWindow={props.onCreateAndAttachWindow}
       />
     )
@@ -606,15 +981,17 @@ export function SplitWorkspace(props: SplitWorkspaceProps) {
 
   useEffect(() => {
     let dragCount = 0
-    const isWindowDrag = (event: DragEvent) =>
-      Array.from(event.dataTransfer?.types ?? []).includes('text/window-key')
+    const isPaneDrag = (event: DragEvent) => {
+      const types = Array.from(event.dataTransfer?.types ?? [])
+      return types.includes('text/window-key') || types.includes('text/pane-content') || types.includes('text/pane-drag')
+    }
     const onDragEnter = (event: DragEvent) => {
-      if (!isWindowDrag(event)) return
+      if (!isPaneDrag(event)) return
       dragCount++
       setIsDragging(true)
     }
     const onDragLeave = (event: DragEvent) => {
-      if (!isWindowDrag(event)) return
+      if (!isPaneDrag(event)) return
       dragCount--
       if (dragCount <= 0) {
         dragCount = 0
@@ -623,7 +1000,7 @@ export function SplitWorkspace(props: SplitWorkspaceProps) {
     }
     const onDragEnd = () => { dragCount = 0; setIsDragging(false) }
     const onDrop = (event: DragEvent) => {
-      if (!isWindowDrag(event)) return
+      if (!isPaneDrag(event)) return
       dragCount = 0
       setIsDragging(false)
     }

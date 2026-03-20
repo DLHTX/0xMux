@@ -74,6 +74,14 @@ export default function FloatingWindow({
     [onOpacityChange],
   )
 
+  const handleTitleDragStart = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.dataTransfer.setData(
+      'text/pane-content',
+      JSON.stringify({ type: 'editor' })
+    )
+    e.dataTransfer.effectAllowed = 'move'
+  }, [])
+
   if (!isOpen) return null
 
   const normalizedOpacity = Math.min(1, Math.max(0.3, opacity))
@@ -114,6 +122,8 @@ export default function FloatingWindow({
         {/* Title bar */}
         <div
           className="floating-drag-handle flex items-center justify-between shrink-0 select-none cursor-move"
+          draggable
+          onDragStart={handleTitleDragStart}
           style={{
             height: TITLE_BAR_HEIGHT,
             borderBottom: minimized

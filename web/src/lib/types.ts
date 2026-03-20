@@ -295,6 +295,20 @@ export type SplitLayout = SplitLayoutLeaf | SplitLayoutBranch
 
 export type RightPanelTab = 'files' | 'changes' | 'search'
 
+// ── Composable Pane Content ──
+
+export type PaneContentType = 'terminal' | 'panel' | 'editor'
+
+export interface PaneContent {
+  type: PaneContentType
+  /** terminal: session name */
+  sessionName?: string
+  /** terminal: window index */
+  windowIndex?: number
+  /** editor: file path to open */
+  filePath?: string
+}
+
 export interface UserSettings {
   fontSize: number
   accentColor: string
@@ -363,6 +377,10 @@ export interface ChangePasswordRequest {
 export interface LayoutState {
   layout: SplitLayout
   paneWindowMap: Record<string, PaneWindow>
+  /** Maps pane IDs to non-terminal content (files, editor, changes, search).
+   *  A pane with an entry here renders the corresponding panel instead of a terminal.
+   *  Terminal panes continue to use paneWindowMap. */
+  paneContentMap?: Record<string, PaneContent>
   activePaneId: string | null
 }
 

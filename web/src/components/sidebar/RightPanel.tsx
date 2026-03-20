@@ -13,6 +13,8 @@ interface RightPanelProps {
   collapsed: boolean
   onCollapsedChange: (collapsed: boolean) => void
   gitChangeCount?: number
+  /** Whether the right panel is currently displayed in a split pane */
+  isInPane?: boolean
   children: Record<RightPanelTab, ReactNode>
 }
 
@@ -37,6 +39,7 @@ export function RightPanel({
   collapsed,
   onCollapsedChange,
   gitChangeCount = 0,
+  isInPane,
   children,
 }: RightPanelProps) {
   const { t } = useI18n()
@@ -83,6 +86,11 @@ export function RightPanel({
     setResizing(true)
   }, [collapsed])
 
+  // If the panel is displayed in a split pane, hide the sidebar version
+  if (isInPane) {
+    return null
+  }
+
   return (
     <div
       className="relative shrink-0 flex flex-col bg-[var(--color-bg)] border-l border-l-[var(--color-border-light)]/30"
@@ -94,8 +102,18 @@ export function RightPanel({
     >
       {!collapsed && (
         <>
-          {/* Tab bar */}
-          <div className="shrink-0 flex items-center border-b border-b-[var(--color-border-light)]/30 bg-[var(--color-bg)]">
+          {/* Tab bar — entire bar is draggable to SplitWorkspace panes */}
+          <div
+            className="shrink-0 flex items-center border-b border-b-[var(--color-border-light)]/30 bg-[var(--color-bg)]"
+            draggable
+            onDragStart={(e) => {
+              e.dataTransfer.setData(
+                'text/pane-content',
+                JSON.stringify({ type: 'panel' })
+              )
+              e.dataTransfer.effectAllowed = 'move'
+            }}
+          >
             {/* Collapse button */}
             <button
               onClick={() => onCollapsedChange(true)}

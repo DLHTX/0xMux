@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { SplitLayout, SplitDirection, PaneWindow, LayoutStore } from '../lib/types'
+import type { SplitLayout, SplitDirection, PaneWindow, PaneContent, LayoutStore } from '../lib/types'
 import { createWindow, getLayouts, saveLayouts } from '../lib/api'
 import { markWindowPending } from '../lib/init-commands'
 import { generateUUID } from '../lib/uuid'
@@ -82,6 +82,7 @@ export function getAllLeafIds(node: SplitLayout): string[] {
 interface LayoutState {
   layout: SplitLayout
   paneWindowMap: Record<string, PaneWindow>
+  paneContentMap: Record<string, PaneContent>
   activePaneId: string | null
 }
 
@@ -95,6 +96,7 @@ export function useSplitLayout() {
 
   const [layout, setLayout] = useState<SplitLayout>(state.layout)
   const [paneWindowMap, setPaneWindowMap] = useState<Record<string, PaneWindow>>({})
+  const [paneContentMap, setPaneContentMap] = useState<Record<string, PaneContent>>({})
   const [activePaneId, setActivePaneId] = useState<string | null>(state.activePaneId)
   const [primarySession, setPrimarySession] = useState<string | null>(null)
 
@@ -102,10 +104,12 @@ export function useSplitLayout() {
   // without needing state in their dependency arrays.
   const layoutRef = useRef(layout)
   const paneWindowMapRef = useRef(paneWindowMap)
+  const paneContentMapRef = useRef(paneContentMap)
   const activePaneIdRef = useRef(activePaneId)
   const primarySessionRef = useRef(primarySession)
   layoutRef.current = layout
   paneWindowMapRef.current = paneWindowMap
+  paneContentMapRef.current = paneContentMap
   activePaneIdRef.current = activePaneId
   primarySessionRef.current = primarySession
 
@@ -142,6 +146,7 @@ export function useSplitLayout() {
         layouts[currentPrimary] = {
           layout: JSON.parse(JSON.stringify(layoutRef.current)),
           paneWindowMap: { ...paneWindowMapRef.current },
+          paneContentMap: { ...paneContentMapRef.current },
           activePaneId: activePaneIdRef.current,
         }
       }
@@ -170,6 +175,7 @@ export function useSplitLayout() {
           setPrimarySession(target)
           setLayout(saved.layout)
           setPaneWindowMap(saved.paneWindowMap)
+          setPaneContentMap(saved.paneContentMap ?? {})
           setActivePaneId(saved.activePaneId)
           isQuickPeekRef.current = false
         }
@@ -265,13 +271,19 @@ export function useSplitLayout() {
     [scheduleSync]
   )
 
-  /** Close a pane (removes from layout and paneWindowMap) */
+  /** Close a pane (removes from layout, paneWindowMap, and paneContentMap) */
   const closePane = useCallback((nodeId: string) => {
     const nextLayout = closeNode(layoutRef.current, nodeId) ?? createLeaf()
     const nextLeafIds = getAllLeafIds(nextLayout)
 
     setLayout(nextLayout)
     setPaneWindowMap((prev) => {
+      const next = { ...prev }
+      delete next[nodeId]
+      return next
+    })
+    setPaneContentMap((prev) => {
+      if (!(nodeId in prev)) return prev
       const next = { ...prev }
       delete next[nodeId]
       return next
@@ -338,6 +350,7 @@ export function useSplitLayout() {
             if (paneEntry) {
               setLayout(saved.layout)
               setPaneWindowMap(saved.paneWindowMap)
+              setPaneContentMap(saved.paneContentMap ?? {})
               setActivePaneId(paneEntry[0])
               isQuickPeekRef.current = false
               return 'restore'
@@ -354,6 +367,7 @@ export function useSplitLayout() {
         layoutHistory.current.set(currentPrimary, {
           layout: JSON.parse(JSON.stringify(layoutRef.current)),
           paneWindowMap: { ...paneWindowMapRef.current },
+          paneContentMap: { ...paneContentMapRef.current },
           activePaneId: activePaneIdRef.current,
         })
       }
@@ -367,6 +381,7 @@ export function useSplitLayout() {
       const leaf = createLeaf()
       setLayout(leaf)
       setPaneWindowMap({ [leaf.id]: { sessionName, windowIndex } })
+      setPaneContentMap({})
       setActivePaneId(leaf.id)
       isQuickPeekRef.current = true
       scheduleSync()
@@ -392,6 +407,7 @@ export function useSplitLayout() {
           if (saved) {
             setLayout(saved.layout)
             setPaneWindowMap(saved.paneWindowMap)
+            setPaneContentMap(saved.paneContentMap ?? {})
             setActivePaneId(saved.activePaneId)
             isQuickPeekRef.current = false
             return 'restore'
@@ -405,6 +421,7 @@ export function useSplitLayout() {
         layoutHistory.current.set(currentPrimary, {
           layout: JSON.parse(JSON.stringify(layoutRef.current)),
           paneWindowMap: { ...paneWindowMapRef.current },
+          paneContentMap: { ...paneContentMapRef.current },
           activePaneId: activePaneIdRef.current,
         })
       }
@@ -417,6 +434,7 @@ export function useSplitLayout() {
       const saved = layoutHistory.current.get(sessionName)
       if (saved) {
         setLayout(saved.layout)
+        setPaneContentMap(saved.paneContentMap ?? {})
 
         let restoredMap = saved.paneWindowMap
         let restoredActive = saved.activePaneId
@@ -453,6 +471,7 @@ export function useSplitLayout() {
       } else {
         setPaneWindowMap({})
       }
+      setPaneContentMap({})
       setActivePaneId(leaf.id)
       scheduleSync()
       return 'new'
@@ -497,6 +516,79 @@ export function useSplitLayout() {
     },
     [scheduleSync]
   )
+
+  /** Assign non-terminal content to a pane.
+   *  Removes any terminal window assignment for this pane (a pane is either
+   *  terminal or content, never both). */
+  const assignContent = useCallback((paneId: string, content: PaneContent) => {
+    if (content.type === 'terminal') {
+      // Terminal content should use assignWindow instead
+      if (content.sessionName !== undefined && content.windowIndex !== undefined) {
+        assignWindow(paneId, content.sessionName, content.windowIndex)
+      }
+      return
+    }
+    // Remove terminal assignment if any
+    setPaneWindowMap((prev) => {
+      if (!(paneId in prev)) return prev
+      const next = { ...prev }
+      delete next[paneId]
+      return next
+    })
+    // Set content
+    setPaneContentMap((prev) => ({
+      ...prev,
+      [paneId]: content,
+    }))
+    scheduleSync()
+  }, [assignWindow, scheduleSync])
+
+  /** Remove content assignment from a pane */
+  const unassignContent = useCallback((paneId: string) => {
+    setPaneContentMap((prev) => {
+      if (!(paneId in prev)) return prev
+      const next = { ...prev }
+      delete next[paneId]
+      return next
+    })
+  }, [])
+
+  /**
+   * Swap the contents of two panes. Each pane can be a terminal (paneWindowMap)
+   * or content (paneContentMap) — the swap handles all combinations.
+   */
+  const swapPanes = useCallback((paneIdA: string, paneIdB: string) => {
+    if (paneIdA === paneIdB) return
+
+    const windowA = paneWindowMapRef.current[paneIdA]
+    const windowB = paneWindowMapRef.current[paneIdB]
+    const contentA = paneContentMapRef.current[paneIdA]
+    const contentB = paneContentMapRef.current[paneIdB]
+
+    setPaneWindowMap((prev) => {
+      const next = { ...prev }
+      // Clear both
+      delete next[paneIdA]
+      delete next[paneIdB]
+      // Swap
+      if (windowB) next[paneIdA] = windowB
+      if (windowA) next[paneIdB] = windowA
+      return next
+    })
+
+    setPaneContentMap((prev) => {
+      const next = { ...prev }
+      // Clear both
+      delete next[paneIdA]
+      delete next[paneIdB]
+      // Swap
+      if (contentB) next[paneIdA] = contentB
+      if (contentA) next[paneIdB] = contentA
+      return next
+    })
+
+    scheduleSync()
+  }, [scheduleSync])
 
   /** Check if a window is currently displayed in any pane */
   const isWindowInUse = useCallback(
@@ -617,6 +709,10 @@ export function useSplitLayout() {
     paneWindowMap,
     assignWindow,
     unassignWindow,
+    paneContentMap,
+    assignContent,
+    unassignContent,
+    swapPanes,
     activePaneId,
     setActivePaneId,
     findPaneByWindow,

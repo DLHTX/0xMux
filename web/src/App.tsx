@@ -46,6 +46,7 @@ import type {
   GitBranch,
   WorktreeInfo,
   RightPanelTab,
+  PaneContent,
   WorkspaceContext,
   AiStatusResponse,
   AiCatalogResponse,
@@ -57,6 +58,60 @@ import type {
 } from './lib/types'
 import { getWindows, createWindow, deleteWindow, getAiStatus, getAiCatalog, syncAi, uninstallAi, getGlobalConfig, saveGlobalConfig as saveGlobalConfigApi, syncGlobalConfig as syncGlobalConfigApi } from './lib/api'
 import { setInitCommand, markWindowPending } from './lib/init-commands'
+
+// Inline version of RightPanel tabs for rendering inside split panes
+const PANEL_TABS: { key: RightPanelTab; labelKey: string }[] = [
+  { key: 'files', labelKey: 'rightPanel.files' },
+  { key: 'changes', labelKey: 'rightPanel.changes' },
+  { key: 'search', labelKey: 'rightPanel.search' },
+]
+
+function InlinePanelTabs({
+  activeTab,
+  onTabChange,
+  gitChangeCount = 0,
+  children,
+}: {
+  activeTab: RightPanelTab
+  onTabChange: (tab: RightPanelTab) => void
+  gitChangeCount?: number
+  children: Record<RightPanelTab, React.ReactNode>
+}) {
+  const { t } = useI18n()
+  return (
+    <div className="flex flex-col h-full">
+      <div className="shrink-0 flex items-center border-b border-b-[var(--color-border-light)]/30 bg-[var(--color-bg)]">
+        {PANEL_TABS.map(({ key, labelKey }) => {
+          const isActive = activeTab === key
+          const showBadge = key === 'changes' && gitChangeCount > 0
+          return (
+            <button
+              key={key}
+              onClick={() => onTabChange(key)}
+              className={`
+                relative flex-1 px-2 py-1.5 text-[10px] font-bold transition-colors cursor-pointer text-center
+                ${isActive
+                  ? 'text-[var(--color-fg)] border-b-2 border-b-[var(--color-primary)]'
+                  : 'text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] border-b-2 border-b-transparent'
+                }
+              `}
+            >
+              {t(labelKey as 'rightPanel.files')}
+              {showBadge && (
+                <span className="ml-1 inline-flex items-center justify-center min-w-[14px] h-[14px] bg-[var(--color-primary)] text-[var(--color-primary-fg)] text-[9px] font-black leading-none px-0.5">
+                  {gitChangeCount > 99 ? '99+' : gitChangeCount}
+                </span>
+              )}
+            </button>
+          )
+        })}
+      </div>
+      <div className="flex-1 overflow-hidden flex flex-col">
+        {children[activeTab]}
+      </div>
+    </div>
+  )
+}
 
 const LAST_WINDOW_STORAGE_PREFIX = '0xmux-last-window'
 
@@ -126,6 +181,9 @@ function AppContent() {
     canSplit,
     paneWindowMap,
     assignWindow,
+    paneContentMap,
+    assignContent,
+    swapPanes,
     activePaneId,
     setActivePaneId,
     selectWindow,
@@ -807,6 +865,11 @@ function AppContent() {
     updateSettings({ rightPanelCollapsed: collapsed })
   }, [updateSettings])
 
+  // Check if the right panel is currently displayed in a split pane
+  const panelIsInPane = useMemo(() => {
+    return Object.values(paneContentMap).some((c) => c.type === 'panel')
+  }, [paneContentMap])
+
   // Changes click → open right panel changes tab
   const handleChangesClick = useCallback(() => {
     updateSettings({ rightPanelCollapsed: false, rightPanelTab: 'changes' })
@@ -984,6 +1047,106 @@ function AppContent() {
       floatingEditor.openFile(path, undefined, 'edit', undefined, activeWorkspace)
     }
   }, [floatingEditor, activeWorkspace])
+
+  // Check if editor is currently displayed in a split pane (inline mode)
+  const editorIsInline = useMemo(() => {
+    return Object.values(paneContentMap).some((c) => c.type === 'editor')
+  }, [paneContentMap])
+
+  /** Render non-terminal content inside a pane */
+  const renderPaneContent = useCallback((content: PaneContent, _paneId: string) => {
+    switch (content.type) {
+      case 'panel':
+        return (
+          <InlinePanelTabs
+            activeTab={settings.rightPanelTab}
+            onTabChange={handleRightPanelTabChange}
+            gitChangeCount={gitChangeCount}
+          >
+            {{
+              files: <FileExplorer onFileOpen={handleOpenFile} workspace={activeWorkspace} />,
+              changes: <GitPanel onOpenDiff={handleOpenDiff} workspace={activeWorkspace} addToast={addToast} onChangeCount={setGitChangeCount} />,
+              search: <SearchPanel onOpenFile={handleOpenFile} workspace={activeWorkspace} />,
+            }}
+          </InlinePanelTabs>
+        )
+      case 'editor': {
+        const activeTab = floatingEditor.state.tabs.find(
+          t => t.id === floatingEditor.state.activeTabId
+        )
+        return (
+          <div className="flex flex-col h-full min-h-0">
+            <EditorTabs
+              tabs={floatingEditor.state.tabs}
+              activeTabId={floatingEditor.state.activeTabId}
+              onSelectTab={floatingEditor.setActiveTab}
+              onCloseTab={floatingEditor.closeTab}
+              onCloseAllTabs={floatingEditor.closeAllTabs}
+              onCloseOtherTabs={floatingEditor.closeOtherTabs}
+              onCloseTabsToLeft={floatingEditor.closeTabsToLeft}
+              onCloseTabsToRight={floatingEditor.closeTabsToRight}
+            />
+            {activeTab && (
+              <div className="flex-1 min-h-0 flex flex-col">
+                <div className="flex-1 min-h-0">
+                  <EditorPane
+                    filePath={activeTab.filePath}
+                    language={activeTab.language}
+                    content={activeTab.content}
+                    mode={activeTab.mode}
+                    editorSettings={settings}
+                    diffOriginal={activeTab.diffOriginal}
+                    imageUrl={activeTab.imageUrl}
+                    onSave={() => floatingEditor.saveCurrentFile()}
+                    onChange={(value: string) => {
+                      floatingEditor.updateTabContent(activeTab.id, value)
+                    }}
+                  />
+                </div>
+                <EditorStatusBar
+                  language={activeTab.language}
+                  line={1}
+                  col={1}
+                  fileSize={activeTab.content.length}
+                  encoding="utf-8"
+                />
+              </div>
+            )}
+            {!activeTab && floatingEditor.state.tabs.length === 0 && (
+              <div className="flex-1 flex items-center justify-center text-[var(--color-fg-muted)] text-xs">
+                No files open
+              </div>
+            )}
+          </div>
+        )
+      }
+      default:
+        return null
+    }
+  }, [handleOpenFile, handleOpenDiff, handleRightPanelTabChange, activeWorkspace, addToast, floatingEditor, settings, gitChangeCount])
+
+  /** Handle pane-content drag drop on center (replace pane content) */
+  const handleDropContent = useCallback((paneId: string, content: PaneContent) => {
+    assignContent(paneId, content)
+    setActivePaneId(paneId)
+    // When editor is dragged into a pane, close the floating window
+    if (content.type === 'editor') {
+      floatingEditor.closeEditor()
+    }
+  }, [assignContent, setActivePaneId, floatingEditor])
+
+  /** Handle pane-content drag drop on edge (split + assign content) */
+  const handleSplitDropContent = useCallback(async (paneId: string, zone: 'left' | 'right' | 'top' | 'bottom', content: PaneContent) => {
+    const direction = (zone === 'left' || zone === 'right') ? 'horizontal' as const : 'vertical' as const
+    const newPaneId = await splitPane(paneId, direction)
+    if (newPaneId) {
+      assignContent(newPaneId, content)
+      // When editor is dragged into a pane, close the floating window
+      if (content.type === 'editor') {
+        floatingEditor.closeEditor()
+      }
+    }
+  }, [splitPane, assignContent, floatingEditor])
 
   const handleSidebarWidthChange = useCallback((nextWidth: number) => {
     updateSettings({ sidebarWidth: nextWidth })
@@ -1473,8 +1636,13 @@ function AppContent() {
                     onClose={closePane}
                     onPaneFocus={setActivePaneId}
                     paneWindowMap={paneWindowMap}
+                    paneContentMap={paneContentMap}
+                    renderPaneContent={renderPaneContent}
                     onDropWindow={handleDropWindow}
                     onSplitDrop={handleSplitDrop}
+                    onDropContent={handleDropContent}
+                    onSplitDropContent={handleSplitDropContent}
+                    onSwapPanes={swapPanes}
                     isWindowInUse={isWindowInUse}
                     activeTerminalRef={activeTerminalRef}
                     getAllTrackedWindowKeys={getAllTrackedWindowKeys}
@@ -1495,8 +1663,8 @@ function AppContent() {
               </div>
             )}
 
-            {/* Floating Editor Window */}
-            {floatingEditor.state.isOpen && (
+            {/* Floating Editor Window — hidden when editor is inline in a pane */}
+            {floatingEditor.state.isOpen && !editorIsInline && (
               <FloatingWindow
                 isOpen={floatingEditor.state.isOpen}
                 minimized={floatingEditor.state.minimized}
@@ -1595,6 +1763,7 @@ function AppContent() {
             collapsed={settings.rightPanelCollapsed}
             onCollapsedChange={handleRightPanelCollapsedChange}
             gitChangeCount={gitChangeCount}
+            isInPane={panelIsInPane}
           >
             {{
               files: <FileExplorer onFileOpen={handleOpenFile} workspace={activeWorkspace} />,
