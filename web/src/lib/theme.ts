@@ -25,7 +25,7 @@ export interface ThemeTokens {
 }
 
 export type ThemeMode = 'light' | 'dark'
-export type PresetName = 'brutalist' | 'clean' | 'terminal' | 'soft' | 'pipboy'
+export type PresetName = 'vscode' | 'brutalist' | 'clean' | 'terminal' | 'soft' | 'pipboy'
 
 export interface FontOption {
   label: string
@@ -268,7 +268,52 @@ const PIPBOY_DARK: ThemeTokens = {
   fontScale: '1.1',
 }
 
+// ── VS Code Theme ──
+
+const VSCODE_LIGHT: ThemeTokens = {
+  colorPrimary: '#007acc',
+  colorPrimaryFg: '#ffffff',
+  colorBg: '#ffffff',
+  colorBgAlt: '#f3f3f3',
+  colorFg: '#333333',
+  colorFgMuted: '#616161',
+  colorFgFaint: '#a0a0a0',
+  colorBorder: '#cecece',
+  colorBorderLight: '#e5e5e5',
+  colorSuccess: '#388a34',
+  colorWarning: '#bf8803',
+  colorDanger: '#e51400',
+  radius: '0px',
+  borderW: '1px',
+  fontBody: "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+  fontHeading: "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+  fontMono: "'JetBrains Mono', 'Menlo', 'Monaco', 'Consolas', monospace",
+  fontScale: '1',
+}
+
+const VSCODE_DARK: ThemeTokens = {
+  colorPrimary: '#0078d4',
+  colorPrimaryFg: '#ffffff',
+  colorBg: '#1e1e1e',
+  colorBgAlt: '#252526',
+  colorFg: '#cccccc',
+  colorFgMuted: '#858585',
+  colorFgFaint: '#5a5a5a',
+  colorBorder: '#3c3c3c',
+  colorBorderLight: '#2d2d2d',
+  colorSuccess: '#4ec9b0',
+  colorWarning: '#cca700',
+  colorDanger: '#f14c4c',
+  radius: '0px',
+  borderW: '1px',
+  fontBody: "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+  fontHeading: "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+  fontMono: "'JetBrains Mono', 'Menlo', 'Monaco', 'Consolas', monospace",
+  fontScale: '1',
+}
+
 export const PRESETS: Record<PresetName, { light: ThemeTokens; dark: ThemeTokens; label: string }> = {
+  vscode: { light: VSCODE_LIGHT, dark: VSCODE_DARK, label: 'VS Code' },
   brutalist: { light: BRUTALIST_LIGHT, dark: BRUTALIST_DARK, label: 'Brutalist' },
   clean: { light: CLEAN_LIGHT, dark: CLEAN_DARK, label: 'Clean' },
   terminal: { light: TERMINAL_LIGHT, dark: TERMINAL_DARK, label: 'Terminal' },
@@ -276,7 +321,7 @@ export const PRESETS: Record<PresetName, { light: ThemeTokens; dark: ThemeTokens
   pipboy: { light: PIPBOY_LIGHT, dark: PIPBOY_DARK, label: 'Pip-Boy' },
 }
 
-export const DEFAULT_PRESET: PresetName = 'pipboy'
+export const DEFAULT_PRESET: PresetName = 'vscode'
 
 // ── CSS Variable Mapping ──
 
