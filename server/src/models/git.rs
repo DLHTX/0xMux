@@ -139,6 +139,17 @@ pub struct GitStageAllRequest {
     pub window: Option<u32>,
 }
 
+/// Worktree sync request — copy files/dirs from current workspace to a target worktree
+#[derive(Deserialize)]
+pub struct WorktreeSyncRequest {
+    /// Relative file/dir paths to sync
+    pub paths: Vec<String>,
+    /// Absolute path of the target worktree
+    pub target_worktree: String,
+    pub session: Option<String>,
+    pub window: Option<u32>,
+}
+
 /// Git checkout request
 #[derive(Deserialize)]
 pub struct GitCheckoutRequest {

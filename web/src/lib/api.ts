@@ -644,6 +644,35 @@ export async function removeWorktree(
   return request('/git/worktree-remove', { method: 'POST', body: JSON.stringify(body) })
 }
 
+export async function syncToWorktree(
+  paths: string[],
+  targetWorktree: string,
+  workspace?: WorkspaceContext,
+): Promise<{ ok: boolean; synced: number }> {
+  const body: Record<string, unknown> = { paths, target_worktree: targetWorktree }
+  if (workspace) { body.session = workspace.session; body.window = workspace.window }
+  return request('/git/worktree-sync', { method: 'POST', body: JSON.stringify(body) })
+}
+
+// ── Dev Command API ──
+
+export async function runDevCommand(
+  session: string,
+  command: string,
+  windowName?: string,
+  port?: number,
+): Promise<{ ok: boolean; session: string; window_index: number; window_name: string }> {
+  return request('/dev/run', {
+    method: 'POST',
+    body: JSON.stringify({
+      session,
+      command,
+      window_name: windowName,
+      port: port ?? null,
+    }),
+  })
+}
+
 // ── Image API ──
 
 export async function deleteImage(filename: string): Promise<void> {

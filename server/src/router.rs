@@ -192,6 +192,8 @@ pub fn build(state: AppState) -> Router {
         .route("/api/git/worktree-list", get(handlers::git::worktree_list_handler))
         .route("/api/git/worktree-create", post(handlers::git::worktree_create_handler))
         .route("/api/git/worktree-remove", post(handlers::git::worktree_remove_handler))
+        .route("/api/git/worktree-sync", post(handlers::git::worktree_sync_handler))
+        .route("/api/dev/run", post(handlers::window::dev_run_handler))
         .route("/api/git/untracked", get(handlers::git::untracked_handler))
         .route(
             "/api/sessions/{name}/windows",

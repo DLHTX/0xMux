@@ -2,7 +2,7 @@ use axum::{Json, extract::Query, response::IntoResponse};
 use serde::Deserialize;
 
 use crate::error::AppError;
-use crate::models::git::{GitCheckoutRequest, GitCommitRequest, GitPushRequest, GitStageAllRequest, GitStageRequest, WorktreeCreateRequest, WorktreeRemoveRequest};
+use crate::models::git::{GitCheckoutRequest, GitCommitRequest, GitPushRequest, GitStageAllRequest, GitStageRequest, WorktreeCreateRequest, WorktreeRemoveRequest, WorktreeSyncRequest};
 use crate::services::{git, workspace};
 use serde_json::json;
 
@@ -215,6 +215,29 @@ pub async fn worktree_remove_handler(
     let root = workspace::resolve_workspace_root(body.session.as_deref(), body.window)?;
     git::remove_worktree(&root, &body.path, body.force)?;
     Ok(Json(json!({ "ok": true })))
+}
+
+// ── POST /api/git/worktree-sync ──────────────────────────────────
+
+pub async fn worktree_sync_handler(
+    Json(body): Json<WorktreeSyncRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let root = workspace::resolve_workspace_root(body.session.as_deref(), body.window)?;
+    let target = std::path::Path::new(&body.target_worktree);
+
+    if !target.exists() {
+        return Err(AppError::BadRequest(format!(
+            "Target worktree does not exist: {}",
+            body.target_worktree
+        )));
+    }
+
+    git::copy_paths_to_worktree(&root, target, &body.paths)?;
+
+    Ok(Json(json!({
+        "ok": true,
+        "synced": body.paths.len(),
+    })))
 }
 
 // ── POST /api/git/discard-all ────────────────────────────────────

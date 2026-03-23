@@ -5,6 +5,7 @@ export interface TmuxSession {
   attached: boolean
   start_directory: string
   is_worktree?: boolean
+  repo_root?: string
 }
 
 export interface Dependency {
@@ -438,6 +439,8 @@ export interface EditorTab {
   scrollLine?: number
   workspace?: WorkspaceContext
   imageUrl?: string
+  /** Preview tab (VSCode-style): italic title, replaced by next single-click open */
+  isPreview?: boolean
 }
 
 export interface FloatingWindowState {

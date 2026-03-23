@@ -10,6 +10,10 @@ pub struct TmuxSession {
     /// Whether the session's working directory is a git worktree
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub is_worktree: bool,
+    /// The common repo root shared by all worktrees of the same project.
+    /// Used by the frontend to group sessions belonging to the same repo.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub repo_root: Option<String>,
 }
 
 #[derive(Deserialize)]

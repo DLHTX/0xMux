@@ -1,4 +1,6 @@
 use axum::{Json, extract::{Path, Query}, http::StatusCode, response::IntoResponse};
+use serde::Deserialize;
+use serde_json::json;
 
 use crate::error::AppError;
 use crate::models::window::{
@@ -102,4 +104,63 @@ pub async fn pane_info_handler(
 ) -> Result<impl IntoResponse, AppError> {
     let info = tmux::pane_info(&name, index, pane)?;
     Ok(Json(info))
+}
+
+// ── Dev command runner ──────────────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct DevRunRequest {
+    pub session: String,
+    pub command: String,
+    pub window_name: Option<String>,
+    pub port: Option<u16>,
+}
+
+pub async fn dev_run_handler(
+    Json(body): Json<DevRunRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    // Kill process on port if configured
+    if let Some(port) = body.port {
+        let _ = std::process::Command::new("lsof")
+            .args(["-ti", &format!(":{port}")])
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| {
+                let pids = String::from_utf8_lossy(&o.stdout);
+                for pid in pids.lines() {
+                    let pid = pid.trim();
+                    if !pid.is_empty() {
+                        let _ = std::process::Command::new("kill")
+                            .args(["-9", pid])
+                            .status();
+                    }
+                }
+            });
+        // Brief pause to let the port release
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
+
+    // Create a new tmux window
+    let window = tmux::new_window(&body.session, body.window_name.as_deref())?;
+
+    // Send the command + Enter
+    let target = format!("{}:{}", body.session, window.index);
+    let status = tmux::tmux_cmd()
+        .args(["send-keys", "-t", &target, &body.command, "Enter"])
+        .status()
+        .map_err(|e| AppError::Internal(format!("send-keys failed: {e}")))?;
+
+    if !status.success() {
+        return Err(AppError::Internal(format!(
+            "tmux send-keys failed for '{target}'"
+        )));
+    }
+
+    Ok(Json(json!({
+        "ok": true,
+        "session": body.session,
+        "window_index": window.index,
+        "window_name": window.name,
+    })))
 }

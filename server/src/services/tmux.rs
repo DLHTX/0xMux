@@ -171,6 +171,13 @@ pub fn list_sessions() -> Result<Vec<TmuxSession>, AppError> {
                         } else {
                             false
                         };
+                        // Resolve common repo root for worktree grouping
+                        let repo_root = if !dir.is_empty() {
+                            crate::services::git::resolve_common_root(std::path::Path::new(&dir))
+                                .map(|p| p.to_string_lossy().to_string())
+                        } else {
+                            None
+                        };
                         Some(TmuxSession {
                             name,
                             windows: parts[1].parse().unwrap_or(0),
@@ -178,6 +185,7 @@ pub fn list_sessions() -> Result<Vec<TmuxSession>, AppError> {
                             attached: parts[3] == "1",
                             start_directory: dir,
                             is_worktree,
+                            repo_root,
                         })
                     } else {
                         None

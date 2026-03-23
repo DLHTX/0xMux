@@ -636,6 +636,39 @@ pub fn is_worktree(repo_path: &Path) -> bool {
     git_path.is_file()
 }
 
+/// Resolve the "common root" for a git repo — the main repository path that is
+/// shared by all worktrees. This ensures that worktrees and their main repo
+/// return the same identity string, allowing the frontend to group them.
+///
+/// Uses `git rev-parse --git-common-dir` which returns the shared .git directory,
+/// then resolves to the parent (the main repo working directory).
+pub fn resolve_common_root(path: &Path) -> Option<PathBuf> {
+    let output = git_cmd(path)
+        .args(["rev-parse", "--git-common-dir"])
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let common_git = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if common_git.is_empty() {
+        return None;
+    }
+
+    // --git-common-dir may return a relative path (e.g. ".git") or absolute.
+    let common_path = if Path::new(&common_git).is_absolute() {
+        PathBuf::from(&common_git)
+    } else {
+        path.join(&common_git)
+    };
+
+    // The common git dir is something like /path/to/main-repo/.git
+    // We want the parent: /path/to/main-repo
+    common_path.canonicalize().ok().and_then(|p| p.parent().map(|pp| pp.to_path_buf()))
+}
+
 /// List all worktrees for the repository.
 pub fn list_worktrees(repo_path: &Path) -> Result<Vec<WorktreeInfo>, AppError> {
     let output = git_cmd(repo_path)

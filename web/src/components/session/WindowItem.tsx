@@ -1,7 +1,6 @@
 import { Icon } from '@iconify/react'
 import { IconTrash } from '../../lib/icons'
 import type { TmuxWindow } from '../../lib/types'
-import { SPLIT_GROUP_COLOR } from '../../lib/session-utils'
 import { useI18n } from '../../hooks/useI18n'
 
 interface WindowItemProps {
@@ -11,8 +10,12 @@ interface WindowItemProps {
   inUse?: boolean
   /** True when this window belongs to the current split group */
   inSplitGroup?: boolean
+  /** True when this is the last window in the split group (for └ vs ├) */
+  isLastInSplitGroup?: boolean
   onSelect: (sessionName: string, windowIndex: number) => void
   onDelete: (sessionName: string, windowIndex: number) => void
+  onHoverStart?: (sessionName: string, windowIndex: number) => void
+  onHoverEnd?: () => void
 }
 
 export function WindowItem({
@@ -20,8 +23,11 @@ export function WindowItem({
   window,
   selected,
   inSplitGroup,
+  isLastInSplitGroup,
   onSelect,
   onDelete,
+  onHoverStart,
+  onHoverEnd,
 }: WindowItemProps) {
   const { t } = useI18n()
 
@@ -31,7 +37,6 @@ export function WindowItem({
   }
 
   const handleDragStart = (e: React.DragEvent) => {
-    // Set the window key for drag-and-drop onto workspace panes
     const windowKey = `${sessionName}:${window.index}`
     e.dataTransfer.setData('text/window-key', windowKey)
     e.dataTransfer.effectAllowed = 'move'
@@ -40,21 +45,23 @@ export function WindowItem({
   return (
     <div
       onClick={() => onSelect(sessionName, window.index)}
+      onMouseEnter={() => onHoverStart?.(sessionName, window.index)}
+      onMouseLeave={() => onHoverEnd?.()}
       draggable
       onDragStart={handleDragStart}
       className={`
-        group relative flex items-center gap-2.5 py-2 pl-9 pr-3 cursor-pointer transition-colors
+        group relative flex items-center gap-1.5 py-2 pl-6 pr-3 cursor-pointer transition-colors
         select-none
         ${selected ? 'bg-[var(--color-bg-alt)]' : 'hover:bg-[var(--color-bg-alt)]'}
       `}
-      style={{
-        borderLeft: inSplitGroup
-          ? `3px solid ${SPLIT_GROUP_COLOR}`
-          : selected
-            ? '3px solid var(--color-primary)'
-            : '3px solid transparent',
-      }}
     >
+      {/* Split group tree connector */}
+      {inSplitGroup && (
+        <span className="text-[var(--color-fg-faint)] text-[11px] font-mono shrink-0 w-4 text-center leading-none">
+          {isLastInSplitGroup ? '└' : '├'}
+        </span>
+      )}
+
       {/* Window index and name */}
       <div className="flex-1 min-w-0">
         <span className="text-xs font-mono truncate block">
@@ -62,7 +69,6 @@ export function WindowItem({
           <span className={selected ? 'font-bold' : ''}>{window.name}</span>
         </span>
       </div>
-
 
       {/* Delete button */}
       <button

@@ -209,6 +209,7 @@ function AppContent() {
   const [showPluginCenter, setShowPluginCenter] = useState(false)
   const [showQuickFile, setShowQuickFile] = useState(false)
   const [selectedWindow, setSelectedWindow] = useState<{ sessionName: string; windowIndex: number } | null>(null)
+  const [hoveredWindowKey, setHoveredWindowKey] = useState<string | null>(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
   const [mobileView, setMobileView] = useState<MobileView>('sessions')
@@ -422,6 +423,14 @@ function AppContent() {
     },
     [splitGroupKeys]
   )
+
+  // Hover highlight: sidebar window hover → highlight corresponding pane
+  const handleWindowHoverStart = useCallback((sessionName: string, windowIndex: number) => {
+    setHoveredWindowKey(`${sessionName}:${windowIndex}`)
+  }, [])
+  const handleWindowHoverEnd = useCallback(() => {
+    setHoveredWindowKey(null)
+  }, [])
 
   const needsSetup = deps && !allReady
 
@@ -1018,8 +1027,8 @@ function AppContent() {
   }, [activeWorkspace])
 
   // Open file in floating editor from file explorer / search results
-  const handleOpenFile = useCallback((path: string, line?: number) => {
-    floatingEditor.openFile(path, line, 'edit', undefined, activeWorkspace)
+  const handleOpenFile = useCallback((path: string, line?: number, preview?: boolean) => {
+    floatingEditor.openFile(path, line, 'edit', undefined, activeWorkspace, preview)
   }, [floatingEditor, activeWorkspace])
 
   // @ trigger in terminal opens quick file search
@@ -1085,6 +1094,7 @@ function AppContent() {
               onCloseOtherTabs={floatingEditor.closeOtherTabs}
               onCloseTabsToLeft={floatingEditor.closeTabsToLeft}
               onCloseTabsToRight={floatingEditor.closeTabsToRight}
+              onPinTab={floatingEditor.pinTab}
             />
             {activeTab && (
               <div className="flex-1 min-h-0 flex flex-col">
@@ -1596,6 +1606,8 @@ function AppContent() {
                   }}
                   isWindowInUse={isWindowInUse}
                   isInSplitGroup={isInSplitGroup}
+                  onWindowHoverStart={handleWindowHoverStart}
+                  onWindowHoverEnd={handleWindowHoverEnd}
                   collapsed={false}
                 />
                 {/* Right-edge resize handle */}
@@ -1652,6 +1664,7 @@ function AppContent() {
                     onImageClick={handleTerminalImageClick}
                     onCreateAndAttachWindow={handleCreateAndAttachWindow}
                     onCreateWindowForPane={handleCreateWindowForPane}
+                    hoveredWindowKey={hoveredWindowKey}
                   />
               </div>
             ) : (
@@ -1785,6 +1798,8 @@ function AppContent() {
             connectionStatus={connectionStatus}
             onBranchClick={handleBranchClick}
             onChangesClick={handleChangesClick}
+            repoRoot={sessions.find(s => s.name === primarySession)?.repo_root ?? null}
+            sessionName={primarySession}
             onWorktreeListClick={() => {
               setShowBranchSwitcher(false)
               setShowWorktreeCreate(true)

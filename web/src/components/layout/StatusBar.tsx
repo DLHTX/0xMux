@@ -2,6 +2,7 @@ import { Icon } from '@iconify/react'
 import { IconGitBranch, IconFolder } from '../../lib/icons'
 import type { ConnectionStatus, WorktreeInfo } from '../../lib/types'
 import { useI18n } from '../../hooks/useI18n'
+import { DevCommandRunner } from './DevCommandRunner'
 
 interface StatusBarProps {
   branch: string
@@ -14,6 +15,8 @@ interface StatusBarProps {
   onBranchClick: () => void
   onChangesClick: () => void
   onWorktreeListClick: () => void
+  repoRoot: string | null
+  sessionName: string | null
 }
 
 export function StatusBar({
@@ -27,6 +30,8 @@ export function StatusBar({
   onBranchClick,
   onChangesClick,
   onWorktreeListClick,
+  repoRoot,
+  sessionName,
 }: StatusBarProps) {
   const { t } = useI18n()
 
@@ -41,11 +46,17 @@ export function StatusBar({
 
   return (
     <div
-      className="shrink-0 flex items-center justify-between px-2 bg-[var(--color-bg)] border-t border-t-[var(--color-border-light)]/30 text-[10px] font-mono select-none"
-      style={{ height: 24 }}
+      className="shrink-0 flex items-center justify-between px-2 bg-[var(--color-bg)] border-t border-t-[var(--color-border-light)]/30 text-xs font-mono select-none"
+      style={{ height: 28 }}
     >
-      {/* Left: Git info */}
+      {/* Left: Git info + Dev commands */}
       <div className="flex items-center gap-0">
+        {/* Dev command runner */}
+        <DevCommandRunner repoRoot={repoRoot} sessionName={sessionName} />
+
+        {/* Separator */}
+        <span className="text-[var(--color-border-light)]/50 mx-0.5">│</span>
+
         {/* Branch name */}
         <button
           onClick={onBranchClick}

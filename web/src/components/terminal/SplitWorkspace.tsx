@@ -120,6 +120,8 @@ interface SplitWorkspaceProps {
   onCreateAndAttachWindow?: (sessionName: string) => void
   /** Called to create a new window and attach to a specific pane (for empty panes) */
   onCreateWindowForPane?: (paneId: string) => void
+  /** Window key (session:index) being hovered in sidebar — highlight the corresponding pane */
+  hoveredWindowKey?: string | null
 }
 
 function ResizeHandle({ direction }: { direction: 'horizontal' | 'vertical' }) {
@@ -320,6 +322,7 @@ function PaneSlot({
   onSplitDropContent,
   onSwapPanes,
   onCreateAndAttachWindow,
+  isHovered,
 }: {
   nodeId: string
   sessionContainers: Map<string, HTMLDivElement>
@@ -337,6 +340,7 @@ function PaneSlot({
   onSplitDropContent?: (paneId: string, zone: 'left' | 'right' | 'top' | 'bottom', content: PaneContent) => void
   onSwapPanes?: (sourcePaneId: string, targetPaneId: string) => void
   onCreateAndAttachWindow?: (sessionName: string) => void
+  isHovered?: boolean
 }) {
   const [dropZone, setDropZone] = useState<DropZone>(null)
 
@@ -482,6 +486,16 @@ function PaneSlot({
             border: inSplit
               ? `1px solid ${isActive ? SPLIT_GROUP_COLOR + '60' : SPLIT_GROUP_COLOR + '25'}`
               : '1px solid color-mix(in srgb, var(--color-primary) 50%, transparent)',
+          }}
+        />
+      )}
+      {/* Sidebar hover highlight */}
+      {isHovered && (
+        <div
+          className="absolute inset-0 pointer-events-none z-10 transition-opacity"
+          style={{
+            border: '2px solid var(--color-primary)',
+            backgroundColor: 'color-mix(in srgb, var(--color-primary) 8%, transparent)',
           }}
         />
       )}
@@ -910,6 +924,7 @@ function renderLayoutStructure(
         onSplitDropContent={props.onSplitDropContent}
         onSwapPanes={props.onSwapPanes}
         onCreateAndAttachWindow={props.onCreateAndAttachWindow}
+        isHovered={props.hoveredWindowKey === windowKey}
       />
     )
   }

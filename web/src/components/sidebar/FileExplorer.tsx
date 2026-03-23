@@ -13,6 +13,7 @@ import {
   IconEdit,
   IconTrash,
   IconExternalLink,
+  IconGitBranch,
 } from '../../lib/icons'
 import { loadJSON, saveJSON } from '../../lib/storage'
 import {
@@ -25,8 +26,10 @@ import {
   resolveAbsoluteFilePath,
   uploadFiles,
   openInApp,
+  listWorktrees,
+  syncToWorktree,
 } from '../../lib/api'
-import type { FileTreeNode, GitFileStatus, WorkspaceContext } from '../../lib/types'
+import type { FileTreeNode, GitFileStatus, WorkspaceContext, WorktreeInfo } from '../../lib/types'
 import { getFileIcon } from '../../lib/file-icons'
 import { buildGitStatusMap, getGitStatusBadge, getGitStatusColor } from '../../lib/gitDecorations'
 import { setTerminalFileDragData } from '../../lib/terminalFileDrag'
@@ -46,7 +49,7 @@ type UndoAction =
   | { type: 'create'; path: string; isDirectory: boolean }
 
 interface FileExplorerProps {
-  onFileOpen: (path: string) => void
+  onFileOpen: (path: string, line?: number, preview?: boolean) => void
   workspace?: WorkspaceContext
 }
 
@@ -175,6 +178,7 @@ interface TreeNodeProps {
   onToggle: (path: string) => void
   onExpand: (path: string) => void
   onNodeClick: (node: FileTreeNode, e: React.MouseEvent) => void
+  onNodeDoubleClick: (node: FileTreeNode) => void
   onContextMenu: (e: React.MouseEvent, node: FileTreeNode) => void
   loading: Set<string>
   gitStatusByPath: Map<string, GitFileStatus>
@@ -187,6 +191,8 @@ interface TreeNodeProps {
   onCreateSubmit: (parentPath: string, name: string, isDir: boolean) => void
   onCreateCancel: () => void
   externalDropDir: string | null
+  worktrees: WorktreeInfo[]
+  onSynced?: () => void
 }
 
 const OPEN_IN_APPS = [
@@ -256,6 +262,88 @@ function OpenInMenu({ path, workspace, onCopyPath }: {
   )
 }
 
+// ── Sync to Worktree Button ──
+
+function SyncWorktreeButton({
+  path,
+  worktrees,
+  workspace,
+  onSynced,
+}: {
+  path: string
+  worktrees: WorktreeInfo[]
+  workspace?: WorkspaceContext
+  onSynced?: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    const timer = setTimeout(() => document.addEventListener('mousedown', handler), 0)
+    return () => { clearTimeout(timer); document.removeEventListener('mousedown', handler) }
+  }, [open])
+
+  const handleSync = async (wt: WorktreeInfo) => {
+    setOpen(false)
+    setSyncing(true)
+    try {
+      await syncToWorktree([path], wt.path, workspace)
+      onSynced?.()
+    } catch (e) {
+      console.error('[FileExplorer] sync to worktree failed:', e)
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  // Only one worktree — sync directly on click, no dropdown
+  if (worktrees.length === 1) {
+    return (
+      <button
+        onClick={(e) => { e.stopPropagation(); void handleSync(worktrees[0]) }}
+        className="w-5 h-5 flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-accent)] transition-colors"
+        title={`同步到 ${worktrees[0].branch ?? worktrees[0].path.split('/').pop()}`}
+      >
+        <Icon icon={IconGitBranch} width={12} height={12} className={syncing ? 'animate-pulse' : ''} />
+      </button>
+    )
+  }
+
+  return (
+    <div ref={ref} className="relative shrink-0">
+      <button
+        onClick={(e) => { e.stopPropagation(); setOpen(prev => !prev) }}
+        className="w-5 h-5 flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-accent)] transition-colors"
+        title="同步到 worktree..."
+      >
+        <Icon icon={IconGitBranch} width={12} height={12} className={syncing ? 'animate-pulse' : ''} />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-0.5 z-50 bg-[var(--color-bg)] border border-[var(--color-border-light)] shadow-lg py-1 min-w-[160px]">
+          <div className="px-3 py-1 text-[9px] font-bold text-[var(--color-fg-faint)] uppercase tracking-wider">
+            同步到
+          </div>
+          {worktrees.map((wt) => (
+            <button
+              key={wt.path}
+              onClick={(e) => { e.stopPropagation(); void handleSync(wt) }}
+              className="w-full text-left px-3 py-1 text-[11px] text-[var(--color-fg)] hover:bg-[var(--color-bg-alt)] transition-colors flex items-center gap-2"
+            >
+              <Icon icon={IconGitBranch} width={10} className="text-[var(--color-accent)] shrink-0" />
+              <span className="truncate">{wt.branch ?? wt.path.split('/').pop()}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function TreeNode({
   node,
   depth,
@@ -264,6 +352,7 @@ function TreeNode({
   onToggle,
   onExpand,
   onNodeClick,
+  onNodeDoubleClick,
   onContextMenu,
   loading,
   gitStatusByPath,
@@ -276,6 +365,8 @@ function TreeNode({
   onCreateSubmit,
   onCreateCancel,
   externalDropDir,
+  worktrees,
+  onSynced,
 }: TreeNodeProps) {
   const isDir = node.type === 'directory'
   const isExpanded = expanded.has(node.path)
@@ -343,6 +434,7 @@ function TreeNode({
         `}
         style={{ paddingLeft: depth * 16 + 8 }}
         onClick={handleClick}
+        onDoubleClick={() => onNodeDoubleClick(node)}
         onContextMenu={handleRightClick}
         draggable={!isDir}
         onDragStart={isDir ? undefined : handleDragStart}
@@ -373,8 +465,16 @@ function TreeNode({
         <span className="truncate min-w-0 flex-1" style={{ color: nameColor }}>
           {node.name}
         </span>
-        {/* Open in... menu (hover only) */}
-        <div className="shrink-0 opacity-0 group-hover/node:opacity-100 transition-opacity">
+        {/* Hover action buttons */}
+        <div className="shrink-0 flex items-center opacity-0 group-hover/node:opacity-100 transition-opacity">
+          {worktrees.length > 0 && (
+            <SyncWorktreeButton
+              path={node.path}
+              worktrees={worktrees}
+              workspace={workspace}
+              onSynced={onSynced}
+            />
+          )}
           <OpenInMenu
             path={node.path}
             workspace={workspace}
@@ -416,6 +516,7 @@ function TreeNode({
               onToggle={onToggle}
               onExpand={onExpand}
               onNodeClick={onNodeClick}
+              onNodeDoubleClick={onNodeDoubleClick}
               onContextMenu={onContextMenu}
               loading={loading}
               gitStatusByPath={gitStatusByPath}
@@ -428,6 +529,8 @@ function TreeNode({
               onCreateSubmit={onCreateSubmit}
               onCreateCancel={onCreateCancel}
               externalDropDir={externalDropDir}
+              worktrees={worktrees}
+              onSynced={onSynced}
             />
           ))}
         </div>
@@ -446,6 +549,19 @@ export function FileExplorer({ onFileOpen, workspace }: FileExplorerProps) {
   const [gitStatusByPath, setGitStatusByPath] = useState<Map<string, GitFileStatus>>(new Map())
   const [error, setError] = useState<string | null>(null)
   const loadedDirs = useRef<Set<string>>(new Set())
+
+  // Worktree state — other worktrees (non-main) to sync files to
+  const [otherWorktrees, setOtherWorktrees] = useState<WorktreeInfo[]>([])
+
+  // Fetch worktrees on mount and when workspace changes
+  useEffect(() => {
+    listWorktrees(workspace)
+      .then((res) => {
+        // Filter out the main worktree — only show targets to sync to
+        setOtherWorktrees(res.worktrees.filter(w => !w.is_main))
+      })
+      .catch(() => setOtherWorktrees([]))
+  }, [workspace?.session, workspace?.window])
 
   // Selection state
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -677,9 +793,16 @@ export function FileExplorer({ onFileOpen, workspace }: FileExplorerProps) {
       }
       handleToggle(node.path)
     } else {
-      onFileOpen(node.path)
+      // Single click = preview mode
+      onFileOpen(node.path, undefined, true)
     }
   }, [visibleNodes, expanded, handleExpand, handleToggle, onFileOpen])
+
+  // Double-click: open file permanently (not preview)
+  const handleNodeDoubleClick = useCallback((node: FileTreeNode) => {
+    if (node.type === 'directory') return
+    onFileOpen(node.path, undefined, false)
+  }, [onFileOpen])
 
   // Clear selection when clicking empty area
   const handleTreeBgClick = useCallback((e: React.MouseEvent) => {
@@ -1080,6 +1203,7 @@ export function FileExplorer({ onFileOpen, workspace }: FileExplorerProps) {
               onToggle={handleToggle}
               onExpand={handleExpand}
               onNodeClick={handleNodeClick}
+              onNodeDoubleClick={handleNodeDoubleClick}
               onContextMenu={handleContextMenu}
               loading={loading}
               gitStatusByPath={gitStatusByPath}
@@ -1092,6 +1216,8 @@ export function FileExplorer({ onFileOpen, workspace }: FileExplorerProps) {
               onCreateSubmit={handleCreateSubmit}
               onCreateCancel={handleCreateCancel}
               externalDropDir={externalDropDir}
+              worktrees={otherWorktrees}
+              onSynced={handleRefresh}
             />
           ))
         )}

@@ -289,7 +289,10 @@ export function useFloatingEditor(options?: { enabled?: boolean }) {
     persistState(state)
   }, [state, enabled])
 
-  /** Open a file in the floating editor */
+  /** Open a file in the floating editor.
+   *  preview=true → VSCode-style preview tab: italic title, replaced by next preview open.
+   *  preview=false (default) → permanent tab.
+   */
   const openFile = useCallback(
     async (
       path: string,
@@ -297,6 +300,7 @@ export function useFloatingEditor(options?: { enabled?: boolean }) {
       mode: 'edit' | 'diff' = 'edit',
       diffOriginal?: string,
       workspace?: WorkspaceContext,
+      preview?: boolean,
     ) => {
       // Check if tab already exists for this path + mode
       const existingTab = state.tabs.find(
@@ -307,6 +311,19 @@ export function useFloatingEditor(options?: { enabled?: boolean }) {
           t.workspace?.window === workspace?.window,
       )
       if (existingTab) {
+        // If opening as permanent, pin the existing preview tab
+        if (!preview && existingTab.isPreview) {
+          setState((prev) => ({
+            ...prev,
+            isOpen: true,
+            minimized: false,
+            activeTabId: existingTab.id,
+            tabs: prev.tabs.map((t) =>
+              t.id === existingTab.id ? { ...t, isPreview: false } : t,
+            ),
+          }))
+          return
+        }
         // If the tab has unsaved changes, just activate it
         if (existingTab.isDirty) {
           setState((prev) => ({
@@ -347,11 +364,16 @@ export function useFloatingEditor(options?: { enabled?: boolean }) {
         return
       }
 
+      // If opening as preview, replace any existing preview tab
+      const existingPreviewId = preview
+        ? state.tabs.find((t) => t.isPreview)?.id
+        : undefined
+
       // Image files: skip readFile, build raw URL
       if (isImageFile(path)) {
         const imageUrl = buildRawFileUrl(path, workspace)
         const newTab: EditorTab = {
-          id: nextTabId(),
+          id: existingPreviewId ?? nextTabId(),
           filePath: path,
           language: 'image',
           content: '',
@@ -360,12 +382,15 @@ export function useFloatingEditor(options?: { enabled?: boolean }) {
           mode: 'edit',
           workspace,
           imageUrl,
+          isPreview: preview,
         }
         setState((prev) => ({
           ...prev,
           isOpen: true,
           minimized: false,
-          tabs: [...prev.tabs, newTab],
+          tabs: existingPreviewId
+            ? prev.tabs.map((t) => (t.id === existingPreviewId ? newTab : t))
+            : [...prev.tabs, newTab],
           activeTabId: newTab.id,
         }))
         return
@@ -376,7 +401,7 @@ export function useFloatingEditor(options?: { enabled?: boolean }) {
       const language = file.language || detectLanguage(path)
 
       const newTab: EditorTab = {
-        id: nextTabId(),
+        id: existingPreviewId ?? nextTabId(),
         filePath: path,
         language,
         content: file.content,
@@ -385,18 +410,31 @@ export function useFloatingEditor(options?: { enabled?: boolean }) {
         mode,
         diffOriginal: diffOriginal ?? (mode === 'diff' ? file.content : undefined),
         workspace,
+        isPreview: preview,
       }
 
       setState((prev) => ({
         ...prev,
         isOpen: true,
         minimized: false,
-        tabs: [...prev.tabs, newTab],
+        tabs: existingPreviewId
+          ? prev.tabs.map((t) => (t.id === existingPreviewId ? newTab : t))
+          : [...prev.tabs, newTab],
         activeTabId: newTab.id,
       }))
     },
     [state.tabs, nextTabId],
   )
+
+  /** Pin a preview tab (convert to permanent) */
+  const pinTab = useCallback((tabId: string) => {
+    setState((prev) => ({
+      ...prev,
+      tabs: prev.tabs.map((t) =>
+        t.id === tabId ? { ...t, isPreview: false } : t,
+      ),
+    }))
+  }, [])
 
   /** Close a tab by ID */
   const closeTab = useCallback((tabId: string) => {
@@ -524,14 +562,15 @@ export function useFloatingEditor(options?: { enabled?: boolean }) {
     }))
   }, [])
 
-  /** Update tab content (called from editor onChange) */
+  /** Update tab content (called from editor onChange).
+   *  Also auto-pins preview tabs — editing makes them permanent. */
   const updateTabContent = useCallback(
     (tabId: string, content: string) => {
       setState((prev) => ({
         ...prev,
         tabs: prev.tabs.map((t) =>
           t.id === tabId
-            ? { ...t, content, isDirty: content !== t.originalContent }
+            ? { ...t, content, isDirty: content !== t.originalContent, isPreview: false }
             : t,
         ),
       }))
@@ -573,5 +612,6 @@ export function useFloatingEditor(options?: { enabled?: boolean }) {
     updateOpacity,
     updateTabContent,
     saveCurrentFile,
+    pinTab,
   }
 }

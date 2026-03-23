@@ -16,6 +16,7 @@ export interface EditorTabsProps {
   onCloseOtherTabs: (id: string) => void
   onCloseTabsToLeft: (id: string) => void
   onCloseTabsToRight: (id: string) => void
+  onPinTab?: (id: string) => void
 }
 
 /** Extract filename from a full file path */
@@ -30,12 +31,14 @@ function TabItem({
   onSelect,
   onClose,
   onContextMenu,
+  onDoubleClick,
 }: {
   tab: EditorTab
   isActive: boolean
   onSelect: () => void
   onClose: () => void
   onContextMenu: (event: React.MouseEvent<HTMLButtonElement>) => void
+  onDoubleClick?: () => void
 }) {
   const handleClose = useCallback(
     (e: React.MouseEvent) => {
@@ -52,10 +55,11 @@ function TabItem({
   return (
     <button
       onClick={onSelect}
+      onDoubleClick={onDoubleClick}
       onContextMenu={onContextMenu}
       draggable
       onDragStart={handleDragStart}
-      className="flex items-center gap-1.5 shrink-0 px-4 h-full text-[13px] leading-none font-mono cursor-pointer whitespace-nowrap"
+      className={`flex items-center gap-1.5 shrink-0 px-4 h-full text-[13px] leading-none font-mono cursor-pointer whitespace-nowrap ${tab.isPreview ? 'italic' : ''}`}
       style={{
         background: isActive ? 'var(--color-bg)' : 'var(--color-bg-alt)',
         color: isActive ? 'var(--color-fg)' : 'var(--color-fg-muted)',
@@ -113,6 +117,7 @@ export default function EditorTabs({
   onCloseOtherTabs,
   onCloseTabsToLeft,
   onCloseTabsToRight,
+  onPinTab,
 }: EditorTabsProps) {
   const { t } = useI18n()
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -202,6 +207,7 @@ export default function EditorTabs({
               onSelect={() => onSelectTab(tab.id)}
               onClose={() => onCloseTab(tab.id)}
               onContextMenu={(event) => openContextMenu(event, tab.id)}
+              onDoubleClick={tab.isPreview && onPinTab ? () => onPinTab(tab.id) : undefined}
             />
           </div>
         ))}

@@ -19,6 +19,9 @@ interface SessionFolderProps {
   isInSplitGroup?: (sessionName: string, windowIndex: number) => boolean
   collapsed: boolean
   onToggle: () => void
+  groupColor?: string
+  onWindowHoverStart?: (sessionName: string, windowIndex: number) => void
+  onWindowHoverEnd?: () => void
 }
 
 export function SessionFolder({
@@ -36,6 +39,9 @@ export function SessionFolder({
   isInSplitGroup,
   collapsed,
   onToggle,
+  groupColor,
+  onWindowHoverStart,
+  onWindowHoverEnd,
 }: SessionFolderProps) {
   const { t } = useI18n()
 
@@ -60,6 +66,13 @@ export function SessionFolder({
     onCreateWindow(session.name)
   }
 
+  // Status dot color: use groupColor if provided, otherwise default
+  const dotColor = groupColor
+    ? groupColor
+    : session.attached
+      ? 'var(--color-success)'
+      : 'var(--color-border-light)'
+
   return (
     <div className="select-none">
       {/* Session folder header */}
@@ -70,9 +83,6 @@ export function SessionFolder({
           hover:bg-[var(--color-bg-alt)]
           ${isSelected ? 'bg-[var(--color-bg-alt)]' : ''}
         `}
-        style={{
-          borderLeft: isSelected ? '3px solid var(--color-primary)' : '3px solid transparent',
-        }}
       >
         {/* Chevron icon */}
         <Icon
@@ -82,14 +92,12 @@ export function SessionFolder({
           className={`shrink-0 transition-transform ${collapsed ? '' : 'rotate-90'}`}
         />
 
-        {/* Status dot — simple green/gray for attached state */}
+        {/* Status dot — colored by project group, dimmed when detached */}
         <div
-          className={`w-2 h-2 shrink-0 ${
-            session.attached
-              ? 'bg-[var(--color-success)]'
-              : 'bg-[var(--color-border-light)]'
-          }`}
+          className="w-2 h-2 shrink-0"
           style={{
+            backgroundColor: dotColor,
+            opacity: groupColor ? (session.attached ? 1 : 0.4) : 1,
             animation: session.attached ? 'breathe 2s ease-in-out infinite' : undefined,
           }}
         />
@@ -141,21 +149,38 @@ export function SessionFolder({
       {/* Windows list */}
       {!collapsed && (
         <div>
-          {windows.map((window) => (
-            <WindowItem
-              key={window.index}
-              sessionName={session.name}
-              window={window}
-              selected={
-                selectedWindow?.sessionName === session.name &&
-                selectedWindow?.windowIndex === window.index
+          {windows.map((window, idx) => {
+            const isSplit = isInSplitGroup?.(session.name, window.index) ?? false
+            // Find if this is the last split-group member in the list
+            let isLastSplit = false
+            if (isSplit) {
+              isLastSplit = true
+              for (let j = idx + 1; j < windows.length; j++) {
+                if (isInSplitGroup?.(session.name, windows[j].index)) {
+                  isLastSplit = false
+                  break
+                }
               }
-              inUse={isWindowInUse?.(session.name, window.index) ?? false}
-              inSplitGroup={isInSplitGroup?.(session.name, window.index) ?? false}
-              onSelect={onSelectWindow}
-              onDelete={onDeleteWindow}
-            />
-          ))}
+            }
+            return (
+              <WindowItem
+                key={window.index}
+                sessionName={session.name}
+                window={window}
+                selected={
+                  selectedWindow?.sessionName === session.name &&
+                  selectedWindow?.windowIndex === window.index
+                }
+                inUse={isWindowInUse?.(session.name, window.index) ?? false}
+                inSplitGroup={isSplit}
+                isLastInSplitGroup={isLastSplit}
+                onSelect={onSelectWindow}
+                onDelete={onDeleteWindow}
+                onHoverStart={onWindowHoverStart}
+                onHoverEnd={onWindowHoverEnd}
+              />
+            )
+          })}
         </div>
       )}
     </div>

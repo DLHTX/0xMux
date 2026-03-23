@@ -196,3 +196,9 @@ export {
 export {
   default as IconUndo,
 } from '@iconify-icons/lucide/undo-2'
+export {
+  default as IconPlay,
+} from '@iconify-icons/lucide/play'
+export {
+  default as IconZap,
+} from '@iconify-icons/lucide/zap'
