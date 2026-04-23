@@ -4,8 +4,14 @@ use image::ImageEncoder;
 use std::io::Cursor;
 
 /// Capture a screenshot of the specified monitor with full HiDPI metadata
-pub fn capture_monitor(monitor_id: Option<u32>, format: ImageFormat, quality: u8, scale: f32) -> Result<AnnotatedScreenshot, String> {
-    let monitors = xcap::Monitor::all().map_err(|e| format!("Failed to enumerate monitors: {e}"))?;
+pub fn capture_monitor(
+    monitor_id: Option<u32>,
+    format: ImageFormat,
+    quality: u8,
+    scale: f32,
+) -> Result<AnnotatedScreenshot, String> {
+    let monitors =
+        xcap::Monitor::all().map_err(|e| format!("Failed to enumerate monitors: {e}"))?;
 
     let monitor = if let Some(id) = monitor_id {
         monitors
@@ -16,10 +22,18 @@ pub fn capture_monitor(monitor_id: Option<u32>, format: ImageFormat, quality: u8
         monitors.first().ok_or("No monitors found")?
     };
 
-    let logical_w = monitor.width().map_err(|e| format!("Failed to get width: {e}"))?;
-    let logical_h = monitor.height().map_err(|e| format!("Failed to get height: {e}"))?;
-    let scale_factor = monitor.scale_factor().map_err(|e| format!("Failed to get scale factor: {e}"))?;
-    let mid = monitor.id().map_err(|e| format!("Failed to get monitor id: {e}"))?;
+    let logical_w = monitor
+        .width()
+        .map_err(|e| format!("Failed to get width: {e}"))?;
+    let logical_h = monitor
+        .height()
+        .map_err(|e| format!("Failed to get height: {e}"))?;
+    let scale_factor = monitor
+        .scale_factor()
+        .map_err(|e| format!("Failed to get scale factor: {e}"))?;
+    let mid = monitor
+        .id()
+        .map_err(|e| format!("Failed to get monitor id: {e}"))?;
 
     let img = monitor
         .capture_image()
@@ -32,12 +46,7 @@ pub fn capture_monitor(monitor_id: Option<u32>, format: ImageFormat, quality: u8
     let img = if scale < 1.0 {
         let new_w = (physical_w as f32 * scale) as u32;
         let new_h = (physical_h as f32 * scale) as u32;
-        image::imageops::resize(
-            &img,
-            new_w,
-            new_h,
-            image::imageops::FilterType::Lanczos3,
-        )
+        image::imageops::resize(&img, new_w, new_h, image::imageops::FilterType::Lanczos3)
     } else {
         img
     };
@@ -58,7 +67,11 @@ pub fn capture_monitor(monitor_id: Option<u32>, format: ImageFormat, quality: u8
 }
 
 /// Capture a specific window by title substring
-pub fn capture_window(title: &str, format: ImageFormat, quality: u8) -> Result<AnnotatedScreenshot, String> {
+pub fn capture_window(
+    title: &str,
+    format: ImageFormat,
+    quality: u8,
+) -> Result<AnnotatedScreenshot, String> {
     let windows = xcap::Window::all().map_err(|e| format!("Failed to enumerate windows: {e}"))?;
 
     let window = windows
@@ -93,21 +106,36 @@ pub fn capture_window(title: &str, format: ImageFormat, quality: u8) -> Result<A
     })
 }
 
-fn encode_image(img: &image::RgbaImage, format: ImageFormat, quality: u8) -> Result<Vec<u8>, String> {
+fn encode_image(
+    img: &image::RgbaImage,
+    format: ImageFormat,
+    quality: u8,
+) -> Result<Vec<u8>, String> {
     let mut buf = Vec::new();
     match format {
         ImageFormat::Png => {
             let encoder = image::codecs::png::PngEncoder::new(Cursor::new(&mut buf));
             encoder
-                .write_image(img.as_raw(), img.width(), img.height(), image::ExtendedColorType::Rgba8)
+                .write_image(
+                    img.as_raw(),
+                    img.width(),
+                    img.height(),
+                    image::ExtendedColorType::Rgba8,
+                )
                 .map_err(|e| format!("PNG encode failed: {e}"))?;
         }
         ImageFormat::Jpeg => {
             // Convert RGBA to RGB for JPEG
             let rgb: image::RgbImage = image::DynamicImage::ImageRgba8(img.clone()).to_rgb8();
-            let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(Cursor::new(&mut buf), quality);
+            let encoder =
+                image::codecs::jpeg::JpegEncoder::new_with_quality(Cursor::new(&mut buf), quality);
             encoder
-                .write_image(rgb.as_raw(), rgb.width(), rgb.height(), image::ExtendedColorType::Rgb8)
+                .write_image(
+                    rgb.as_raw(),
+                    rgb.width(),
+                    rgb.height(),
+                    image::ExtendedColorType::Rgb8,
+                )
                 .map_err(|e| format!("JPEG encode failed: {e}"))?;
         }
     }

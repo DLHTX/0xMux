@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Icon } from '@iconify/react'
-import { IconPuzzle, IconSettings, IconBell } from '../../lib/icons'
-import type { ConnectionStatus, Notification } from '../../lib/types'
+import { IconPuzzle, IconSettings, IconBell, IconExternalLink, IconGitPullRequest } from '../../lib/icons'
+import type { ConnectionStatus, CurrentPrResponse, CurrentPrStatus, Notification } from '../../lib/types'
 import { ThemeConfigurator } from '../settings/ThemeConfigurator'
 import { NotificationPopover } from './NotificationPopover'
 import { Logo } from './Logo'
@@ -21,6 +21,116 @@ interface HeaderProps {
   onMarkRead?: (id: string) => void
   onDismissNotification?: (id: string) => void
   onImageClick?: (url: string) => void
+  currentPr?: CurrentPrResponse | null
+  currentPrLoading?: boolean
+  onOpenCurrentPr?: (url: string) => void
+}
+
+interface CurrentPrCardProps {
+  currentPr?: CurrentPrResponse | null
+  currentPrLoading?: boolean
+  onOpenCurrentPr?: (url: string) => void
+}
+
+function CurrentPrCard({
+  currentPr,
+  currentPrLoading = false,
+  onOpenCurrentPr,
+}: CurrentPrCardProps) {
+  const { t } = useI18n()
+
+  const statusLabels: Record<CurrentPrStatus, string> = {
+    draft: t('header.prStatusDraft'),
+    approved: t('header.prStatusApproved'),
+    changes_requested: t('header.prStatusChangesRequested'),
+    review_required: t('header.prStatusReviewRequired'),
+    open: t('header.prStatusOpen'),
+  }
+
+  const statusClasses: Record<CurrentPrStatus, string> = {
+    draft: 'border-[var(--color-warning)] text-[var(--color-warning)]',
+    approved: 'border-[var(--color-success)] text-[var(--color-success)]',
+    changes_requested: 'border-[var(--color-danger)] text-[var(--color-danger)]',
+    review_required: 'border-[var(--color-primary)] text-[var(--color-primary)]',
+    open: 'border-[var(--color-fg-muted)] text-[var(--color-fg-muted)]',
+  }
+
+  if (!currentPrLoading && !currentPr) return null
+
+  const shellClass = `hidden md:flex items-center gap-2 px-2 h-8 border-[length:var(--border-w)] border-[var(--color-border)] min-w-[220px] max-w-[360px]`
+
+  if (currentPrLoading) {
+    return (
+      <div className={shellClass}>
+        <Icon icon={IconGitPullRequest} width={14} className="shrink-0 animate-pulse" />
+        <div className="min-w-0 flex-1 overflow-hidden">
+          <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--color-fg-muted)]">
+            {t('header.prLabel')}
+          </div>
+          <div className="truncate text-[11px] font-bold text-[var(--color-fg)]">
+            {t('header.prChecking')}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!currentPr) return null
+
+  if (currentPr.kind !== 'ready') {
+    const label = currentPr.kind === 'no_pr'
+      ? t('header.prNoPr')
+      : currentPr.kind === 'gh_unavailable'
+        ? t('header.prGhUnavailable')
+        : t('header.prLookupFailed')
+    const title = currentPr.kind === 'error'
+      ? currentPr.message
+      : currentPr.kind === 'gh_unavailable'
+        ? currentPr.message ?? label
+        : label
+
+    return (
+      <div className={shellClass} title={title}>
+        <Icon icon={IconGitPullRequest} width={14} className="shrink-0 text-[var(--color-fg-muted)]" />
+        <div className="min-w-0 flex-1 overflow-hidden">
+          <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--color-fg-muted)]">
+            {t('header.prLabel')}
+          </div>
+          <div className="truncate text-[11px] font-bold text-[var(--color-fg-muted)]">
+            {label}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const subtitle = `#${currentPr.number}${currentPr.extra_count > 0 ? ` +${currentPr.extra_count}` : ''}`
+
+  return (
+    <div className={shellClass} title={`#${currentPr.number} ${currentPr.title}`}>
+      <Icon icon={IconGitPullRequest} width={14} className="shrink-0 text-[var(--color-primary)]" />
+      <div className="min-w-0 flex-1 overflow-hidden">
+        <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--color-fg-muted)]">
+          <span>{t('header.prLabel')}</span>
+          <span>{subtitle}</span>
+        </div>
+        <div className="truncate text-[11px] font-bold text-[var(--color-fg)]">
+          {currentPr.title}
+        </div>
+      </div>
+      <span className={`hidden lg:inline-flex px-1 py-0.5 border-[length:var(--border-w)] text-[9px] font-bold uppercase tracking-[0.08em] ${statusClasses[currentPr.status]}`}>
+        {statusLabels[currentPr.status]}
+      </span>
+      <button
+        onClick={() => onOpenCurrentPr?.(currentPr.url)}
+        className="shrink-0 h-6 px-2 flex items-center gap-1 border-[length:var(--border-w)] border-[var(--color-primary)] text-[var(--color-primary)] text-[10px] font-bold transition-colors cursor-pointer hover:bg-[var(--color-primary)] hover:text-[var(--color-primary-fg)]"
+        aria-label={t('ctx.open')}
+      >
+        <Icon icon={IconExternalLink} width={12} height={12} />
+        <span className="hidden lg:inline">{t('ctx.open')}</span>
+      </button>
+    </div>
+  )
 }
 
 export function Header({
@@ -37,6 +147,9 @@ export function Header({
   onMarkRead,
   onDismissNotification,
   onImageClick,
+  currentPr,
+  currentPrLoading = false,
+  onOpenCurrentPr,
 }: HeaderProps) {
   const { t } = useI18n()
   const [showConfig, setShowConfig] = useState(false)
@@ -71,6 +184,12 @@ export function Header({
 
         {/* Right: status + notifications + plugins + settings */}
         <div className="flex items-center gap-3">
+          <CurrentPrCard
+            currentPr={currentPr}
+            currentPrLoading={currentPrLoading}
+            onOpenCurrentPr={onOpenCurrentPr}
+          />
+
           {/* Connection status */}
           <div className="flex items-center gap-1.5">
             <div className={`w-2 h-2 ${status.dotClass}`} />

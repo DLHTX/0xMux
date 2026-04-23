@@ -4,7 +4,7 @@ import { useMux } from '../../contexts/MuxContext'
 import { useMobile } from '../../hooks/useMobile'
 import { useI18n } from '../../hooks/useI18n'
 import { consumePendingInit } from '../../lib/init-commands'
-import { resolveAbsoluteFilePath, resolveFilePath, uploadFiles, deleteImage } from '../../lib/api'
+import { resolveAbsoluteFilePath, resolveFilePath, deleteImage, locateFiles } from '../../lib/api'
 import { getTerminalFileDragData, isTerminalFileDrag } from '../../lib/terminalFileDrag'
 import { ImagePreviewTooltip } from '../ui/ImagePreviewTooltip'
 import type { WorkspaceContext } from '../../lib/types'
@@ -27,6 +27,8 @@ interface TerminalPaneProps {
   onFileClick?: (path: string, line?: number, workspace?: WorkspaceContext) => void
   /** Called when an image link is clicked in terminal output */
   onImageClick?: (imageUrl: string) => void
+  /** Called when a TermUI block is detected — opens HTML in a webview pane */
+  onTermUIRender?: (html: string) => void
 }
 
 export function TerminalPane({
@@ -41,6 +43,7 @@ export function TerminalPane({
   atTriggerEnabled = true,
   onFileClick,
   onImageClick,
+  onTermUIRender,
 }: TerminalPaneProps) {
   const mux = useMux()
   const { t } = useI18n()
@@ -86,6 +89,10 @@ export function TerminalPane({
   const imageLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const onImageClickRef = useRef(onImageClick)
   onImageClickRef.current = onImageClick
+
+  // TermUI: ref mirror for callback
+  const onTermUIRenderRef = useRef(onTermUIRender)
+  onTermUIRenderRef.current = onTermUIRender
 
   const handleImageHover = useCallback((event: MouseEvent, imageUrl: string, imagePath: string) => {
     if (imageLeaveTimerRef.current) { clearTimeout(imageLeaveTimerRef.current); imageLeaveTimerRef.current = null }
@@ -197,6 +204,7 @@ export function TerminalPane({
     onImageHover: handleImageHover,
     onImageLeave: handleImageLeave,
     onImageClick: (imageUrl) => { onImageClickRef.current?.(imageUrl) },
+    onTermUIRender: (html) => { onTermUIRenderRef.current?.(html) },
     onData: (data) => {
       if (data === '@' && atTriggerEnabledRef.current && onAtTriggerRef.current) {
         onAtTriggerRef.current()
@@ -280,17 +288,25 @@ export function TerminalPane({
       return
     }
 
-    // External file drag (from OS)
+    // External file drag (from OS) — resolve absolute paths via server
     const nativeFiles = Array.from(event.dataTransfer.files)
     if (nativeFiles.length > 0) {
       try {
-        const results = await uploadFiles(nativeFiles, undefined, fallbackWorkspace)
-        const paths = results.map(r => quoteShellPath(r.absolute_path)).join(' ')
-        chRef.current?.send(`${paths} `)
+        const entries = nativeFiles.map(f => ({ name: f.name, size: f.size }))
+        const result = await locateFiles(entries)
+        const parts = result.files
+          .map(f => f.path ? quoteShellPath(f.path) : quoteShellPath(f.name))
+        if (parts.length > 0) {
+          chRef.current?.send(`${parts.join(' ')} `)
+          onFocus?.()
+          focus()
+        }
+      } catch {
+        // Fallback: just output file names
+        const parts = nativeFiles.map(f => quoteShellPath(f.name))
+        chRef.current?.send(`${parts.join(' ')} `)
         onFocus?.()
         focus()
-      } catch (error) {
-        console.error('Failed to upload dropped files', error)
       }
     }
   }, [focus, onFocus, quoteShellPath, sessionName, windowIndex])

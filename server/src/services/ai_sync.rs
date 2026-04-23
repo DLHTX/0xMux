@@ -13,13 +13,59 @@ use std::path::{Path, PathBuf};
 use toml::Value as TomlValue;
 
 const PROVIDERS: &[&str] = &["claude", "codex"];
+
+/// Built-in TermUI instructions appended to global config during sync.
+/// Teaches AI agents (Claude Code, Codex) how to output rich HTML content
+/// that 0xMux renders in a webview pane next to the terminal.
+const TERMUI_INSTRUCTIONS: &str = r#"## TermUI — Rich Content Rendering
+
+You are running inside 0xMux, a terminal multiplexer with rich rendering support.
+When your output would benefit from rich formatting (charts, data flow diagrams, architecture visualizations, comparison tables, dashboards), use the TermUI API to render HTML in a webview pane next to this terminal.
+
+### Protocol — execute via Bash tool:
+```bash
+curl -s -X POST http://localhost:${OXMUX_PORT:-1234}/api/termui \
+  -H "Content-Type: application/json" \
+  -d '{"html": "<h2>Title</h2><p>Content here</p>"}'
+```
+
+### Built-in Components
+
+**Charts** (powered by Chart.js — line, bar, pie, doughnut, radar):
+```html
+<tui-chart>{"type":"line","title":"API Latency","labels":["Mon","Tue","Wed"],"datasets":[{"label":"p50","data":[12,19,8]},{"label":"p99","data":[45,62,35]}]}</tui-chart>
+```
+
+**Metrics row**:
+```html
+<div class='tui-metric'><div class='value'>47</div><div class='label'>Sessions</div></div>
+```
+
+**Data flow**:
+```html
+<div class='tui-flow'><span class='tui-flow-node'>Client</span><span class='tui-flow-arrow'>→</span><span class='tui-flow-node'>API</span></div>
+```
+
+**Bar chart (CSS)**:
+```html
+<div class='tui-bar'><div class='tui-bar-row'><span class='tui-bar-label'>GET</span><div class='tui-bar-track'><div class='tui-bar-fill' style='width:78%;background:#1BFF80'></div><div class='tui-bar-value'>78%</div></div></div></div>
+```
+
+### Rules:
+- Use any HTML/CSS; Chart.js is pre-loaded via CDN
+- Built-in dark theme: transparent bg, fg:#c9d1d9, accent:#1BFF80, font: JetBrains Mono
+- Standard HTML tables work with built-in styling
+- Only use when rich rendering genuinely helps; simple text should stay as plain text
+- For JSON in HTML attributes, use single quotes for the outer HTML attribute"#;
 const SYNC_TYPES: &[&str] = &["skills", "mcp"];
 
 /// Bundled skills shipped with the 0xMux binary.
 /// Each entry: (id, version, content).
-const BUNDLED_SKILLS: &[(&str, &str, &str)] = &[
-    ("commands/0xmux", "0.5.0", include_str!("../../../ai/skills/commands/0xmux.md")),
-];
+const BUNDLED_SKILLS: &[(&str, &str, &str)] = &[(
+    "commands/0xmux",
+    "0.5.0",
+    include_str!("../../../ai/skills/commands/0xmux.md"),
+)];
 
 #[derive(Clone, Debug)]
 struct SkillSource {
@@ -985,13 +1031,15 @@ fn build_skill_catalog(
             .unwrap_or_else(|| id.clone());
 
         let claude_exists = claude_skill.is_some()
-            || global.and_then(|g| g.source_dir.as_ref()).map_or(false, |_| {
-                claude_skill_dir_target(&claude_home, &id).exists()
-            });
+            || global
+                .and_then(|g| g.source_dir.as_ref())
+                .map_or(false, |_| {
+                    claude_skill_dir_target(&claude_home, &id).exists()
+                });
         let codex_exists = codex_skill.is_some()
-            || global.and_then(|g| g.source_dir.as_ref()).map_or(false, |_| {
-                codex_skill_dir_target(codex_home, &id).exists()
-            });
+            || global
+                .and_then(|g| g.source_dir.as_ref())
+                .map_or(false, |_| codex_skill_dir_target(codex_home, &id).exists());
         let (claude_in_sync, codex_in_sync) = if let Some(global_skill) = global {
             if let Some(ref source_dir) = global_skill.source_dir {
                 // Directory skill: compare all files
@@ -1027,9 +1075,7 @@ fn build_skill_catalog(
 
         let recommended = global.map_or(false, |s| s.recommended);
         let official = global.map_or(false, |s| s.official);
-        let description = global
-            .map(|s| s.description.clone())
-            .unwrap_or_default();
+        let description = global.map(|s| s.description.clone()).unwrap_or_default();
 
         list.push(SkillCatalogItem {
             id,
@@ -1212,9 +1258,8 @@ fn discover_skills_recursive(
     }
 
     // Otherwise, scan entries: collect standalone .md files and recurse into subdirs
-    let entries = fs::read_dir(dir).map_err(|err| {
-        AppError::Internal(format!("读取目录失败（{}）: {}", dir.display(), err))
-    })?;
+    let entries = fs::read_dir(dir)
+        .map_err(|err| AppError::Internal(format!("读取目录失败（{}）: {}", dir.display(), err)))?;
 
     for entry in entries {
         let entry = entry.map_err(|err| {
@@ -1297,9 +1342,7 @@ fn discover_provider_skills(root: &Path, suffix: &str) -> Result<Vec<SkillSource
             continue;
         }
         // For Claude (.md suffix): skip SKILL.md inside directories — these are directory skills managed separately
-        if suffix == ".md"
-            && path.file_name().and_then(|n| n.to_str()) == Some("SKILL.md")
-        {
+        if suffix == ".md" && path.file_name().and_then(|n| n.to_str()) == Some("SKILL.md") {
             continue;
         }
         if suffix == "/SKILL.md" && !relative.ends_with("/SKILL.md") {
@@ -1500,8 +1543,7 @@ fn copy_dir_recursive(source: &Path, target: &Path) -> Result<(), AppError> {
         .map_err(|err| AppError::Internal(format!("读取源目录失败: {}", err)))?;
 
     for entry in entries {
-        let entry = entry
-            .map_err(|err| AppError::Internal(format!("读取目录项失败: {}", err)))?;
+        let entry = entry.map_err(|err| AppError::Internal(format!("读取目录项失败: {}", err)))?;
         let path = entry.path();
         let file_name = path.file_name().unwrap();
 
@@ -1675,9 +1717,7 @@ fn is_version_newer(bundled: &str, local: Option<&str>) -> bool {
         // 本地无版本号，视为旧版本，需要更新
         return true;
     };
-    let parse = |v: &str| -> Vec<u32> {
-        v.split('.').filter_map(|s| s.parse().ok()).collect()
-    };
+    let parse = |v: &str| -> Vec<u32> { v.split('.').filter_map(|s| s.parse().ok()).collect() };
     let b = parse(bundled);
     let l = parse(local);
     b > l
@@ -2523,7 +2563,9 @@ fn render_claude_skill_bytes(skill: &SkillSource) -> Result<Vec<u8>, AppError> {
     let source_meta = parse_skill_frontmatter(without_bom);
     let mut out = if source_meta.name.is_some() || source_meta.description.is_some() {
         // Has frontmatter – strip it, emit body only
-        strip_initial_frontmatter(without_bom).trim_start().to_string()
+        strip_initial_frontmatter(without_bom)
+            .trim_start()
+            .to_string()
     } else {
         without_bom.to_string()
     };
@@ -2990,7 +3032,9 @@ pub fn save_global_config(content: String) -> Result<GlobalConfigResponse, AppEr
     })
 }
 
-pub fn sync_global_config(request: SyncGlobalConfigRequest) -> Result<GlobalConfigResponse, AppError> {
+pub fn sync_global_config(
+    request: SyncGlobalConfigRequest,
+) -> Result<GlobalConfigResponse, AppError> {
     let mux_home = mux_home()?;
     let config_path = global_config_path(&mux_home);
     let content = if config_path.exists() {
@@ -3029,15 +3073,22 @@ pub fn sync_global_config(request: SyncGlobalConfigRequest) -> Result<GlobalConf
             String::new()
         };
 
-        let updated = replace_marker_section(&existing, &content);
+        // Append built-in TermUI instructions to user config
+        let full_content = format!("{}\n\n{}", content, TERMUI_INSTRUCTIONS);
+        let updated = replace_marker_section(&existing, &full_content);
 
         if let Some(parent) = target_path.parent() {
             fs::create_dir_all(parent)
                 .map_err(|err| AppError::Internal(format!("创建目标目录失败: {}", err)))?;
         }
 
-        fs::write(&target_path, &updated)
-            .map_err(|err| AppError::Internal(format!("写入目标文件失败（{}）: {}", target_path.display(), err)))?;
+        fs::write(&target_path, &updated).map_err(|err| {
+            AppError::Internal(format!(
+                "写入目标文件失败（{}）: {}",
+                target_path.display(),
+                err
+            ))
+        })?;
     }
 
     // Re-check sync state after writing

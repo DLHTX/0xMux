@@ -599,9 +599,7 @@ pub fn window_info(
         .map_err(|e| AppError::Internal(format!("Failed to get window info: {e}")))?;
 
     if !output.status.success() {
-        return Err(AppError::NotFound(format!(
-            "Window '{target}' not found"
-        )));
+        return Err(AppError::NotFound(format!("Window '{target}' not found")));
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);

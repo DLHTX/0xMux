@@ -361,6 +361,28 @@ function EditorTab({ settings, updateSettings }: {
         </button>
       </div>
 
+      {/* Audio Notifications Toggle */}
+      <div className="flex items-center justify-between py-2">
+        <div className="flex-1 min-w-0 mr-4">
+          <div className="text-xs font-bold">{t('settings.audioNotifications')}</div>
+          <div className="text-[10px] text-[var(--color-fg-muted)] mt-0.5">
+            {t('settings.audioNotificationsHint')}
+          </div>
+        </div>
+        <button
+          onClick={() => updateSettings({ audioNotifications: !settings.audioNotifications })}
+          className={`shrink-0 w-5 h-5 border-[length:var(--border-w)] flex items-center justify-center transition-colors ${
+            settings.audioNotifications
+              ? 'border-[var(--color-primary)] bg-[var(--color-primary)]'
+              : 'border-[var(--color-border-light)] bg-transparent'
+          }`}
+        >
+          {settings.audioNotifications && (
+            <span className="text-[10px] font-bold text-[var(--color-primary-fg)]">✓</span>
+          )}
+        </button>
+      </div>
+
       {/* Modal Blur */}
       <div className="flex items-center justify-between py-2">
         <div className="flex-1 min-w-0 mr-4">

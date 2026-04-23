@@ -1,4 +1,9 @@
-use axum::{Json, extract::{Path, Query}, http::StatusCode, response::IntoResponse};
+use axum::{
+    Json,
+    extract::{Path, Query},
+    http::StatusCode,
+    response::IntoResponse,
+};
 use serde::Deserialize;
 use serde_json::json;
 

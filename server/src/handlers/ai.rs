@@ -1,7 +1,9 @@
 use axum::{Json, response::IntoResponse};
 
 use crate::error::AppError;
-use crate::models::ai::{AiSyncRequest, AiUninstallRequest, SaveGlobalConfigRequest, SyncGlobalConfigRequest};
+use crate::models::ai::{
+    AiSyncRequest, AiUninstallRequest, SaveGlobalConfigRequest, SyncGlobalConfigRequest,
+};
 use crate::services;
 
 pub async fn ai_status_handler() -> Result<impl IntoResponse, AppError> {

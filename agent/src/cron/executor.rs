@@ -43,7 +43,10 @@ async fn execute_command(
                 (
                     JobStatus::Failed,
                     Some(result.stdout),
-                    Some(format!("Exit code: {}. {}", result.exit_code, result.stderr)),
+                    Some(format!(
+                        "Exit code: {}. {}",
+                        result.exit_code, result.stderr
+                    )),
                 )
             }
         }
@@ -69,9 +72,7 @@ fn execute_open_app(name: &str) -> (JobStatus, Option<String>, Option<String>) {
 }
 
 fn execute_open_url(url: &str) -> (JobStatus, Option<String>, Option<String>) {
-    let result = std::process::Command::new("open")
-        .arg(url)
-        .output();
+    let result = std::process::Command::new("open").arg(url).output();
 
     match result {
         Ok(output) if output.status.success() => {
@@ -81,7 +82,11 @@ fn execute_open_url(url: &str) -> (JobStatus, Option<String>, Option<String>) {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
             (JobStatus::Failed, None, Some(stderr))
         }
-        Err(e) => (JobStatus::Failed, None, Some(format!("Failed to open URL: {e}"))),
+        Err(e) => (
+            JobStatus::Failed,
+            None,
+            Some(format!("Failed to open URL: {e}")),
+        ),
     }
 }
 
@@ -115,7 +120,9 @@ fn execute_screenshot(
                     JobStatus::Success,
                     Some(format!(
                         "Screenshot captured: {}x{} (scale: {})",
-                        screenshot.logical_width, screenshot.logical_height, screenshot.scale_factor
+                        screenshot.logical_width,
+                        screenshot.logical_height,
+                        screenshot.scale_factor
                     )),
                     None,
                 )

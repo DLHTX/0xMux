@@ -34,8 +34,9 @@ import { useNotifications } from './hooks/useNotifications'
 import { ThemeProvider, useTheme } from './hooks/useTheme'
 import { I18nProvider, useI18n } from './hooks/useI18n'
 import { MuxProvider, useMux } from './contexts/MuxContext'
+import { WindowActivityProvider } from './contexts/WindowActivityContext'
 import { FUSION_PIXEL_FONT, SILKSCREEN_FONT } from './lib/theme'
-import { getGitDiff, getGitStatus, getGitBranches, gitCheckout, uploadFiles, createWorktree, listWorktrees, removeWorktree, getUntrackedFiles } from './lib/api'
+import { getGitDiff, getGitStatus, getGitBranches, getCurrentPr, gitCheckout, uploadFiles, createWorktree, listWorktrees, removeWorktree, getUntrackedFiles } from './lib/api'
 import { isTerminalFileDrag } from './lib/terminalFileDrag'
 import { useImageSync } from './hooks/useImageSync'
 import { Icon } from '@iconify/react'
@@ -55,6 +56,7 @@ import type {
   AiSyncType,
   AiProvider,
   GlobalConfigResponse,
+  CurrentPrResponse,
 } from './lib/types'
 import { getWindows, createWindow, deleteWindow, getAiStatus, getAiCatalog, syncAi, uninstallAi, getGlobalConfig, saveGlobalConfig as saveGlobalConfigApi, syncGlobalConfig as syncGlobalConfigApi } from './lib/api'
 import { setInitCommand, markWindowPending } from './lib/init-commands'
@@ -933,6 +935,8 @@ function AppContent() {
   const [gitIsWorktree, setGitIsWorktree] = useState(false)
   const [gitBranches, setGitBranches] = useState<GitBranch[]>([])
   const [gitWorktrees, setGitWorktrees] = useState<WorktreeInfo[]>([])
+  const [currentPr, setCurrentPr] = useState<CurrentPrResponse | null>(null)
+  const [currentPrLoading, setCurrentPrLoading] = useState(false)
   const [showBranchSwitcher, setShowBranchSwitcher] = useState(false)
   const [showWorktreeCreate, setShowWorktreeCreate] = useState(false)
   const [untrackedFiles, setUntrackedFiles] = useState<string[]>([])
@@ -964,6 +968,41 @@ function AppContent() {
   useEffect(() => {
     refreshGitInfo()
   }, [refreshGitInfo])
+
+  useEffect(() => {
+    if (!activeWorkspace) {
+      setCurrentPr(null)
+      setCurrentPrLoading(false)
+      return
+    }
+
+    let cancelled = false
+    setCurrentPrLoading(true)
+
+    getCurrentPr(activeWorkspace)
+      .then((result) => {
+        if (cancelled) return
+        setCurrentPr(result)
+      })
+      .catch((error) => {
+        if (cancelled) return
+        const message = typeof error === 'object' && error && 'message' in error
+          ? String(error.message)
+          : error instanceof Error
+            ? error.message
+            : String(error)
+        setCurrentPr({ kind: 'error', message })
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setCurrentPrLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeWorkspace, gitBranch])
 
   // Auto-refresh git status on file changes (debounced, no worktree list)
   const refreshGitStatusRef = useRef(refreshGitStatus)
@@ -1003,11 +1042,11 @@ function AppContent() {
   }, [activeWorkspace, refreshGitInfo, addToast, t])
 
   // Worktree creation — uses the session that was clicked, not the active one
-  const handleWorktreeCreate = useCallback(async (baseBranch: string, newBranch: string, dirName: string, copyPaths: string[]) => {
+  const handleWorktreeCreate = useCallback(async (baseBranch: string, newBranch: string, dirName: string, linkPaths: string[]) => {
     setWorktreeCreating(true)
     const ws = worktreeTargetSession ? { session: worktreeTargetSession, window: 0 } : activeWorkspace
     try {
-      const result = await createWorktree(baseBranch, newBranch, dirName, copyPaths, ws)
+      const result = await createWorktree(baseBranch, newBranch, dirName, linkPaths, ws)
       setShowWorktreeCreate(false)
       addToast(t('worktree.created', { branch: result.branch }), 'success')
       // Create a session in the new worktree directory
@@ -1025,6 +1064,10 @@ function AppContent() {
     if (activeWorkspace?.session) return activeWorkspace.session.split('/').pop() ?? '0xmux'
     return '0xmux'
   }, [activeWorkspace])
+
+  const handleOpenCurrentPr = useCallback((url: string) => {
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }, [])
 
   // Open file in floating editor from file explorer / search results
   const handleOpenFile = useCallback((path: string, line?: number, preview?: boolean) => {
@@ -1130,10 +1173,122 @@ function AppContent() {
           </div>
         )
       }
+      case 'webview': {
+        const doc = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"><\/script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--fg:#c9d1d9;--primary:#1BFF80;--border:#30363d;--surface:rgba(22,27,34,0.6);--muted:#8b949e}
+html,body{background:transparent;color:var(--fg);font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;line-height:1.6;padding:16px;overflow:auto}
+::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#30363d}::-webkit-scrollbar-thumb:hover{background:#8b949e}
+*{scrollbar-width:thin;scrollbar-color:#30363d transparent}
+table{width:100%;border-collapse:collapse;margin:8px 0}
+th,td{padding:6px 10px;border:1px solid var(--border);text-align:left}
+th{background:var(--surface);color:var(--primary);font-weight:600}
+h1,h2,h3{color:var(--primary);margin:12px 0 8px}
+h2:first-child,h3:first-child{margin-top:0}
+p{margin-bottom:8px}
+.tui-chart-container{position:relative;margin:12px 0;width:100%}
+.tui-metric{display:inline-block;background:var(--surface);border:1px solid var(--border);padding:10px 16px;margin:4px;text-align:center;min-width:100px}
+.tui-metric .value{font-size:20px;font-weight:bold;color:var(--primary)}
+.tui-metric .label{font-size:10px;color:var(--muted);margin-top:4px}
+.tui-flow{display:flex;align-items:center;gap:4px;margin:12px 0;flex-wrap:wrap;font-size:11px}
+.tui-flow-node{background:var(--surface);border:1px solid var(--border);padding:4px 10px}
+.tui-flow-arrow{color:var(--primary)}
+.tui-bar{margin:4px 0}
+.tui-bar-row{display:flex;align-items:center;margin-bottom:4px}
+.tui-bar-label{width:90px;font-size:11px;color:var(--muted);flex-shrink:0}
+.tui-bar-track{flex:1;height:16px;background:rgba(33,38,45,0.8);position:relative}
+.tui-bar-fill{height:100%;position:absolute;left:0;top:0}
+.tui-bar-value{position:absolute;right:4px;top:0;font-size:10px;line-height:16px}
+</style></head><body>${content.htmlContent || ''}
+<script>
+// Auto-render all <tui-chart> elements
+document.querySelectorAll('tui-chart').forEach(function(el){
+  try {
+    var cfg = JSON.parse(el.textContent);
+    el.textContent = '';
+    var wrap = document.createElement('div');
+    wrap.className = 'tui-chart-container';
+    wrap.style.height = (cfg.height || 250) + 'px';
+    var canvas = document.createElement('canvas');
+    wrap.appendChild(canvas);
+    el.appendChild(wrap);
+    var colors = ['#58a6ff','#f85149','#d29922','#1BFF80','#bc8cff','#f778ba','#8b949e','#3fb950'];
+    var isPie = cfg.type === 'pie' || cfg.type === 'doughnut';
+    var isBar = cfg.type === 'bar';
+    var datasets = (cfg.datasets || [cfg]).map(function(ds, i){
+      var defaults = {};
+      if (isPie) {
+        // Pie/doughnut: each slice gets its own color
+        var sliceColors = (ds.data || []).map(function(_,j){ return colors[j % colors.length]; });
+        defaults = { backgroundColor: sliceColors, borderColor: '#0d1117', borderWidth: 2 };
+      } else if (isBar) {
+        // Bar: each bar gets its own color if single dataset, else one color per dataset
+        var barColors = (cfg.datasets || []).length > 1
+          ? colors[i % colors.length]
+          : (ds.data || []).map(function(_,j){ return colors[j % colors.length]; });
+        defaults = { backgroundColor: barColors, borderColor: 'transparent', borderWidth: 0 };
+      } else {
+        // Line: one color per dataset
+        defaults = { borderColor: colors[i % colors.length], backgroundColor: 'transparent', borderWidth: 2, pointRadius: 3, tension: 0.3, fill: false };
+      }
+      return Object.assign(defaults, ds);
+    });
+    new Chart(canvas, {
+      type: cfg.type || 'line',
+      data: { labels: cfg.labels, datasets: datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { color: '#8b949e', font: { family: 'JetBrains Mono', size: 11 } } },
+          title: cfg.title ? { display: true, text: cfg.title, color: '#1BFF80', font: { family: 'JetBrains Mono', size: 14 } } : undefined,
+        },
+        scales: isPie ? {} : {
+          x: { ticks: { color: '#8b949e', font: { size: 10 } }, grid: { color: '#30363d40' } },
+          y: { ticks: { color: '#8b949e', font: { size: 10 } }, grid: { color: '#30363d40' } },
+        }
+      }
+    });
+  } catch(e) { el.textContent = 'Chart error: ' + e.message; }
+});
+<\/script></body></html>`
+        return (
+          <TermUIWebview doc={doc} />
+        )
+      }
       default:
         return null
     }
   }, [handleOpenFile, handleOpenDiff, handleRightPanelTabChange, activeWorkspace, addToast, floatingEditor, settings, gitChangeCount])
+
+  /** Handle TermUI block detected in terminal — open webview pane next to it */
+  const handleTermUIRender = useCallback(async (html: string, paneId: string) => {
+    const newPaneId = await splitPane(paneId, 'horizontal')
+    if (newPaneId) {
+      assignContent(newPaneId, { type: 'webview', htmlContent: html })
+    }
+  }, [splitPane, assignContent])
+
+  // TermUI: listen for render events from WebSocket (triggered by POST /api/termui)
+  const handleTermUIRenderRef = useRef(handleTermUIRender)
+  handleTermUIRenderRef.current = handleTermUIRender
+  const paneWindowMapForTermUI = paneWindowMap
+  useEffect(() => {
+    return mux.onTermUIRender((html) => {
+      // Find a terminal pane to split next to.
+      // Prefer activePaneId if it's a terminal, otherwise find any terminal pane.
+      let targetPaneId = activePaneId
+      if (targetPaneId && !paneWindowMapForTermUI[targetPaneId]) {
+        targetPaneId = Object.keys(paneWindowMapForTermUI)[0] ?? null
+      }
+      if (targetPaneId) {
+        handleTermUIRenderRef.current(html, targetPaneId)
+      }
+    })
+  }, [mux, activePaneId, paneWindowMapForTermUI])
 
   /** Handle pane-content drag drop on center (replace pane content) */
   const handleDropContent = useCallback((paneId: string, content: PaneContent) => {
@@ -1344,6 +1499,9 @@ function AppContent() {
         onMarkRead={markNotificationRead}
         onDismissNotification={dismissNotification}
         onImageClick={(url) => setImageViewerSrc(url)}
+        currentPr={currentPr}
+        currentPrLoading={currentPrLoading}
+        onOpenCurrentPr={handleOpenCurrentPr}
       />
 
       {/* Main area */}
@@ -1574,7 +1732,7 @@ function AppContent() {
         <div className="flex-1 flex overflow-hidden relative bg-[var(--color-bg)]">
           {/* Left: Sessions sidebar (reuses SidebarContainer-style resize) */}
           <div
-            className="relative shrink-0 overflow-hidden flex flex-col bg-[var(--color-bg)] border-r border-r-[var(--color-border-light)]/30"
+            className="relative shrink-0 overflow-hidden flex flex-col min-h-0 bg-[var(--color-bg)] border-r border-r-[var(--color-border-light)]/30"
             style={{
               width: sidebarCollapsed ? 0 : settings.sidebarWidth,
               transition: 'width 200ms ease',
@@ -1662,6 +1820,7 @@ function AppContent() {
                     atTriggerEnabled={settings.quickFileTrigger}
                     onFileClick={handleTerminalFileClick}
                     onImageClick={handleTerminalImageClick}
+                    onTermUIRender={handleTermUIRender}
                     onCreateAndAttachWindow={handleCreateAndAttachWindow}
                     onCreateWindowForPane={handleCreateWindowForPane}
                     hoveredWindowKey={hoveredWindowKey}
@@ -1906,12 +2065,27 @@ function AppContent() {
   )
 }
 
+/** TermUI webview pane — sandboxed iframe for rich content display */
+function TermUIWebview({ doc }: { doc: string }) {
+  return (
+    <iframe
+      srcDoc={doc}
+      sandbox="allow-scripts"
+      className="w-full h-full border-0"
+      style={{ background: 'transparent' }}
+      title="TermUI Webview"
+    />
+  )
+}
+
 function App() {
   return (
     <I18nProvider>
       <ThemeProvider>
         <MuxProvider>
-          <AppContent />
+          <WindowActivityProvider>
+            <AppContent />
+          </WindowActivityProvider>
         </MuxProvider>
       </ThemeProvider>
     </I18nProvider>

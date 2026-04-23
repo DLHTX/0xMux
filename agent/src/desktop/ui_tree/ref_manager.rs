@@ -21,9 +21,9 @@ impl RefManager {
 
     /// Get the center point (logical coordinates) of an element by ref ID
     pub fn get_element_center(&self, ref_id: &str) -> Option<Point> {
-        self.refs.get(ref_id).map(|bounds| {
-            crate::desktop::coordinate::element_center(bounds)
-        })
+        self.refs
+            .get(ref_id)
+            .map(|bounds| crate::desktop::coordinate::element_center(bounds))
     }
 
     /// Check if a ref ID exists

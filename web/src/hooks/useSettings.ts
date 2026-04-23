@@ -32,6 +32,7 @@ const DEFAULT_SETTINGS: UserSettings = {
   rightPanelWidth: 280,
   rightPanelTab: 'files',
   rightPanelCollapsed: false,
+  audioNotifications: false,
 }
 
 function loadSettings(): UserSettings {

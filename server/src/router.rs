@@ -53,10 +53,7 @@ pub fn build(state: AppState) -> Router {
             "/api/check-update",
             post(handlers::health::check_update_handler),
         )
-        .route(
-            "/api/do-update",
-            post(handlers::health::do_update_handler),
-        )
+        .route("/api/do-update", post(handlers::health::do_update_handler))
         .route(
             "/api/sessions",
             get(handlers::session::list_sessions_handler)
@@ -139,7 +136,9 @@ pub fn build(state: AppState) -> Router {
         )
         .route(
             "/api/layouts",
-            get(handlers::layout::get_layouts).put(handlers::layout::save_layouts),
+            get(handlers::layout::get_layouts)
+                .put(handlers::layout::save_layouts)
+                .post(handlers::layout::save_layouts),
         )
         // File system API
         .route("/api/files/tree", get(handlers::files::tree_handler))
@@ -154,27 +153,16 @@ pub fn build(state: AppState) -> Router {
         .route("/api/files/read", get(handlers::files::read_handler))
         .route("/api/files/raw", get(handlers::files::raw_handler))
         .route("/api/files/write", put(handlers::files::write_handler))
-        .route(
-            "/api/files/delete",
-            post(handlers::files::delete_handler),
-        )
-        .route(
-            "/api/files/rename",
-            post(handlers::files::rename_handler),
-        )
-        .route(
-            "/api/files/create",
-            post(handlers::files::create_handler),
-        )
-        .route(
-            "/api/files/reveal",
-            post(handlers::files::reveal_handler),
-        )
+        .route("/api/files/delete", post(handlers::files::delete_handler))
+        .route("/api/files/rename", post(handlers::files::rename_handler))
+        .route("/api/files/create", post(handlers::files::create_handler))
+        .route("/api/files/reveal", post(handlers::files::reveal_handler))
         .route(
             "/api/files/open-in",
             post(handlers::files::open_in_app_handler),
         )
         .route("/api/files/search", get(handlers::files::search_handler))
+        .route("/api/files/locate", post(handlers::files::locate_handler))
         // Git API
         .route("/api/git/status", get(handlers::git::status_handler))
         .route("/api/git/diff", get(handlers::git::diff_handler))
@@ -185,16 +173,38 @@ pub fn build(state: AppState) -> Router {
         .route("/api/git/stage", post(handlers::git::stage_handler))
         .route("/api/git/unstage", post(handlers::git::unstage_handler))
         .route("/api/git/stage-all", post(handlers::git::stage_all_handler))
-        .route("/api/git/unstage-all", post(handlers::git::unstage_all_handler))
+        .route(
+            "/api/git/unstage-all",
+            post(handlers::git::unstage_all_handler),
+        )
         .route("/api/git/checkout", post(handlers::git::checkout_handler))
         .route("/api/git/discard", post(handlers::git::discard_handler))
-        .route("/api/git/discard-all", post(handlers::git::discard_all_handler))
-        .route("/api/git/worktree-list", get(handlers::git::worktree_list_handler))
-        .route("/api/git/worktree-create", post(handlers::git::worktree_create_handler))
-        .route("/api/git/worktree-remove", post(handlers::git::worktree_remove_handler))
-        .route("/api/git/worktree-sync", post(handlers::git::worktree_sync_handler))
+        .route(
+            "/api/git/discard-all",
+            post(handlers::git::discard_all_handler),
+        )
+        .route(
+            "/api/git/worktree-list",
+            get(handlers::git::worktree_list_handler),
+        )
+        .route(
+            "/api/git/worktree-create",
+            post(handlers::git::worktree_create_handler),
+        )
+        .route(
+            "/api/git/worktree-remove",
+            post(handlers::git::worktree_remove_handler),
+        )
+        .route(
+            "/api/git/worktree-sync",
+            post(handlers::git::worktree_sync_handler),
+        )
         .route("/api/dev/run", post(handlers::window::dev_run_handler))
         .route("/api/git/untracked", get(handlers::git::untracked_handler))
+        .route(
+            "/api/github/current-pr",
+            get(handlers::github::current_pr_handler),
+        )
         .route(
             "/api/sessions/{name}/windows",
             get(handlers::window::list_windows_handler)
@@ -359,6 +369,9 @@ pub fn build(state: AppState) -> Router {
             "/api/agent/browser/close",
             post(handlers::agent_browser::close_handler),
         );
+
+    // TermUI render endpoint — no auth required (used by AI agents inside terminal)
+    let app = app.route("/api/termui", post(handlers::termui::render_handler));
 
     let app = app
         // 添加鉴权中间件

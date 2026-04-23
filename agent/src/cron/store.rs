@@ -18,8 +18,8 @@ pub fn load() -> Result<Vec<CronJob>, String> {
         return Ok(Vec::new());
     }
 
-    let content =
-        std::fs::read_to_string(&path).map_err(|e| format!("Failed to read {}: {e}", path.display()))?;
+    let content = std::fs::read_to_string(&path)
+        .map_err(|e| format!("Failed to read {}: {e}", path.display()))?;
 
     let storage: CronStorage =
         serde_json::from_str(&content).map_err(|e| format!("Failed to parse cron storage: {e}"))?;
@@ -49,8 +49,13 @@ pub fn save(jobs: &[CronJob]) -> Result<(), String> {
     let tmp_path = path.with_extension("json.tmp");
     std::fs::write(&tmp_path, &content)
         .map_err(|e| format!("Failed to write {}: {e}", tmp_path.display()))?;
-    std::fs::rename(&tmp_path, &path)
-        .map_err(|e| format!("Failed to rename {} -> {}: {e}", tmp_path.display(), path.display()))?;
+    std::fs::rename(&tmp_path, &path).map_err(|e| {
+        format!(
+            "Failed to rename {} -> {}: {e}",
+            tmp_path.display(),
+            path.display()
+        )
+    })?;
 
     Ok(())
 }
@@ -77,7 +82,11 @@ mod dirs {
             std::env::var("XDG_CONFIG_HOME")
                 .ok()
                 .map(PathBuf::from)
-                .or_else(|| std::env::var("HOME").ok().map(|h| PathBuf::from(h).join(".config")))
+                .or_else(|| {
+                    std::env::var("HOME")
+                        .ok()
+                        .map(|h| PathBuf::from(h).join(".config"))
+                })
         }
     }
 }

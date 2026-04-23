@@ -92,13 +92,12 @@ export function SessionFolder({
           className={`shrink-0 transition-transform ${collapsed ? '' : 'rotate-90'}`}
         />
 
-        {/* Status dot — colored by project group, dimmed when detached */}
+        {/* Status dot — colored by project group, dimmed to reduce noise */}
         <div
           className="w-2 h-2 shrink-0"
           style={{
             backgroundColor: dotColor,
-            opacity: groupColor ? (session.attached ? 1 : 0.4) : 1,
-            animation: session.attached ? 'breathe 2s ease-in-out infinite' : undefined,
+            opacity: groupColor ? (session.attached ? 0.4 : 0.2) : 0.4,
           }}
         />
 

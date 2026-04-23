@@ -55,7 +55,13 @@ impl NotificationService {
         }
     }
 
-    pub async fn create(&self, title: String, message: String, image_url: Option<String>, category: Option<String>) -> Notification {
+    pub async fn create(
+        &self,
+        title: String,
+        message: String,
+        image_url: Option<String>,
+        category: Option<String>,
+    ) -> Notification {
         let notification = Notification {
             id: uuid::Uuid::new_v4().to_string(),
             title,

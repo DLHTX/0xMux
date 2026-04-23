@@ -51,10 +51,7 @@ static ACTIVE_GROUPS: LazyLock<Mutex<HashMap<String, Option<Instant>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 fn register_group(name: &str) {
-    ACTIVE_GROUPS
-        .lock()
-        .unwrap()
-        .insert(name.to_string(), None);
+    ACTIVE_GROUPS.lock().unwrap().insert(name.to_string(), None);
 }
 
 fn deregister_group(name: &str) {
@@ -75,8 +72,8 @@ pub fn active_group_names() -> HashSet<String> {
 
     // Purge entries whose grace period has expired
     map.retain(|_, v| match v {
-        None => true,                                 // still active
-        Some(t) => now.duration_since(*t) < grace,    // within grace period
+        None => true,                              // still active
+        Some(t) => now.duration_since(*t) < grace, // within grace period
     });
 
     map.keys().cloned().collect()
@@ -433,9 +430,7 @@ async fn handle_text_frame(
                             }
                         }
                         // Send final state once after all coalesced scrolling
-                        if let Ok((history, position)) =
-                            read_group_scroll_state(&group_session)
-                        {
+                        if let Ok((history, position)) = read_group_scroll_state(&group_session) {
                             let msg = serde_json::json!({
                                 "type": "scroll_state",
                                 "ch": ch,
@@ -482,7 +477,10 @@ async fn open_channel(
     event_tx: mpsc::UnboundedSender<MuxEvent>,
 ) -> Result<(), String> {
     // Serialize PTY creation — concurrent openpty/forkpty on macOS causes ENXIO
-    let permit = PTY_SETUP_SEMAPHORE.acquire().await.map_err(|e| format!("Semaphore closed: {e}"))?;
+    let permit = PTY_SETUP_SEMAPHORE
+        .acquire()
+        .await
+        .map_err(|e| format!("Semaphore closed: {e}"))?;
 
     // Run all blocking PTY setup in a single spawn_blocking
     let parts =
@@ -644,6 +642,17 @@ fn setup_pty_blocking(
         .args(["set-option", "-t", &group_session, "prefix2", "None"])
         .status();
 
+    // Allow OSC passthrough so TermUI sequences (OSC 7770) reach the frontend
+    let _ = tmux::tmux_cmd()
+        .args([
+            "set-option",
+            "-t",
+            &group_session,
+            "allow-passthrough",
+            "on",
+        ])
+        .status();
+
     // 4. Select the target window inside the grouped session
     if let Some(window_index) = window {
         let select_target = format!("{}:{}", group_session, window_index);
@@ -682,6 +691,28 @@ fn setup_pty_blocking(
     if std::env::var("TERM").is_err() {
         cmd.env("TERM", "xterm-256color");
     }
+    // Inject OXMUX_PORT so AI agents can call the TermUI API
+    if let Ok(port) = std::env::var("OXMUX_PORT") {
+        cmd.env("OXMUX_PORT", port);
+    }
+    // Inject TermUI capability so AI agents know they can output rich HTML blocks.
+    cmd.env("TERMUI", "1");
+    cmd.env("TERMUI_INSTRUCTIONS", concat!(
+        "You are running inside 0xMux, a terminal multiplexer with rich rendering support. ",
+        "When your output would benefit from rich formatting (charts, data flow diagrams, ",
+        "architecture visualizations, comparison tables, interactive choices, UI prototypes), ",
+        "use the TermUI protocol to render HTML in a webview pane next to this terminal.\n\n",
+        "Protocol: execute via Bash tool:\n",
+        "  HTML='<h2>Title</h2><p>Content</p><button data-action=\"choice1\">Option A</button>'\n",
+        "  echo \"__TERMUI_BEGIN__\"\n",
+        "  echo -n \"$HTML\" | base64\n",
+        "  echo \"__TERMUI_END__\"\n\n",
+        "Rules:\n",
+        "- HTML must be base64 encoded between the markers\n",
+        "- Buttons: use data-action=\"value\" attribute; clicking sends the value back as terminal input\n",
+        "- Built-in dark theme (bg:#0d1117, fg:#c9d1d9, accent:#1BFF80)\n",
+        "- Only use when rich rendering genuinely helps; simple text responses should stay as text\n",
+    ));
 
     let child = pair.slave.spawn_command(cmd).map_err(|e| {
         // Clean up grouped session on failure

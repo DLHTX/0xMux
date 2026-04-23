@@ -531,6 +531,32 @@ function GlobalConfigEditor({
         className="w-full h-48 px-3 py-2 text-sm font-mono border-[length:var(--border-w)] border-[var(--color-border-light)] rounded-[var(--radius)] bg-[var(--color-bg)] text-[var(--color-fg)] placeholder:text-[var(--color-fg-muted)] focus:outline-none focus:border-[var(--color-primary)] resize-y"
       />
 
+      {/* Built-in TermUI instructions — shown as read-only grey hint */}
+      <details className="text-xs text-[var(--color-fg-muted)]">
+        <summary className="cursor-pointer select-none opacity-60 hover:opacity-100">
+          TermUI {t('plugin.builtinInstructions')}
+        </summary>
+        <pre className="mt-1 px-3 py-2 text-[10px] leading-relaxed opacity-40 bg-[var(--color-bg-alt)] border-[length:var(--border-w)] border-[var(--color-border-light)] rounded-[var(--radius)] overflow-x-auto whitespace-pre-wrap">
+{`## TermUI — Rich Content Rendering
+
+You are running inside 0xMux, a terminal multiplexer with rich rendering support.
+When your output would benefit from rich formatting (charts, data flow diagrams,
+architecture visualizations, comparison tables, interactive choices, UI prototypes),
+use the TermUI protocol to render HTML in a webview pane next to this terminal.
+
+Protocol — execute via Bash tool:
+  HTML='<h2>Title</h2><p>Content</p><button data-action="choice1">Option A</button>'
+  curl -s -X POST http://localhost:$OXMUX_PORT/api/termui \\
+    -H "Content-Type: application/json" -d "{\\\"html\\\": \\\"$HTML\\\"}"
+
+Rules:
+- HTML must be base64 encoded between the markers
+- Buttons: use data-action="value"; clicking sends value back as terminal input
+- Built-in dark theme (bg:#0d1117, fg:#c9d1d9, accent:#1BFF80)
+- Only use when rich rendering genuinely helps`}
+        </pre>
+      </details>
+
       <div className="flex flex-wrap items-center gap-2">
         <button
           onClick={() => onSave(draft)}

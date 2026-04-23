@@ -3,6 +3,7 @@ pub mod auth_service;
 pub mod config_store;
 pub mod fs;
 pub mod git;
+pub mod github;
 pub mod install;
 pub mod notification;
 pub mod search;

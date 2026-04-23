@@ -125,10 +125,7 @@ pub async fn run_now_handler(
         .as_ref()
         .ok_or_else(|| AppError::ServiceUnavailable("Agent cron not enabled".into()))?;
 
-    let result = cron
-        .run_now(&id)
-        .await
-        .map_err(|e| AppError::Internal(e))?;
+    let result = cron.run_now(&id).await.map_err(|e| AppError::Internal(e))?;
 
     Ok(ok_json(result))
 }

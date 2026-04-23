@@ -32,6 +32,7 @@ import type {
   WorkspaceContext,
   NotificationListResponse,
   WorktreeInfo,
+  CurrentPrResponse,
 } from './types'
 
 const API_BASE = '/api'
@@ -366,6 +367,16 @@ export async function resolveFilePath(
   return request(`/files/resolve?${params}`)
 }
 
+export async function locateFiles(
+  files: { name: string; size?: number }[],
+): Promise<{ files: { name: string; path: string | null }[] }> {
+  return request('/files/locate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ files }),
+  })
+}
+
 export async function searchFiles(
   query: string,
   options?: { regex?: boolean; case?: boolean; glob?: string; max?: number },
@@ -524,6 +535,12 @@ export async function getGitBranches(workspace?: WorkspaceContext): Promise<{ br
   return request(`/git/branches${query ? `?${query}` : ''}`)
 }
 
+export async function getCurrentPr(workspace?: WorkspaceContext): Promise<CurrentPrResponse> {
+  const params = withWorkspaceParams(new URLSearchParams(), workspace)
+  const query = params.toString()
+  return request(`/github/current-pr${query ? `?${query}` : ''}`)
+}
+
 export async function gitCommit(
   message: string,
   workspace?: WorkspaceContext
@@ -611,14 +628,14 @@ export async function createWorktree(
   baseBranch: string,
   newBranch: string,
   dirName: string,
-  copyPaths: string[] = [],
+  linkPaths: string[] = [],
   workspace?: WorkspaceContext,
 ): Promise<{ ok: boolean; path: string; branch: string }> {
   const body: Record<string, unknown> = {
     base_branch: baseBranch,
     new_branch: newBranch,
     dir_name: dirName,
-    copy_paths: copyPaths,
+    link_paths: linkPaths,
   }
   if (workspace) { body.session = workspace.session; body.window = workspace.window }
   return request('/git/worktree-create', { method: 'POST', body: JSON.stringify(body) })

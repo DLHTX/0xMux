@@ -42,7 +42,10 @@ impl CronService {
             service.scheduler_loop().await;
         });
 
-        tracing::info!("CronService started with {} jobs", self.jobs.read().await.len());
+        tracing::info!(
+            "CronService started with {} jobs",
+            self.jobs.read().await.len()
+        );
         Ok(())
     }
 
@@ -261,9 +264,7 @@ impl CronService {
                     None
                 }
             }
-            CronSchedule::Every(secs) => {
-                Some(now + chrono::Duration::seconds(*secs as i64))
-            }
+            CronSchedule::Every(secs) => Some(now + chrono::Duration::seconds(*secs as i64)),
             CronSchedule::Cron(_expr) => {
                 // For now, use a simple interval fallback
                 // Full cron parsing can be added with the croner crate

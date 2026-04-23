@@ -298,7 +298,7 @@ export type RightPanelTab = 'files' | 'changes' | 'search'
 
 // ── Composable Pane Content ──
 
-export type PaneContentType = 'terminal' | 'panel' | 'editor'
+export type PaneContentType = 'terminal' | 'panel' | 'editor' | 'webview'
 
 export interface PaneContent {
   type: PaneContentType
@@ -308,6 +308,8 @@ export interface PaneContent {
   windowIndex?: number
   /** editor: file path to open */
   filePath?: string
+  /** webview: raw HTML content to render in sandboxed iframe */
+  htmlContent?: string
 }
 
 export interface UserSettings {
@@ -332,6 +334,8 @@ export interface UserSettings {
   rightPanelTab: RightPanelTab
   /** Right panel collapsed state */
   rightPanelCollapsed: boolean
+  /** Enable audio notification when background window output completes */
+  audioNotifications: boolean
 }
 
 export interface CreateWindowRequest {
@@ -527,6 +531,34 @@ export interface WorktreeInfo {
   head: string
   is_main: boolean
 }
+
+export type CurrentPrStatus =
+  | 'draft'
+  | 'approved'
+  | 'changes_requested'
+  | 'review_required'
+  | 'open'
+
+export type CurrentPrResponse =
+  | {
+    kind: 'ready'
+    number: number
+    title: string
+    url: string
+    status: CurrentPrStatus
+    extra_count: number
+  }
+  | {
+    kind: 'no_pr'
+  }
+  | {
+    kind: 'gh_unavailable'
+    message?: string
+  }
+  | {
+    kind: 'error'
+    message: string
+  }
 
 export interface GitDiffContent {
   file_path: string

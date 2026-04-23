@@ -156,8 +156,7 @@ impl PlaywrightBridge {
     }
 
     async fn send_command(&self, cmd: &Value) -> Result<Value, String> {
-        let json_line = serde_json::to_string(cmd)
-            .map_err(|e| format!("Serialize error: {e}"))?;
+        let json_line = serde_json::to_string(cmd).map_err(|e| format!("Serialize error: {e}"))?;
 
         {
             let mut stdin = self.stdin.lock().await;

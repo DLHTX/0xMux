@@ -1,5 +1,5 @@
 use crate::types::MouseButton;
-use enigo::{Enigo, Keyboard, Mouse, Settings, Coordinate, Button, Direction};
+use enigo::{Button, Coordinate, Direction, Enigo, Keyboard, Mouse, Settings};
 
 /// Create a new Enigo instance
 fn create_enigo() -> Result<Enigo, String> {

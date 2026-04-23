@@ -1,5 +1,5 @@
-use crate::types::{Rect, UIElement, UITree};
 use super::{UITreeFilter, UITreeOptions};
+use crate::types::{Rect, UIElement, UITree};
 use std::process::Command;
 
 /// Read the UI tree on macOS using System Events accessibility API via osascript
@@ -86,7 +86,12 @@ fn get_window_title(app_name: &str) -> Result<String, String> {
     }
 }
 
-fn build_tree_script(app_name: &str, depth: u32, max_elements: u32, filter: UITreeFilter) -> String {
+fn build_tree_script(
+    app_name: &str,
+    depth: u32,
+    max_elements: u32,
+    filter: UITreeFilter,
+) -> String {
     let filter_clause = match filter {
         UITreeFilter::Interactive => {
             r#"set validRoles to {"AXButton", "AXTextField", "AXTextArea", "AXCheckBox", "AXRadioButton", "AXPopUpButton", "AXComboBox", "AXSlider", "AXLink", "AXMenuItem", "AXMenuButton", "AXTab"}
@@ -94,9 +99,7 @@ fn build_tree_script(app_name: &str, depth: u32, max_elements: u32, filter: UITr
                     set skipElement to true
                 end if"#
         }
-        UITreeFilter::All => {
-            "set skipElement to false"
-        }
+        UITreeFilter::All => "set skipElement to false",
     };
 
     format!(

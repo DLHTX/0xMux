@@ -116,6 +116,8 @@ interface SplitWorkspaceProps {
   onFileClick?: (path: string, line?: number, workspace?: import('../../lib/types').WorkspaceContext) => void
   /** Called when an image link is clicked in terminal output */
   onImageClick?: (imageUrl: string) => void
+  /** Called when a TermUI block is detected in terminal output */
+  onTermUIRender?: (html: string, paneId: string) => void
   /** Called to create a new window in the given session and attach to current pane */
   onCreateAndAttachWindow?: (sessionName: string) => void
   /** Called to create a new window and attach to a specific pane (for empty panes) */
@@ -1119,6 +1121,14 @@ export function SplitWorkspace(props: SplitWorkspaceProps) {
             atTriggerEnabled={props.atTriggerEnabled}
             onFileClick={props.onFileClick}
             onImageClick={props.onImageClick}
+            onTermUIRender={props.onTermUIRender ? (html) => {
+              // Find the pane ID for this terminal
+              const paneId = leafIds.find((id) => {
+                const pw = props.paneWindowMap[id]
+                return pw && `${pw.sessionName}:${pw.windowIndex}` === windowKey
+              })
+              if (paneId) props.onTermUIRender!(html, paneId)
+            } : undefined}
           />,
           container
         )

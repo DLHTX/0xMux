@@ -30,7 +30,6 @@ export function WindowItem({
   onHoverEnd,
 }: WindowItemProps) {
   const { t } = useI18n()
-
   const handleDeleteClick = (e: React.MouseEvent) => {
     e.stopPropagation()
     onDelete(sessionName, window.index)
@@ -53,6 +52,7 @@ export function WindowItem({
         group relative flex items-center gap-1.5 py-2 pl-6 pr-3 cursor-pointer transition-colors
         select-none
         ${selected ? 'bg-[var(--color-bg-alt)]' : 'hover:bg-[var(--color-bg-alt)]'}
+        ${'border-l-2 border-l-transparent'}
       `}
     >
       {/* Split group tree connector */}
@@ -63,8 +63,8 @@ export function WindowItem({
       )}
 
       {/* Window index and name */}
-      <div className="flex-1 min-w-0">
-        <span className="text-xs font-mono truncate block">
+      <div className="flex-1 min-w-0 flex items-center gap-1.5">
+        <span className="text-xs font-mono truncate">
           <span className="text-[var(--color-fg-muted)]">{window.index}:</span>{' '}
           <span className={selected ? 'font-bold' : ''}>{window.name}</span>
         </span>

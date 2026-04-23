@@ -1,5 +1,5 @@
-use crate::types::UITree;
 use super::UITreeOptions;
+use crate::types::UITree;
 
 /// Read the UI tree on Windows using UIAutomation
 pub fn read_tree(_options: &UITreeOptions) -> Result<UITree, String> {

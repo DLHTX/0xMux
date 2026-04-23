@@ -119,10 +119,7 @@ fn parse_rg_json(stdout: &[u8], max: usize) -> Result<SearchResponse, AppError> 
         }
 
         let data = &val["data"];
-        let file_path = data["path"]["text"]
-            .as_str()
-            .unwrap_or("")
-            .to_string();
+        let file_path = data["path"]["text"].as_str().unwrap_or("").to_string();
         let line_number = data["line_number"].as_u64().unwrap_or(0);
         let line_content = data["lines"]["text"]
             .as_str()
@@ -213,10 +210,7 @@ fn search_fallback(root: &Path, query: &SearchQuery) -> Result<SearchResponse, A
             let name = entry.file_name().to_string_lossy().into_owned();
 
             // Skip hidden dirs and common large dirs
-            if name.starts_with('.')
-                || name == "node_modules"
-                || name == "target"
-                || name == ".git"
+            if name.starts_with('.') || name == "node_modules" || name == "target" || name == ".git"
             {
                 continue;
             }
@@ -242,16 +236,13 @@ fn search_fallback(root: &Path, query: &SearchQuery) -> Result<SearchResponse, A
                             return;
                         }
                         if let Some(m) = pattern.find(line) {
-                            groups
-                                .entry(rel.clone())
-                                .or_default()
-                                .push(SearchMatch {
-                                    file_path: rel.clone(),
-                                    line_number: (line_idx + 1) as u64,
-                                    line_content: line.to_string(),
-                                    match_start: m.start(),
-                                    match_end: m.end(),
-                                });
+                            groups.entry(rel.clone()).or_default().push(SearchMatch {
+                                file_path: rel.clone(),
+                                line_number: (line_idx + 1) as u64,
+                                line_content: line.to_string(),
+                                match_start: m.start(),
+                                match_end: m.end(),
+                            });
                             *total += 1;
                         }
                     }
