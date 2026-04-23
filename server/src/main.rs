@@ -49,6 +49,10 @@ async fn main() {
     let banner_host = config.host.clone();
     let banner_port = config.port;
 
+    // Expose port so PTY sessions can call the TermUI API
+    // SAFETY: called before any threads are spawned
+    unsafe { std::env::set_var("OXMUX_PORT", banner_port.to_string()) };
+
     // Initialize tmux socket isolation (must be before any tmux calls)
     services::tmux::init_tmux_socket(config.tmux_socket.clone());
     if let Some(ref socket) = config.tmux_socket {

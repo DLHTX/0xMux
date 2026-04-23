@@ -1,8 +1,8 @@
 #[cfg(target_os = "macos")]
 mod macos;
+pub mod ref_manager;
 #[cfg(target_os = "windows")]
 mod windows_impl;
-pub mod ref_manager;
 
 use crate::types::{UIElement, UITree};
 

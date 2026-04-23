@@ -137,7 +137,9 @@ export function useSplitLayout() {
         layouts[currentPrimary] = {
           layout: JSON.parse(JSON.stringify(layoutRef.current)),
           paneWindowMap: { ...paneWindowMapRef.current },
-          paneContentMap: { ...paneContentMapRef.current },
+          paneContentMap: Object.fromEntries(
+            Object.entries(paneContentMapRef.current).filter(([, v]) => v.type !== 'webview')
+          ),
           activePaneId: activePaneIdRef.current,
         }
       }
@@ -146,6 +148,36 @@ export function useSplitLayout() {
         primarySession: primarySessionRef.current,
       }).catch(() => {})
     }, 2000)
+  }, [])
+
+  // Force-save layout on page unload (covers refresh within 2s debounce window)
+  useEffect(() => {
+    const flushSync = () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current)
+        saveTimerRef.current = null
+      }
+      const layouts: Record<string, LayoutState> = {}
+      for (const [name, state] of layoutHistory.current.entries()) {
+        layouts[name] = state
+      }
+      const currentPrimary = primarySessionRef.current
+      if (currentPrimary && !isQuickPeekRef.current) {
+        layouts[currentPrimary] = {
+          layout: JSON.parse(JSON.stringify(layoutRef.current)),
+          paneWindowMap: { ...paneWindowMapRef.current },
+          paneContentMap: Object.fromEntries(
+            Object.entries(paneContentMapRef.current).filter(([, v]) => v.type !== 'webview')
+          ),
+          activePaneId: activePaneIdRef.current,
+        }
+      }
+      // Use sendBeacon for reliable delivery during unload
+      const body = JSON.stringify({ layouts, primarySession: primarySessionRef.current })
+      navigator.sendBeacon('/api/layouts', new Blob([body], { type: 'application/json' }))
+    }
+    window.addEventListener('beforeunload', flushSync)
+    return () => window.removeEventListener('beforeunload', flushSync)
   }, [])
 
   // Load saved layouts from server on mount
@@ -166,7 +198,11 @@ export function useSplitLayout() {
           setPrimarySession(target)
           setLayout(saved.layout)
           setPaneWindowMap(saved.paneWindowMap)
-          setPaneContentMap(saved.paneContentMap ?? {})
+          // Filter out webview panes — they are ephemeral and should not persist across reloads
+          const restoredContent = Object.fromEntries(
+            Object.entries(saved.paneContentMap ?? {}).filter(([, v]) => v.type !== 'webview')
+          )
+          setPaneContentMap(restoredContent)
           setActivePaneId(saved.activePaneId)
           isQuickPeekRef.current = false
         }

@@ -47,6 +47,8 @@ export interface UseMuxSocketReturn {
   onNotification(cb: (notification: Notification) => void): () => void
   /** Subscribe to file system change events. Returns unsubscribe function. */
   onFileChange(cb: (data: FileChangeData) => void): () => void
+  /** Subscribe to TermUI render events. Returns unsubscribe function. */
+  onTermUIRender(cb: (html: string, session?: string, window?: number) => void): () => void
 }
 
 // ── Internal types ──
@@ -76,6 +78,7 @@ export function useMuxSocket(): UseMuxSocketReturn {
   const windowListenersRef = useRef(new Set<(windows: Record<string, TmuxWindow[]>) => void>())
   const notificationListenersRef = useRef(new Set<(notification: Notification) => void>())
   const fileChangeListenersRef = useRef(new Set<(data: FileChangeData) => void>())
+  const termUIListenersRef = useRef(new Set<(html: string, session?: string, window?: number) => void>())
   const latestSessionsRef = useRef<TmuxSession[] | null>(null)
   const latestWindowsRef = useRef<Record<string, TmuxWindow[]> | null>(null)
 
@@ -284,6 +287,15 @@ export function useMuxSocket(): UseMuxSocketReturn {
           }
           break
         }
+        case 'termui_render': {
+          const payload = msg as unknown as { html?: string; session?: string; window?: number }
+          if (payload.html) {
+            for (const cb of termUIListenersRef.current) {
+              cb(payload.html, payload.session, payload.window)
+            }
+          }
+          break
+        }
         case 'file_change': {
           const data = msg.data as FileChangeData | undefined
           if (data) {
@@ -437,5 +449,15 @@ export function useMuxSocket(): UseMuxSocketReturn {
     []
   )
 
-  return { status, openChannel, onSessionsUpdate, onWindowsUpdate, onNotification, onFileChange }
+  const onTermUIRender = useCallback(
+    (cb: (html: string, session?: string, window?: number) => void): (() => void) => {
+      termUIListenersRef.current.add(cb)
+      return () => {
+        termUIListenersRef.current.delete(cb)
+      }
+    },
+    []
+  )
+
+  return { status, openChannel, onSessionsUpdate, onWindowsUpdate, onNotification, onFileChange, onTermUIRender }
 }

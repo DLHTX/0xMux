@@ -2,7 +2,10 @@ use axum::{Json, extract::Query, response::IntoResponse};
 use serde::Deserialize;
 
 use crate::error::AppError;
-use crate::models::git::{GitCheckoutRequest, GitCommitRequest, GitPushRequest, GitStageAllRequest, GitStageRequest, WorktreeCreateRequest, WorktreeRemoveRequest, WorktreeSyncRequest};
+use crate::models::git::{
+    GitCheckoutRequest, GitCommitRequest, GitPushRequest, GitStageAllRequest, GitStageRequest,
+    WorktreeCreateRequest, WorktreeRemoveRequest, WorktreeSyncRequest,
+};
 use crate::services::{git, workspace};
 use serde_json::json;
 
@@ -33,9 +36,7 @@ pub struct DiffQuery {
     pub window: Option<u32>,
 }
 
-pub async fn diff_handler(
-    Query(q): Query<DiffQuery>,
-) -> Result<impl IntoResponse, AppError> {
+pub async fn diff_handler(Query(q): Query<DiffQuery>) -> Result<impl IntoResponse, AppError> {
     let root = workspace::resolve_workspace_root(q.session.as_deref(), q.window)?;
     let diff = git::get_diff(&root, &q.path, q.staged)?;
     Ok(Json(diff))
@@ -55,9 +56,7 @@ fn default_log_limit() -> usize {
     20
 }
 
-pub async fn log_handler(
-    Query(q): Query<LogQuery>,
-) -> Result<impl IntoResponse, AppError> {
+pub async fn log_handler(Query(q): Query<LogQuery>) -> Result<impl IntoResponse, AppError> {
     let root = workspace::resolve_workspace_root(q.session.as_deref(), q.window)?;
     let commits = git::get_log(&root, q.limit)?;
     Ok(Json(json!({ "commits": commits })))
@@ -85,9 +84,7 @@ pub async fn commit_handler(
 
 // ── POST /api/git/push ────────────────────────────────────────────
 
-pub async fn push_handler(
-    Json(body): Json<GitPushRequest>,
-) -> Result<impl IntoResponse, AppError> {
+pub async fn push_handler(Json(body): Json<GitPushRequest>) -> Result<impl IntoResponse, AppError> {
     let root = workspace::resolve_workspace_root(body.session.as_deref(), body.window)?;
     let result = git::push(&root)?;
     Ok(Json(result))
@@ -171,9 +168,9 @@ pub async fn worktree_create_handler(
     let root = workspace::resolve_workspace_root(body.session.as_deref(), body.window)?;
 
     // Worktree directory: parent of repo root / dir_name
-    let parent = root.parent().ok_or_else(|| {
-        AppError::Internal("Cannot determine parent directory".into())
-    })?;
+    let parent = root
+        .parent()
+        .ok_or_else(|| AppError::Internal("Cannot determine parent directory".into()))?;
     let worktree_path = parent.join(&body.dir_name);
 
     if worktree_path.exists() {
@@ -183,12 +180,36 @@ pub async fn worktree_create_handler(
         )));
     }
 
-    git::create_worktree(&root, &worktree_path, &body.new_branch, &body.base_branch)?;
+    let root_for_job = root.clone();
+    let worktree_path_for_job = worktree_path.clone();
+    let new_branch = body.new_branch.clone();
+    let base_branch = body.base_branch.clone();
+    let link_paths = body.link_paths.clone();
 
-    // Copy selected untracked files/dirs to the new worktree
-    if !body.copy_paths.is_empty() {
-        git::copy_paths_to_worktree(&root, &worktree_path, &body.copy_paths)?;
-    }
+    tokio::task::spawn_blocking(move || -> Result<(), AppError> {
+        git::create_worktree(
+            &root_for_job,
+            &worktree_path_for_job,
+            &new_branch,
+            &base_branch,
+        )?;
+
+        if !link_paths.is_empty()
+            && let Err(err) =
+                git::link_paths_to_worktree(&root_for_job, &worktree_path_for_job, &link_paths)
+        {
+            let _ = git::remove_worktree(
+                &root_for_job,
+                &worktree_path_for_job.to_string_lossy(),
+                true,
+            );
+            return Err(err);
+        }
+
+        Ok(())
+    })
+    .await
+    .map_err(|e| AppError::Internal(format!("worktree create task failed: {e}")))??;
 
     Ok(Json(json!({
         "ok": true,

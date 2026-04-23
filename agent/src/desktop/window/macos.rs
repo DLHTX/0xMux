@@ -118,10 +118,7 @@ pub fn launch_app(name: &str) -> Result<u32, String> {
 
 /// Quit an application by name
 pub fn quit_app(name: &str) -> Result<(), String> {
-    let script = format!(
-        "tell application \"{}\" to quit",
-        name.replace('"', "\\\"")
-    );
+    let script = format!("tell application \"{}\" to quit", name.replace('"', "\\\""));
 
     let output = Command::new("osascript")
         .args(["-e", &script])

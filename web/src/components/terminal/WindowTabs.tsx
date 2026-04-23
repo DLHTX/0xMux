@@ -15,6 +15,7 @@ export function WindowTabs({ sessionName }: WindowTabsProps) {
   const [activeIndex, setActiveIndex] = useState(0)
   const scrollRef = useRef<HTMLDivElement>(null)
 
+
   const fetchWindows = useCallback(async () => {
     try {
       const data = await api.getWindows(sessionName)
@@ -76,15 +77,17 @@ export function WindowTabs({ sessionName }: WindowTabsProps) {
         ref={scrollRef}
         className="window-tabs-scrollbar hide-native-scrollbar flex items-center overflow-x-auto"
       >
-        {windows.map((win) => (
+        {windows.map((win) => {
+          const isActive = activeIndex === win.index
+          return (
           <div
             key={win.index}
             className={`group flex items-center gap-1.5 px-3 py-1.5 text-xs cursor-pointer shrink-0
             border-r-[length:var(--border-w)] border-[var(--color-border-light)]
             ${
-              activeIndex === win.index
+              isActive
                 ? 'bg-[var(--color-bg-alt)] border-b-2 border-b-[var(--color-success)] font-bold'
-                : 'hover:bg-[var(--color-bg-alt)]'
+                : 'hover:bg-[var(--color-bg-alt)] border-b-2 border-b-transparent'
             }
             transition-colors`}
             onClick={() => handleSelect(win.index)}
@@ -103,7 +106,8 @@ export function WindowTabs({ sessionName }: WindowTabsProps) {
               </button>
             )}
           </div>
-        ))}
+          )
+        })}
         <button
           onClick={handleCreate}
           className="p-1.5 text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] transition-colors shrink-0"

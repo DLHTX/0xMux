@@ -1,4 +1,4 @@
-use notify_debouncer_mini::{new_debouncer, DebouncedEventKind};
+use notify_debouncer_mini::{DebouncedEventKind, new_debouncer};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::time::Duration;

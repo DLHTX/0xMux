@@ -125,6 +125,9 @@ export {
   default as IconGitBranch,
 } from '@iconify-icons/lucide/git-branch'
 export {
+  default as IconGitPullRequest,
+} from '@iconify-icons/lucide/git-pull-request'
+export {
   default as IconGitCommit,
 } from '@iconify-icons/lucide/git-commit'
 export {

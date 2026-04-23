@@ -291,6 +291,25 @@ input[type="range"].floating-opacity-slider:hover::-moz-range-thumb {
   100% { opacity: 0.98; }
 }
 
+/* Window activity — border blink for streaming output */
+@keyframes activity-blink {
+  0%, 100% { border-color: var(--color-success); }
+  50%      { border-color: transparent; }
+}
+.window-activity-blink {
+  animation: activity-blink 0.6s steps(1) infinite;
+  border-left: 3px solid var(--color-success);
+}
+
+/* Square indicator blink — high contrast on/off */
+@keyframes square-blink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.15; }
+}
+.activity-square-blink {
+  animation: square-blink 0.6s steps(1) infinite;
+}
+
 /* CRT power-on animation for modals (with glitch) */
 @keyframes crt-open-center {
   0%   { opacity: 0; transform: scaleY(0.005) scaleX(0.5); filter: brightness(8); }

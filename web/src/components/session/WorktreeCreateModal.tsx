@@ -7,7 +7,7 @@ import { Button } from '../ui/Button'
 import { useI18n } from '../../hooks/useI18n'
 import { loadJSON, saveJSON } from '../../lib/storage'
 
-const COPY_PREFS_KEY = '0xmux-worktree-copy-prefs'
+const LINK_PREFS_KEY = '0xmux-worktree-copy-prefs'
 
 function randomBranchName(): string {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
@@ -162,7 +162,7 @@ interface WorktreeCreateModalProps {
   currentBranch: string
   projectName: string
   untrackedFiles: string[]
-  onSubmit: (baseBranch: string, newBranch: string, dirName: string, copyPaths: string[]) => void
+  onSubmit: (baseBranch: string, newBranch: string, dirName: string, linkPaths: string[]) => void
   loading?: boolean
 }
 
@@ -198,7 +198,7 @@ export function WorktreeCreateModal({
       setDirManuallyEdited(false)
 
       // Restore saved preferences
-      const saved = loadJSON<string[]>(COPY_PREFS_KEY)
+      const saved = loadJSON<string[]>(LINK_PREFS_KEY)
       const available = new Set(untrackedFiles)
       const restored = new Set<string>()
       if (saved) {
@@ -253,9 +253,9 @@ export function WorktreeCreateModal({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!canSubmit) return
-    const copyPaths = [...selectedPaths]
-    saveJSON(COPY_PREFS_KEY, copyPaths)
-    onSubmit(baseBranch, newBranch.trim(), dirName.trim(), copyPaths)
+    const linkPaths = [...selectedPaths]
+    saveJSON(LINK_PREFS_KEY, linkPaths)
+    onSubmit(baseBranch, newBranch.trim(), dirName.trim(), linkPaths)
   }
 
   const selectedCount = selectedPaths.size

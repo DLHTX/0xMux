@@ -1,5 +1,5 @@
-use axum::{Json, http::StatusCode, response::IntoResponse};
 use axum::extract::Query;
+use axum::{Json, http::StatusCode, response::IntoResponse};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Mutex;
@@ -128,9 +128,7 @@ pub async fn displays_handler() -> Result<impl IntoResponse, AppError> {
         .map_err(|e| AppError::Internal(e))
 }
 
-pub async fn click_handler(
-    Json(body): Json<ClickRequest>,
-) -> Result<impl IntoResponse, AppError> {
+pub async fn click_handler(Json(body): Json<ClickRequest>) -> Result<impl IntoResponse, AppError> {
     let button = match body.button.as_deref() {
         Some("right") => oxmux_agent::MouseButton::Right,
         Some("middle") => oxmux_agent::MouseButton::Middle,
@@ -167,9 +165,7 @@ pub async fn press_key_handler(
     Ok(ok_json(json!({"pressed": true})))
 }
 
-pub async fn drag_handler(
-    Json(body): Json<DragRequest>,
-) -> Result<impl IntoResponse, AppError> {
+pub async fn drag_handler(Json(body): Json<DragRequest>) -> Result<impl IntoResponse, AppError> {
     tokio::task::spawn_blocking(move || {
         oxmux_agent::desktop::input::drag(body.from_x, body.from_y, body.to_x, body.to_y)
     })
@@ -283,8 +279,11 @@ pub struct ClickByRefRequest {
 }
 
 /// Thread-safe ref manager that persists across a single UI tree read + click cycle
-static LAST_REF_MANAGER: std::sync::LazyLock<Mutex<oxmux_agent::desktop::ui_tree::ref_manager::RefManager>> =
-    std::sync::LazyLock::new(|| Mutex::new(oxmux_agent::desktop::ui_tree::ref_manager::RefManager::new()));
+static LAST_REF_MANAGER: std::sync::LazyLock<
+    Mutex<oxmux_agent::desktop::ui_tree::ref_manager::RefManager>,
+> = std::sync::LazyLock::new(|| {
+    Mutex::new(oxmux_agent::desktop::ui_tree::ref_manager::RefManager::new())
+});
 
 pub async fn ui_tree_handler(
     Query(params): Query<UITreeQuery>,
@@ -301,11 +300,10 @@ pub async fn ui_tree_handler(
         max_elements: params.max_elements.unwrap_or(500),
     };
 
-    let result = tokio::task::spawn_blocking(move || {
-        oxmux_agent::desktop::ui_tree::read_tree(&options)
-    })
-    .await
-    .map_err(|e| AppError::Internal(format!("Task join error: {e}")))?;
+    let result =
+        tokio::task::spawn_blocking(move || oxmux_agent::desktop::ui_tree::read_tree(&options))
+            .await
+            .map_err(|e| AppError::Internal(format!("Task join error: {e}")))?;
 
     match result {
         Ok(tree) => {
@@ -373,7 +371,9 @@ pub async fn click_or_ref_handler(
         .map_err(|e| AppError::Internal(format!("Task join error: {e}")))?
         .map_err(|e| AppError::Internal(e))?;
 
-        return Ok(ok_json(json!({"clicked": true, "ref": ref_id, "x": center.x, "y": center.y})));
+        return Ok(ok_json(
+            json!({"clicked": true, "ref": ref_id, "x": center.x, "y": center.y}),
+        ));
     }
 
     // Otherwise use x/y coordinates

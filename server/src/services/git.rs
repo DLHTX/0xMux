@@ -7,6 +7,20 @@ use crate::services::fs::detect_language;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+#[cfg(unix)]
+fn create_symlink(source: &Path, dest: &Path, _is_dir: bool) -> std::io::Result<()> {
+    std::os::unix::fs::symlink(source, dest)
+}
+
+#[cfg(windows)]
+fn create_symlink(source: &Path, dest: &Path, is_dir: bool) -> std::io::Result<()> {
+    if is_dir {
+        std::os::windows::fs::symlink_dir(source, dest)
+    } else {
+        std::os::windows::fs::symlink_file(source, dest)
+    }
+}
+
 /// Build a `Command` for git with safe environment.
 fn git_cmd(repo_path: &Path) -> Command {
     let mut cmd = Command::new("git");
@@ -86,7 +100,10 @@ fn get_numstat(repo_path: &Path) -> std::collections::HashMap<(String, bool), (i
     }
 
     // Staged changes
-    if let Ok(output) = git_cmd(repo_path).args(["diff", "--numstat", "--cached"]).output() {
+    if let Ok(output) = git_cmd(repo_path)
+        .args(["diff", "--numstat", "--cached"])
+        .output()
+    {
         if output.status.success() {
             let stdout = String::from_utf8_lossy(&output.stdout);
             for line in stdout.lines() {
@@ -374,9 +391,7 @@ pub fn get_branches(repo_path: &Path) -> Result<Vec<GitBranchInfo>, AppError> {
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(AppError::BadRequest(format!(
-            "git branch error: {stderr}"
-        )));
+        return Err(AppError::BadRequest(format!("git branch error: {stderr}")));
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -429,7 +444,9 @@ pub fn commit(repo_path: &Path, message: &str) -> Result<GitCommitResponse, AppE
         .output()
         .map_err(|e| AppError::Internal(format!("git rev-parse failed: {e}")))?;
 
-    let hash = String::from_utf8_lossy(&hash_output.stdout).trim().to_string();
+    let hash = String::from_utf8_lossy(&hash_output.stdout)
+        .trim()
+        .to_string();
     let short_hash = hash.chars().take(7).collect();
 
     Ok(GitCommitResponse {
@@ -462,7 +479,11 @@ pub fn push(repo_path: &Path) -> Result<GitPushResponse, AppError> {
 
     Ok(GitPushResponse {
         success: true,
-        message: if msg.is_empty() { "Push completed".into() } else { msg },
+        message: if msg.is_empty() {
+            "Push completed".into()
+        } else {
+            msg
+        },
     })
 }
 
@@ -536,9 +557,7 @@ pub fn unstage_all(repo_path: &Path) -> Result<(), AppError> {
 /// Checkout a branch.
 /// For remote branches like `origin/xxx`, automatically create a local tracking branch.
 pub fn checkout(repo_path: &Path, branch: &str) -> Result<(), AppError> {
-    let local_branch = branch
-        .strip_prefix("origin/")
-        .unwrap_or(branch);
+    let local_branch = branch.strip_prefix("origin/").unwrap_or(branch);
 
     let output = git_cmd(repo_path)
         .args(["checkout", local_branch])
@@ -620,9 +639,7 @@ pub fn discard(repo_path: &Path, paths: &[String]) -> Result<(), AppError> {
             .map_err(|e| AppError::Internal(format!("git clean failed: {e}")))?;
         if !out.status.success() {
             let stderr = String::from_utf8_lossy(&out.stderr);
-            return Err(AppError::BadRequest(format!(
-                "git clean error: {stderr}"
-            )));
+            return Err(AppError::BadRequest(format!("git clean error: {stderr}")));
         }
     }
 
@@ -666,7 +683,10 @@ pub fn resolve_common_root(path: &Path) -> Option<PathBuf> {
 
     // The common git dir is something like /path/to/main-repo/.git
     // We want the parent: /path/to/main-repo
-    common_path.canonicalize().ok().and_then(|p| p.parent().map(|pp| pp.to_path_buf()))
+    common_path
+        .canonicalize()
+        .ok()
+        .and_then(|p| p.parent().map(|pp| pp.to_path_buf()))
 }
 
 /// List all worktrees for the repository.
@@ -678,7 +698,9 @@ pub fn list_worktrees(repo_path: &Path) -> Result<Vec<WorktreeInfo>, AppError> {
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(AppError::BadRequest(format!("git worktree error: {stderr}")));
+        return Err(AppError::BadRequest(format!(
+            "git worktree error: {stderr}"
+        )));
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -709,9 +731,7 @@ pub fn list_worktrees(repo_path: &Path) -> Result<Vec<WorktreeInfo>, AppError> {
             current_head = rest.chars().take(7).collect();
         } else if let Some(rest) = line.strip_prefix("branch ") {
             // refs/heads/main -> main
-            current_branch = Some(
-                rest.strip_prefix("refs/heads/").unwrap_or(rest).to_string()
-            );
+            current_branch = Some(rest.strip_prefix("refs/heads/").unwrap_or(rest).to_string());
         }
     }
     // Push last entry
@@ -803,7 +823,9 @@ pub fn remove_worktree(repo_path: &Path, worktree_path: &str, force: bool) -> Re
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(AppError::BadRequest(format!("git worktree remove error: {stderr}")));
+        return Err(AppError::BadRequest(format!(
+            "git worktree remove error: {stderr}"
+        )));
     }
 
     // Prune stale worktree references
@@ -815,7 +837,12 @@ pub fn remove_worktree(repo_path: &Path, worktree_path: &str, force: bool) -> Re
 /// List untracked files and directories (top-level, including gitignored).
 pub fn list_untracked(repo_path: &Path) -> Result<Vec<String>, AppError> {
     let output = git_cmd(repo_path)
-        .args(["ls-files", "--others", "--directory", "--no-empty-directory"])
+        .args([
+            "ls-files",
+            "--others",
+            "--directory",
+            "--no-empty-directory",
+        ])
         .output()
         .map_err(|e| AppError::Internal(format!("git ls-files failed: {e}")))?;
 
@@ -832,6 +859,41 @@ pub fn list_untracked(repo_path: &Path) -> Result<Vec<String>, AppError> {
         .collect();
     paths.sort();
     Ok(paths)
+}
+
+/// Symlink a list of files/directories from source to dest worktree.
+pub fn link_paths_to_worktree(
+    source: &Path,
+    dest: &Path,
+    paths: &[String],
+) -> Result<(), AppError> {
+    for rel_path in paths {
+        let clean = rel_path.trim_end_matches('/');
+        let src = source.join(clean);
+        let dst = dest.join(clean);
+
+        if !src.exists() {
+            continue;
+        }
+
+        if dst.symlink_metadata().is_ok() {
+            return Err(AppError::BadRequest(format!(
+                "Cannot link path because destination already exists: {}",
+                dst.display()
+            )));
+        }
+
+        if let Some(parent) = dst.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| AppError::Internal(format!("mkdir failed: {e}")))?;
+        }
+
+        let is_dir = src.is_dir();
+        create_symlink(&src, &dst, is_dir)
+            .map_err(|e| AppError::Internal(format!("symlink failed: {e}")))?;
+    }
+
+    Ok(())
 }
 
 /// Copy a list of files/directories from source to dest worktree.
@@ -864,10 +926,9 @@ pub fn copy_paths_to_worktree(
 }
 
 fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), AppError> {
-    std::fs::create_dir_all(dst)
-        .map_err(|e| AppError::Internal(format!("mkdir failed: {e}")))?;
-    for entry in std::fs::read_dir(src)
-        .map_err(|e| AppError::Internal(format!("readdir failed: {e}")))?
+    std::fs::create_dir_all(dst).map_err(|e| AppError::Internal(format!("mkdir failed: {e}")))?;
+    for entry in
+        std::fs::read_dir(src).map_err(|e| AppError::Internal(format!("readdir failed: {e}")))?
     {
         let entry = entry.map_err(|e| AppError::Internal(format!("entry: {e}")))?;
         let s = entry.path();
@@ -875,11 +936,103 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), AppError> {
         if s.is_dir() {
             copy_dir_recursive(&s, &d)?;
         } else {
-            std::fs::copy(&s, &d)
-                .map_err(|e| AppError::Internal(format!("copy: {e}")))?;
+            std::fs::copy(&s, &d).map_err(|e| AppError::Internal(format!("copy: {e}")))?;
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::link_paths_to_worktree;
+    use crate::error::AppError;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+    use uuid::Uuid;
+
+    fn temp_root(name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("oxmux-{name}-{}", Uuid::new_v4()))
+    }
+
+    fn write_file(path: &Path, contents: &str) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        fs::write(path, contents).unwrap();
+    }
+
+    #[test]
+    fn symlinks_selected_file_into_worktree() {
+        let source = temp_root("source-file");
+        let dest = temp_root("dest-file");
+        fs::create_dir_all(&source).unwrap();
+        fs::create_dir_all(&dest).unwrap();
+
+        let source_file = source.join("notes.txt");
+        write_file(&source_file, "hello");
+
+        link_paths_to_worktree(&source, &dest, &[String::from("notes.txt")]).unwrap();
+
+        let linked_file = dest.join("notes.txt");
+        assert!(
+            linked_file
+                .symlink_metadata()
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+        assert_eq!(fs::read_to_string(&linked_file).unwrap(), "hello");
+
+        fs::remove_dir_all(&dest).unwrap();
+        fs::remove_dir_all(&source).unwrap();
+    }
+
+    #[test]
+    fn symlinks_selected_directory_into_worktree() {
+        let source = temp_root("source-dir");
+        let dest = temp_root("dest-dir");
+        fs::create_dir_all(&source).unwrap();
+        fs::create_dir_all(&dest).unwrap();
+
+        let nested_file = source.join("web/node_modules/package/index.js");
+        write_file(&nested_file, "export default true");
+
+        link_paths_to_worktree(&source, &dest, &[String::from("web/node_modules/")]).unwrap();
+
+        let linked_dir = dest.join("web/node_modules");
+        assert!(
+            linked_dir
+                .symlink_metadata()
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+        assert_eq!(
+            fs::read_to_string(dest.join("web/node_modules/package/index.js")).unwrap(),
+            "export default true"
+        );
+
+        fs::remove_dir_all(&dest).unwrap();
+        fs::remove_dir_all(&source).unwrap();
+    }
+
+    #[test]
+    fn refuses_to_overwrite_existing_destination() {
+        let source = temp_root("source-conflict");
+        let dest = temp_root("dest-conflict");
+        fs::create_dir_all(&source).unwrap();
+        fs::create_dir_all(&dest).unwrap();
+
+        write_file(&source.join("notes.txt"), "source");
+        write_file(&dest.join("notes.txt"), "dest");
+
+        let err = link_paths_to_worktree(&source, &dest, &[String::from("notes.txt")]).unwrap_err();
+
+        assert!(matches!(err, AppError::BadRequest(_)));
+
+        fs::remove_dir_all(&dest).unwrap();
+        fs::remove_dir_all(&source).unwrap();
+    }
 }
 
 /// Discard all changes: `git checkout -- .` + `git clean -fd`
@@ -901,9 +1054,7 @@ pub fn discard_all(repo_path: &Path) -> Result<(), AppError> {
         .map_err(|e| AppError::Internal(format!("git clean -fd failed: {e}")))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(AppError::BadRequest(format!(
-            "git clean error: {stderr}"
-        )));
+        return Err(AppError::BadRequest(format!("git clean error: {stderr}")));
     }
 
     Ok(())

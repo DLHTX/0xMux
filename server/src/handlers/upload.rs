@@ -83,7 +83,13 @@ fn sanitize_filename(name: &str) -> String {
         .unwrap_or("upload");
     let sanitized: String = base
         .chars()
-        .map(|c| if c == '/' || c == '\\' || c == '\0' { '_' } else { c })
+        .map(|c| {
+            if c == '/' || c == '\\' || c == '\0' {
+                '_'
+            } else {
+                c
+            }
+        })
         .collect();
     if sanitized.is_empty() || sanitized == "." || sanitized == ".." {
         "upload".to_string()
@@ -154,10 +160,7 @@ pub async fn upload_file_handler(
         .await
         .map_err(|e| AppError::BadRequest(format!("Multipart error: {e}")))?
     {
-        let original_name = field
-            .file_name()
-            .unwrap_or("upload")
-            .to_string();
+        let original_name = field.file_name().unwrap_or("upload").to_string();
         let data = field
             .bytes()
             .await

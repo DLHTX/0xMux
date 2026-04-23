@@ -4,6 +4,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
 import { isImagePath, resolveImageUrl, resolveImageByIndex } from '../lib/imageRegistry'
+import { TermUIBufferScanner } from '../lib/termui-parser'
 import type { WorkspaceContext } from '../lib/types'
 
 export interface UseTerminalOptions {
@@ -19,6 +20,7 @@ export interface UseTerminalOptions {
   onImageHover?: (event: MouseEvent, imageUrl: string, imagePath: string) => void
   onImageLeave?: () => void
   onImageClick?: (imageUrl: string) => void
+  onTermUIRender?: (html: string) => void
 }
 
 // Regex: matches paths with at least one `/` segment and a file extension, plus optional :line:col
@@ -31,6 +33,8 @@ export function useTerminal(options: UseTerminalOptions = {}) {
   const fitAddonRef = useRef<FitAddon | null>(null)
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
   const detachScrollBridgeRef = useRef<(() => void) | null>(null)
+  const disposeTermUIRef = useRef<(() => void) | null>(null)
+  const termUIScannerRef = useRef<TermUIBufferScanner | null>(null)
   const onFileClickRef = useRef(options.onFileClick)
   onFileClickRef.current = options.onFileClick
   const onImageHoverRef = useRef(options.onImageHover)
@@ -39,6 +43,8 @@ export function useTerminal(options: UseTerminalOptions = {}) {
   onImageLeaveRef.current = options.onImageLeave
   const onImageClickRef = useRef(options.onImageClick)
   onImageClickRef.current = options.onImageClick
+  const onTermUIRenderRef = useRef(options.onTermUIRender)
+  onTermUIRenderRef.current = options.onTermUIRender
   const workspaceRef = useRef(options.workspace)
   workspaceRef.current = options.workspace
 
@@ -79,6 +85,13 @@ export function useTerminal(options: UseTerminalOptions = {}) {
       })
 
     terminal.open(containerRef.current)
+
+    // Create TermUI buffer scanner for inline rich HTML blocks
+    const termUIScanner = new TermUIBufferScanner(terminal, (html) => {
+      onTermUIRenderRef.current?.(html)
+    })
+    termUIScannerRef.current = termUIScanner
+    disposeTermUIRef.current = () => termUIScanner.dispose()
 
     // Register custom file path link provider (includes image detection).
     // Handles wrapped lines: when a long path spans multiple terminal rows,
@@ -433,6 +446,8 @@ export function useTerminal(options: UseTerminalOptions = {}) {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const dispose = useCallback(() => {
+    disposeTermUIRef.current?.()
+    disposeTermUIRef.current = null
     detachScrollBridgeRef.current?.()
     detachScrollBridgeRef.current = null
     resizeObserverRef.current?.disconnect()
@@ -444,6 +459,14 @@ export function useTerminal(options: UseTerminalOptions = {}) {
 
   const write = useCallback((data: string | Uint8Array) => {
     terminalRef.current?.write(data)
+    // Only scan for TERMUI markers when data contains potential markers
+    // This avoids scanning on every keystroke/output which causes performance issues
+    if (data instanceof Uint8Array && data.length > 20) {
+      const preview = new TextDecoder().decode(data.slice(0, 200))
+      if (preview.includes('TERMUI')) {
+        termUIScannerRef.current?.scheduleScan()
+      }
+    }
   }, [])
 
   const fit = useCallback(() => {

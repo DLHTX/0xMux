@@ -402,7 +402,7 @@ export function SessionSidebar({
                   {showGroupHeaders && (
                     <div className="flex items-center gap-2 px-3 pt-3 pb-1 cursor-grab active:cursor-grabbing">
                       <div
-                        className="w-2 h-2 shrink-0"
+                        className="w-2 h-2 shrink-0 opacity-40"
                         style={{ backgroundColor: group.color }}
                       />
                       <span className="text-[10px] font-bold text-[var(--color-fg-faint)] uppercase tracking-wider truncate">

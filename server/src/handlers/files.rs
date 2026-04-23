@@ -10,8 +10,8 @@ use serde_json::json;
 
 use crate::error::AppError;
 use crate::models::files::{
-    FileCreateRequest, FileDeleteRequest, FileRevealRequest, FileRenameRequest,
-    FileWriteRequest, OpenInAppRequest, SearchQuery,
+    FileCreateRequest, FileDeleteRequest, FileRenameRequest, FileRevealRequest, FileWriteRequest,
+    OpenInAppRequest, SearchQuery,
 };
 use crate::services::{fs, git, search, workspace};
 
@@ -25,9 +25,7 @@ pub struct TreeQuery {
     pub window: Option<u32>,
 }
 
-pub async fn tree_handler(
-    Query(q): Query<TreeQuery>,
-) -> Result<impl IntoResponse, AppError> {
+pub async fn tree_handler(Query(q): Query<TreeQuery>) -> Result<impl IntoResponse, AppError> {
     let root = workspace::resolve_workspace_root(q.session.as_deref(), q.window)?;
     let path = if q.path.is_empty() { "." } else { &q.path };
     let mut children = fs::list_directory(&root, path)?;
@@ -60,7 +58,9 @@ pub async fn absolute_path_handler(
 ) -> Result<impl IntoResponse, AppError> {
     let root = workspace::resolve_workspace_root(q.session.as_deref(), q.window)?;
     let absolute = fs::validate_path(&root, &q.path)?;
-    Ok(Json(json!({ "path": absolute.to_string_lossy().to_string() })))
+    Ok(Json(
+        json!({ "path": absolute.to_string_lossy().to_string() }),
+    ))
 }
 
 // ── GET /api/files/resolve?path= ────────────────────────────────────
@@ -83,9 +83,7 @@ pub struct ReadQuery {
     pub window: Option<u32>,
 }
 
-pub async fn read_handler(
-    Query(q): Query<ReadQuery>,
-) -> Result<impl IntoResponse, AppError> {
+pub async fn read_handler(Query(q): Query<ReadQuery>) -> Result<impl IntoResponse, AppError> {
     let root = workspace::resolve_workspace_root(q.session.as_deref(), q.window)?;
     let content = fs::read_file(&root, &q.path)?;
     Ok(Json(content))
@@ -103,9 +101,7 @@ pub async fn write_handler(
 
 // ── GET /api/files/raw?path= ─────────────────────────────────────────
 
-pub async fn raw_handler(
-    Query(q): Query<ReadQuery>,
-) -> Result<Response, AppError> {
+pub async fn raw_handler(Query(q): Query<ReadQuery>) -> Result<Response, AppError> {
     let root = workspace::resolve_workspace_root(q.session.as_deref(), q.window)?;
     let file_path = fs::validate_path(&root, &q.path)?;
 
@@ -194,29 +190,17 @@ pub async fn open_in_app_handler(
     let target = fs::validate_path(&root, &body.path)?;
 
     let result = match body.app.as_str() {
-        "finder" => {
-            std::process::Command::new("open")
-                .arg("-R")
-                .arg(&target)
-                .spawn()
-        }
-        "vscode" => {
-            std::process::Command::new("code")
-                .arg(&target)
-                .spawn()
-        }
-        "cursor" => {
-            std::process::Command::new("cursor")
-                .arg(&target)
-                .spawn()
-        }
-        "xcode" => {
-            std::process::Command::new("open")
-                .arg("-a")
-                .arg("Xcode")
-                .arg(&target)
-                .spawn()
-        }
+        "finder" => std::process::Command::new("open")
+            .arg("-R")
+            .arg(&target)
+            .spawn(),
+        "vscode" => std::process::Command::new("code").arg(&target).spawn(),
+        "cursor" => std::process::Command::new("cursor").arg(&target).spawn(),
+        "xcode" => std::process::Command::new("open")
+            .arg("-a")
+            .arg("Xcode")
+            .arg(&target)
+            .spawn(),
         "warp" => {
             // Open the directory containing the file in Warp
             let dir = if target.is_file() {
@@ -249,16 +233,74 @@ pub async fn open_in_app_handler(
 
     match result {
         Ok(_) => Ok(Json(json!({ "success": true }))),
-        Err(e) => Err(AppError::Internal(format!("Failed to open {}: {e}", body.app))),
+        Err(e) => Err(AppError::Internal(format!(
+            "Failed to open {}: {e}",
+            body.app
+        ))),
     }
 }
 
 // ── GET /api/files/search?query=&regex=&case=&glob=&max= ────────────
 
-pub async fn search_handler(
-    Query(q): Query<SearchQuery>,
-) -> Result<impl IntoResponse, AppError> {
+pub async fn search_handler(Query(q): Query<SearchQuery>) -> Result<impl IntoResponse, AppError> {
     let root = workspace::resolve_workspace_root(q.session.as_deref(), q.window)?;
     let response = search::search_files(&root, &q).await?;
     Ok(Json(response))
+}
+
+// ── POST /api/files/locate ──────────────────────────────────────────
+// Given file names (and optional sizes), find their absolute paths via mdfind.
+
+#[derive(Deserialize)]
+pub struct LocateRequest {
+    pub files: Vec<LocateFileEntry>,
+}
+
+#[derive(Deserialize)]
+pub struct LocateFileEntry {
+    pub name: String,
+    pub size: Option<u64>,
+}
+
+pub async fn locate_handler(
+    Json(body): Json<LocateRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let mut results: Vec<serde_json::Value> = Vec::new();
+
+    for entry in &body.files {
+        // Use mdfind (macOS Spotlight) to find file by exact name
+        let output = tokio::process::Command::new("mdfind")
+            .args(["-name", &entry.name])
+            .output()
+            .await
+            .map_err(|e| AppError::Internal(format!("mdfind failed: {e}")))?;
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let candidates: Vec<&str> = stdout.lines().collect();
+
+        // If size is provided, filter by matching file size
+        let mut matched_path: Option<String> = None;
+        if let Some(expected_size) = entry.size {
+            for path in &candidates {
+                if let Ok(meta) = tokio::fs::metadata(path).await {
+                    if meta.len() == expected_size {
+                        matched_path = Some(path.to_string());
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Fallback: use the first result
+        if matched_path.is_none() && !candidates.is_empty() {
+            matched_path = Some(candidates[0].to_string());
+        }
+
+        results.push(json!({
+            "name": entry.name,
+            "path": matched_path,
+        }));
+    }
+
+    Ok(Json(json!({ "files": results })))
 }

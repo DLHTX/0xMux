@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { Rnd } from 'react-rnd'
 import type { RndDragCallback, RndResizeCallback } from 'react-rnd'
 import { Icon } from '@iconify/react/offline'
-import { IconMinus, IconX } from '../../lib/icons.ts'
+import { IconGripVertical, IconMinus, IconX } from '../../lib/icons.ts'
 
 export interface FloatingWindowProps {
   isOpen: boolean
@@ -19,7 +19,7 @@ export interface FloatingWindowProps {
   onRestore: () => void
   onPositionChange: (x: number, y: number) => void
   onSizeChange: (w: number, h: number) => void
-  onOpacityChange: (o: number) => void
+  onOpacityChange?: (o: number) => void
   children: React.ReactNode
 }
 
@@ -41,7 +41,7 @@ export default function FloatingWindow({
   onRestore,
   onPositionChange,
   onSizeChange,
-  onOpacityChange,
+  onOpacityChange: _onOpacityChange,
   children,
 }: FloatingWindowProps) {
   const handleDragStop: RndDragCallback = useCallback(
@@ -67,14 +67,7 @@ export default function FloatingWindow({
     }
   }, [minimized, onMinimize, onRestore])
 
-  const handleOpacityInput = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      onOpacityChange(parseFloat(e.target.value))
-    },
-    [onOpacityChange],
-  )
-
-  const handleTitleDragStart = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+  const handleSnapDragStart = useCallback((e: React.DragEvent<HTMLSpanElement>) => {
     e.dataTransfer.setData(
       'text/pane-content',
       JSON.stringify({ type: 'editor' })
@@ -97,6 +90,7 @@ export default function FloatingWindow({
       minHeight={minimized ? TITLE_BAR_HEIGHT : MIN_WINDOW_HEIGHT}
       bounds="window"
       dragHandleClassName="floating-drag-handle"
+      cancel=".snap-drag-handle"
       enableResizing={!minimized}
       onDragStop={handleDragStop}
       onResizeStop={handleResizeStop}
@@ -122,8 +116,6 @@ export default function FloatingWindow({
         {/* Title bar */}
         <div
           className="floating-drag-handle flex items-center justify-between shrink-0 select-none cursor-move"
-          draggable
-          onDragStart={handleTitleDragStart}
           style={{
             height: TITLE_BAR_HEIGHT,
             borderBottom: minimized
@@ -136,26 +128,22 @@ export default function FloatingWindow({
           }}
           onDoubleClick={handleTitleDoubleClick}
         >
-          {/* Left: drag handle spacer */}
+          {/* Left: snap drag handle icon */}
+          <span
+            draggable
+            onDragStart={handleSnapDragStart}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="snap-drag-handle shrink-0 cursor-grab active:cursor-grabbing flex items-center justify-center"
+            style={{ color: 'var(--color-fg-faint)' }}
+            title="Drag to snap into pane"
+          >
+            <Icon icon={IconGripVertical} width={14} height={14} />
+          </span>
+
           <div className="flex-1" />
 
-          {/* Right: opacity slider + minimize + close */}
+          {/* Right: minimize + close */}
           <div className="flex items-center gap-1 shrink-0">
-            {/* Opacity slider */}
-            <input
-              type="range"
-              min={0.3}
-              max={1.0}
-              step={0.05}
-              value={opacity}
-              onChange={handleOpacityInput}
-              className="floating-opacity-slider w-14 h-3 cursor-pointer"
-              title="Opacity"
-              onClick={(e) => e.stopPropagation()}
-              onDoubleClick={(e) => e.stopPropagation()}
-              onMouseDown={(e) => e.stopPropagation()}
-            />
-
             {/* Minimize button */}
             <button
               onClick={(e) => {

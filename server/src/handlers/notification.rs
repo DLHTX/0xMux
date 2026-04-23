@@ -80,9 +80,7 @@ pub async fn mark_read_handler(
     }
 }
 
-pub async fn mark_all_read_handler(
-    State(state): State<AppState>,
-) -> impl IntoResponse {
+pub async fn mark_all_read_handler(State(state): State<AppState>) -> impl IntoResponse {
     state.notification_service.mark_all_read().await;
     StatusCode::NO_CONTENT
 }
@@ -103,10 +101,15 @@ pub async fn list_images_handler() -> impl IntoResponse {
             }
             if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
                 let ext = name.rsplit('.').next().unwrap_or("").to_lowercase();
-                if !matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "bmp" | "avif" | "ico") {
+                if !matches!(
+                    ext.as_str(),
+                    "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "bmp" | "avif" | "ico"
+                ) {
                     continue;
                 }
-                let mtime = entry.metadata().await
+                let mtime = entry
+                    .metadata()
+                    .await
                     .ok()
                     .and_then(|m| m.modified().ok())
                     .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
@@ -136,9 +139,7 @@ pub async fn list_images_handler() -> impl IntoResponse {
 }
 
 /// Serve images from ~/.cache/0xmux/images/{filename}
-pub async fn serve_image_handler(
-    Path(filename): Path<String>,
-) -> impl IntoResponse {
+pub async fn serve_image_handler(Path(filename): Path<String>) -> impl IntoResponse {
     // Prevent path traversal
     if filename.contains("..") || filename.contains('/') || filename.contains('\\') {
         return Err(StatusCode::BAD_REQUEST);
@@ -151,9 +152,7 @@ pub async fn serve_image_handler(
     let path = image_dir.join(&filename);
 
     // Verify the resolved path is still inside image_dir
-    let canonical = path
-        .canonicalize()
-        .map_err(|_| StatusCode::NOT_FOUND)?;
+    let canonical = path.canonicalize().map_err(|_| StatusCode::NOT_FOUND)?;
     let canonical_dir = image_dir
         .canonicalize()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -169,16 +168,11 @@ pub async fn serve_image_handler(
     let ext = filename.rsplit('.').next().unwrap_or("").to_lowercase();
     let content_type = crate::utils::mime::mime_from_extension(&ext);
 
-    Ok((
-        [(axum::http::header::CONTENT_TYPE, content_type)],
-        data,
-    ))
+    Ok(([(axum::http::header::CONTENT_TYPE, content_type)], data))
 }
 
 /// Delete an image from ~/.cache/0xmux/images/{filename}
-pub async fn delete_image_handler(
-    Path(filename): Path<String>,
-) -> impl IntoResponse {
+pub async fn delete_image_handler(Path(filename): Path<String>) -> impl IntoResponse {
     // Prevent path traversal
     if filename.contains("..") || filename.contains('/') || filename.contains('\\') {
         return Err(StatusCode::BAD_REQUEST);
@@ -191,9 +185,7 @@ pub async fn delete_image_handler(
     let path = image_dir.join(&filename);
 
     // Verify the resolved path is still inside image_dir
-    let canonical = path
-        .canonicalize()
-        .map_err(|_| StatusCode::NOT_FOUND)?;
+    let canonical = path.canonicalize().map_err(|_| StatusCode::NOT_FOUND)?;
     let canonical_dir = image_dir
         .canonicalize()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -208,4 +200,3 @@ pub async fn delete_image_handler(
 
     Ok(StatusCode::NO_CONTENT)
 }
-

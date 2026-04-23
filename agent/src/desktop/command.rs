@@ -66,11 +66,8 @@ pub async fn run_command(
 
     let start = Instant::now();
 
-    let result = tokio::time::timeout(
-        std::time::Duration::from_secs(timeout),
-        command.output(),
-    )
-    .await;
+    let result =
+        tokio::time::timeout(std::time::Duration::from_secs(timeout), command.output()).await;
 
     let duration_ms = start.elapsed().as_millis() as u64;
 
